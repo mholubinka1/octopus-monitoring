@@ -14,6 +14,7 @@ repos:
         additional_dependencies: [
           'types-requests',
           'types-simplejson',
+          'types-PyYAML',
         ]
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2

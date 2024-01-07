@@ -8,6 +8,8 @@ packages = [{include = "octopus_monitoring"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
+requests = "^2.31.0"
+influxdb = "^5.3.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -16,6 +18,9 @@ black = "^23.12.1"
 mypy = "^1.8.0"
 ruff = "^0.1.11"
 pre-commit = "^3.6.0"
+ipykernel = "^6.28.0"
+types-requests = "^2.31.0.20240106"
+types-pyyaml = "^6.0.12.12"
 
 [build-system]
 requires = ["poetry-core"]

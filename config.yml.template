@@ -1,0 +1,17 @@
+influx:
+  host:
+  port:
+  database:
+  user:
+  password:
+
+api:
+  key:
+
+electricity:
+  mpan:
+  sn:
+
+gas:
+  mprn:
+  sn:

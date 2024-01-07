@@ -1,0 +1,8 @@
+services:
+  energy-monitor:
+    container_name: energy_monitor
+    image: mholubinka1/energy_monitor:latest
+    volumes:
+      - /home/pi/.config/energy-monitor:/config
+      - /home/pi/.log/energy-monitor:/log
+    restart: unless-stopped
