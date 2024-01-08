@@ -1,22 +1,15 @@
-## build influx points
-
-## month
-## day of year
-## weeknumber
-## hour of day
-## day of week
-
-## request for month to date
-## request for day till now
-
-# electricity, month=,weeknumber=,day_of_week=,hour= consumption=, convert timestamp to unix timestamp in nano seconds
-# gas, month=,weeknumber=,day_of_week=,hour= consumption=, convert timestamp to unix timestamp in nano seconds
-
+import logging
+import logging.config
+from logging import Logger, getLogger
 from typing import Dict, List
 
+from common.constants import APP_LOGGER_NAME
+from common.logging import config
+from data.api import Consumption
 from influxdb import InfluxDBClient
 
-from app.data.api import Consumption
+logging.config.dictConfig(config)
+logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
 class InfluxDB:
@@ -25,11 +18,12 @@ class InfluxDB:
     def __init__(self, settings: Dict) -> None:
         host = settings["influx"]["host"]
         port = settings["influx"]["port"]
-        database = settings["influx"]["energy_consumption"]
+        database = settings["influx"]["database"]
         user = settings["influx"]["user"]
         password = settings["influx"]["password"]
 
         self.client = InfluxDBClient(host, port, user, password, database)
+        logger.info(f"InfluxDB Client initialised. Writing data to: {database}")
 
     def create_points(
         self,
@@ -50,8 +44,17 @@ class InfluxDB:
             yesterday_consumption = next(
                 (x for x in yesterday if x.fuel == point.fuel), None
             )
+            yesterday_consumption = (
+                yesterday_consumption.consumption if yesterday_consumption else None
+            )
+
             month_to_date_consumption = next(
                 (x for x in month_to_date if x.fuel == point.fuel), None
+            )
+            month_to_date_consumption = (
+                month_to_date_consumption.consumption
+                if month_to_date_consumption
+                else None
             )
 
             # timestamp_ns = int(point.end.timestamp() * 1e9)
@@ -82,4 +85,7 @@ class InfluxDB:
     ) -> None:
         points = self.create_points(consumption, yesterday, month_to_date)
         self.client.write_points(points)
+        logger.info(
+            f"{len(points)} measurements successfully written to Influx database."
+        )
         return

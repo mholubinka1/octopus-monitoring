@@ -1,16 +1,18 @@
-import logging
+import logging.config
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from logging import Logger, getLogger
 from typing import Any, Callable, List, Optional
 
 import requests
+from common.constants import APP_LOGGER_NAME
+from common.exceptions import APIError, NullValueError
+from common.logging import config
 
-from app.common.constants import APP_LOGGER_NAME
-from app.common.exceptions import APIError, NullValueError
-
-logger = logging.getLogger(APP_LOGGER_NAME)
+logging.config.dictConfig(config)
+logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
 def retry(
@@ -24,7 +26,7 @@ def retry(
                     return func(*args, **kwargs)
                 except Exception as e:
                     logger.warning(
-                        f"Error attempting to execute {func}: {e}. \nRetrying."
+                        f"Error attempting to execute {func}: {e}.\nRetrying."
                     )
                     attempt += 1
                     time.sleep(retry_delay)
@@ -32,7 +34,7 @@ def retry(
                 return func(*args, **kwargs)
             except Exception as e:
                 logger.critical(
-                    f"Error attempting to execute {func}: {e}. \nRetries exhausted."
+                    f"Error attempting to execute {func}: {e}.\nRetries exhausted."
                 )
                 raise e
 
@@ -103,7 +105,7 @@ class OctopusAPI:
             raise NullValueError(
                 "Configuration Error: application requires an API key."
             )
-        if not electricity or gas:
+        if not electricity or not gas:
             raise NullValueError(
                 "Configuration Error: at least one meter must be present."
             )
@@ -111,7 +113,8 @@ class OctopusAPI:
         self.electricity_meter = electricity
         self.gas_meter = gas
 
-        self.tarriff = self.set_fuel_configuration()
+        self.fuel = self.set_fuel_configuration()
+        logger.info("Octopus API initialised.")
 
     def set_fuel_configuration(self) -> Fuel:
         if not self.electricity_meter:

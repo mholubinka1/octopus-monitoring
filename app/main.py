@@ -4,53 +4,51 @@ from asyncio import sleep
 from datetime import datetime
 from logging import Logger, getLogger
 
-from app.common.constants import APP_LOGGER_NAME
-from app.common.logging import config
-from app.data.api import OctopusAPI
-from app.data.extract import (
-    extract_consumption_history,
-    extract_month_to_date_consumption,
-    extract_new_consumption,
-    extract_yesterday_consumption,
-)
-from app.data.influx import InfluxDB
-from app.startup import get_api_settings, parse_api_settings
+from common.constants import APP_LOGGER_NAME
+from common.logging import config
+from data.api import OctopusAPI
+from data.extract import write_full_consumption_history, write_new_consumption_history
+from data.influx import InfluxDB
+from startup import get_api_settings, parse_api_settings
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
+
+logging.info("Starting octopus-monitoring...")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config-file")
 args = parser.parse_args()
 
 settings = get_api_settings(args)
-(api_key, electricity, gas) = parse_api_settings(args)
+(api_key, electricity, gas) = parse_api_settings(settings)
+
 api = OctopusAPI(api_key, electricity, gas)
-
-# add logging
-
 influxdb = InfluxDB(settings)
 
-latest_period_to, consumption_history = extract_consumption_history(api)
-yesterday = extract_yesterday_consumption(api)
-month_to_date = extract_month_to_date_consumption(api)
+logging.info("Startup complete.")
 
-influxdb.save_consumption(consumption_history, yesterday, month_to_date)
+logging.info("Retrieving full consumption history.")
+
+latest_period_to: datetime = write_full_consumption_history(api, influxdb)
+
+logging.info("Historical consumption retrieved and saved.")
 
 last_retrieved_hour = datetime.utcnow().hour
-period_from = latest_period_to
+
+polling_interval_seconds = 60
+logging.info("Starting periodic retrieval service...")
+logging.info(
+    f"Consumption data update interval ~ 1 hour and polling interval: {polling_interval_seconds}"
+)
+
+period_from: datetime = latest_period_to
 while not sleep(60):
     current_hour = datetime.utcnow().hour
     if not last_retrieved_hour == current_hour:
-        period_from, new_consumption = extract_new_consumption(api, period_from)
-        yesterday = extract_yesterday_consumption(api)
-        month_to_date = extract_month_to_date_consumption(api)
+        logging.info(
+            "Update interval threshold reached, retrieving any new consumption data..."
+        )
+        new_period_from = write_new_consumption_history(period_from, api, influxdb)
 
-        influxdb.save_consumption(new_consumption, yesterday, month_to_date)
-
-
-##read and save all data up to now to database
-##tz to be converted to UTC
-##save last received timestamp
-
-## read all data to last received on an hourly basis - after the next hour has struck
+    logging.debug("Update interval threshold not reached, waiting to poll again.")
