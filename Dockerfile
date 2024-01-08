@@ -5,7 +5,7 @@ ENV POETRY_VENV=/opt/poetry-venv
 ENV POETRY_CACHE_DIR=/opt/.cache
 
 #RUN apk add --no-cache libpq musl-dev postgresql-dev openssl-dev libffi-dev g++
-RUN apk add --no-cache --virtual .deps gcc g++
+RUN apk add --no-cache --virtual .deps gcc g++ libffi-dev
 
 RUN python3 -m venv ${POETRY_VENV} \
     && ${POETRY_VENV}/bin/pip install --upgrade pip setuptools wheel
