@@ -1,14 +1,11 @@
-FROM python:3.11-slim-bullseye
+FROM python:3.11.0-alpine3.17
 
 ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 ENV POETRY_CACHE_DIR=/opt/.cache
 
-RUN apt-get update && apt-get -y upgrade
-
-#libssl-dev libc-dev g++
-RUN apt-get -y --no-install-recommends install gcc libffi-dev g++ build-essential libssl-dev python3-dev cargo pkg-config
-
+#RUN apk add --no-cache libpq musl-dev postgresql-dev openssl-dev libffi-dev g++
+RUN apk add --no-cache --virtual .deps gcc 
 
 RUN python3 -m venv ${POETRY_VENV} \
     && ${POETRY_VENV}/bin/pip install --upgrade pip setuptools wheel
@@ -21,6 +18,8 @@ COPY pyproject.toml poetry.lock ./
 
 RUN ${POETRY_VENV}/bin/pip install poetry
 RUN poetry install --no-root --only main
+
+RUN apk del .deps
 
 COPY app ./app
 
