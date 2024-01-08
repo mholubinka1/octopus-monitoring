@@ -26,8 +26,6 @@ COPY app ./app
 RUN mkdir -p config
 VOLUME /config
 
-COPY config.yml ./app/config
-
 USER 999
 
 CMD [ "poetry", "run", "python", "./app/main.py", "--config-file", "config.yml"]
