@@ -7,7 +7,8 @@ ENV POETRY_CACHE_DIR=/opt/.cache
 RUN apt-get update && apt-get -y upgrade
 
 #libssl-dev libc-dev g++
-RUN apt-get -y --no-install-recommends install gcc libffi-dev g++ rust cargo
+RUN apt-get -y --no-install-recommends install gcc libffi-dev g++ build-essential libssl-dev python3-dev cargo pkg-config
+
 
 RUN python3 -m venv ${POETRY_VENV} \
     && ${POETRY_VENV}/bin/pip install --upgrade pip setuptools wheel
