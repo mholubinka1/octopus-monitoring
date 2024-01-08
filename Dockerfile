@@ -4,7 +4,7 @@ ENV POETRY_HOME=/opt/poetry
 ENV POETRY_VENV=/opt/poetry-venv
 ENV POETRY_CACHE_DIR=/opt/.cache
 
-RUN apt update && apt upgrade --no-cache
+RUN apt update && apt upgrade
 
 RUN apt install libffi-dev openssl-dev gcc libc-dev g++
 
