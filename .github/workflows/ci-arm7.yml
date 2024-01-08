@@ -13,7 +13,7 @@ jobs:
     runs-on: [ ARMv7 ]
     env:
       DOCKER_REGISTRY: docker.io
-      DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/hueshift2
+      DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/octopus-monitoring
       DOCKER_TARGET_PLATFORM: linux/arm/v7
     steps:
       - name: Checkout
