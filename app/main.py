@@ -1,14 +1,16 @@
 import argparse
 import logging.config
-from asyncio import sleep
+import time
 from datetime import datetime
 from logging import Logger, getLogger
+from typing import Any, Callable, Optional
 
 from common.constants import APP_LOGGER_NAME
 from common.logging import config
 from data.api import OctopusAPI
-from data.extract import write_full_consumption_history, write_new_consumption_history
+from data.extract import write_full_consumption_history
 from data.influx import InfluxDB
+from data.poll import ConsumptionPoller
 from startup import get_api_settings, parse_api_settings
 
 logging.config.dictConfig(config)
@@ -42,13 +44,18 @@ logging.info(
     f"Consumption data update interval ~ 1 hour and polling interval: {polling_interval_seconds}"
 )
 
-period_from: datetime = latest_period_to
-while not sleep(60):
-    current_hour = datetime.utcnow().hour
-    if not last_retrieved_hour == current_hour:
-        logging.info(
-            "Update interval threshold reached, retrieving any new consumption data..."
-        )
-        new_period_from = write_new_consumption_history(period_from, api, influxdb)
+poller = ConsumptionPoller(latest_period_to)
 
-    logging.debug("Update interval threshold not reached, waiting to poll again.")
+
+def every(delay: int, poll: Callable[..., Optional[Any]]) -> None:
+    next_time = time.time() + polling_interval_seconds
+    while True:
+        time.sleep(max(0, next_time - time.time()))
+        try:
+            poller.poll()
+        except Exception as e:
+            logger.exception(f"Failed to run consumption poll to completion: {e}")
+        next_time += (time.time() - next_time) // delay * delay + delay
+
+
+every(polling_interval_seconds, poller.poll())
