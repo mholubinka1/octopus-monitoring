@@ -15,21 +15,33 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 def write_new_consumption_history(
     period_from: datetime, api: OctopusAPI, influxdb: InfluxDB
 ) -> datetime:
+    logger.info("Retrieving full consumption history.")
+
     new_period_from, new_consumption = extract_new_consumption(api, period_from)
     yesterday = extract_yesterday_consumption(api)
     month_to_date = extract_month_to_date_consumption(api)
 
-    influxdb.save_consumption(new_consumption, yesterday, month_to_date)
+    if len(new_consumption) != 0:
+        influxdb.save_consumption(new_consumption, yesterday, month_to_date)
+        logger.info("New consumption retrieved and saved.")
+    else:
+        logger.info("No new consumption data available.")
 
     return new_period_from
 
 
 def write_full_consumption_history(api: OctopusAPI, influxdb: InfluxDB) -> datetime:
+    logger.info("Retrieving full consumption history.")
+
     latest_period_to, consumption_history = extract_consumption_history(api)
     yesterday = extract_yesterday_consumption(api)
     month_to_date = extract_month_to_date_consumption(api)
 
-    influxdb.save_consumption(consumption_history, yesterday, month_to_date)
+    if len(consumption_history) != 0:
+        influxdb.save_consumption(consumption_history, yesterday, month_to_date)
+        logger.info("Historical consumption retrieved and saved.")
+    else:
+        logger.info("No historical consumption data available.")
 
     return latest_period_to
 

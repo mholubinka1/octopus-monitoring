@@ -30,11 +30,7 @@ influxdb = InfluxDB(settings)
 
 logger.info("Startup complete.")
 
-logger.info("Retrieving full consumption history.")
-
 latest_period_to: datetime = write_full_consumption_history(api, influxdb)
-
-logger.info("Historical consumption retrieved and saved.")
 
 polling_interval_seconds = 60
 logger.info("Starting periodic retrieval service...")
