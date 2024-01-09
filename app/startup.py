@@ -56,7 +56,8 @@ def parse_api_settings(
         raise ConfigurationFileError(
             "Configuration Error: failed to read Gas Meter properties."
         )
-    logger.info(
-        f"Successfully parsed API and energy meter settings:\nAPI Key: {api_key}\nElectricity Meter: [MPAN: {electricity.mpan}, SN: {electricity.sn}]\nGas Meter: [MPRN: {gas.mprn}, SN: {gas.sn}]"
-    )
+    logger.info("Successfully parsed API and energy meter settings:")
+    logger.info(f"API Key: {api_key}")
+    logger.info(f"Electricity Meter: [MPAN: {electricity.mpan}, SN: {electricity.sn}]")
+    logger.info(f"Gas Meter: [MPRN: {gas.mprn}, SN: {gas.sn}]")
     return api_key, electricity, gas
