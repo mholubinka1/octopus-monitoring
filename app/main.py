@@ -16,7 +16,7 @@ from startup import get_api_settings, parse_api_settings
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
-logging.info("Starting octopus-monitoring...")
+logger.info("Starting octopus-monitoring...")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config-file")
@@ -28,18 +28,18 @@ settings = get_api_settings(args)
 api = OctopusAPI(api_key, electricity, gas)
 influxdb = InfluxDB(settings)
 
-logging.info("Startup complete.")
+logger.info("Startup complete.")
 
-logging.info("Retrieving full consumption history.")
+logger.info("Retrieving full consumption history.")
 
 latest_period_to: datetime = write_full_consumption_history(api, influxdb)
 
-logging.info("Historical consumption retrieved and saved.")
+logger.info("Historical consumption retrieved and saved.")
 
 polling_interval_seconds = 60
-logging.info("Starting periodic retrieval service...")
-logging.info(
-    f"Consumption data update interval ~ 1 hour and polling interval: {polling_interval_seconds}"
+logger.info("Starting periodic retrieval service...")
+logger.info(
+    f"Consumption data update interval ~ 1 hour and polling interval: {polling_interval_seconds} seconds."
 )
 
 last_retrieved_hour = datetime.utcnow().hour
