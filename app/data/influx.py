@@ -84,8 +84,8 @@ class InfluxDB:
         month_to_date: List[Consumption],
     ) -> None:
         points = self.create_points(consumption, yesterday, month_to_date)
-        self.client.write_points(points)
+        result = self.client.write_points(points)
         logger.info(
-            f"{len(points)} measurements successfully written to Influx database."
+            f"{len(points)} measurements successfully written to Influx database. {result}"
         )
         return

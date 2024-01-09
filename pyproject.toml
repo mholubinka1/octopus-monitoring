@@ -10,7 +10,6 @@ packages = [{include = "octopus_monitoring"}]
 python = "^3.11"
 requests = "^2.31.0"
 influxdb = "^5.3.1"
-cryptography = "3.3.1"
 pyyaml = "^6.0.1"
 
 

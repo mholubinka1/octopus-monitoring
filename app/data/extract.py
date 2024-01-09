@@ -1,18 +1,15 @@
+import logging.config
 from datetime import datetime, timedelta
+from logging import Logger, getLogger
 from typing import List
 
+from common.constants import APP_LOGGER_NAME
+from common.logging import config
 from data.api import Consumption, OctopusAPI
 from data.influx import InfluxDB
 
-
-def write_full_consumption_history(api: OctopusAPI, influxdb: InfluxDB) -> datetime:
-    latest_period_to, consumption_history = extract_consumption_history(api)
-    yesterday = extract_yesterday_consumption(api)
-    month_to_date = extract_month_to_date_consumption(api)
-
-    influxdb.save_consumption(consumption_history, yesterday, month_to_date)
-
-    return latest_period_to
+logging.config.dictConfig(config)
+logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
 def write_new_consumption_history(
@@ -25,6 +22,16 @@ def write_new_consumption_history(
     influxdb.save_consumption(new_consumption, yesterday, month_to_date)
 
     return new_period_from
+
+
+def write_full_consumption_history(api: OctopusAPI, influxdb: InfluxDB) -> datetime:
+    latest_period_to, consumption_history = extract_consumption_history(api)
+    yesterday = extract_yesterday_consumption(api)
+    month_to_date = extract_month_to_date_consumption(api)
+
+    influxdb.save_consumption(consumption_history, yesterday, month_to_date)
+
+    return latest_period_to
 
 
 # region Data Extraction Methods
