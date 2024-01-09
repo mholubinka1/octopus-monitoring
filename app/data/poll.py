@@ -1,5 +1,5 @@
 import logging.config
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import Logger, getLogger
 
 from common.constants import APP_LOGGER_NAME
@@ -33,13 +33,17 @@ class ConsumptionPoller:
         self.last_retrieved_hour = last_retrieved_hour
 
     def poll(self) -> None:
-        current_hour = datetime.utcnow().hour
-        if not self.last_retrieved_hour == current_hour:
+        current_time = datetime.utcnow()
+        if not self.last_retrieved_hour == current_time.hour:
             logging.info(
                 "Update interval threshold reached, retrieving any new consumption data..."
             )
             self.period_from = write_new_consumption_history(
                 self.period_from, self.api, self.influxdb
+            )
+            self.last_retrieved_hour = current_time.hour
+            logging.info(
+                f"New consumption will be retrieved after {(current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
         logging.debug("Update interval threshold not reached, waiting to poll again.")

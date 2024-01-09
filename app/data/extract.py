@@ -37,9 +37,13 @@ def write_full_consumption_history(api: OctopusAPI, influxdb: InfluxDB) -> datet
 # region Data Extraction Methods
 
 
-def extract_consumption_history(api: OctopusAPI) -> tuple[datetime, List[Consumption]]:
+def extract_consumption_history(
+    api: OctopusAPI, period_from: datetime = datetime.fromisoformat("1970-01-01T00:00Z")
+) -> tuple[datetime, List[Consumption]]:
     consumption_history = api.get_consumption()
-    latest_period_to = consumption_history[0].end
+    if len(consumption_history) == 0:
+        return period_from, consumption_history
+    latest_period_to = consumption_history[-1].end
     return latest_period_to, consumption_history
 
 
@@ -47,7 +51,9 @@ def extract_new_consumption(
     api: OctopusAPI, period_from: datetime
 ) -> tuple[datetime, List[Consumption]]:
     new_consumption = api.get_consumption(period_from=period_from)
-    latest_period_to = new_consumption[0].end
+    if len(new_consumption) == 0:
+        return period_from, new_consumption
+    latest_period_to = new_consumption[-1].end
     return latest_period_to, new_consumption
 
 

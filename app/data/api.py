@@ -221,6 +221,9 @@ class OctopusAPI:
         cumulative: bool = False,
     ) -> List[Consumption]:
         if self.electricity_meter:
+            logger.info(
+                "Getting Electricity consumption for period from: {period_from}."
+            )
             api_endpoint = (
                 self.reference_url
                 + f"electricity-meter-points/{self.electricity_meter.mpan}/meters/{self.electricity_meter.sn}/consumption/"
@@ -245,6 +248,7 @@ class OctopusAPI:
         page_size: int,
     ) -> List[Consumption]:
         if self.gas_meter:
+            logger.info("Getting Gas consumption for period from: {period_from}.")
             api_endpoint = (
                 self.reference_url
                 + f"gas-meter-points/{self.gas_meter.mprn}/meters/{self.gas_meter.sn}/consumption/"
@@ -293,4 +297,7 @@ class OctopusAPI:
             response_json = response.json()
             raise APIError(response_json)
         finally:
+            logger.info(
+                f"Get consumption complete. {len(consumption)} data points retrieved."
+            )
             return consumption
