@@ -36,15 +36,14 @@ latest_period_to: datetime = write_full_consumption_history(api, influxdb)
 
 logging.info("Historical consumption retrieved and saved.")
 
-last_retrieved_hour = datetime.utcnow().hour
-
 polling_interval_seconds = 60
 logging.info("Starting periodic retrieval service...")
 logging.info(
     f"Consumption data update interval ~ 1 hour and polling interval: {polling_interval_seconds}"
 )
 
-poller = ConsumptionPoller(latest_period_to)
+last_retrieved_hour = datetime.utcnow().hour
+poller = ConsumptionPoller(api, influxdb, latest_period_to, last_retrieved_hour)
 
 
 def every(delay: int, poll: Callable[..., Optional[Any]]) -> None:
