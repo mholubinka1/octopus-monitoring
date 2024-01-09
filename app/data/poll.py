@@ -26,6 +26,9 @@ class ConsumptionPoller:
         period_from: datetime,
         last_retrieved_hour: int,
     ) -> None:
+        self.api = api
+        self.influxdb = influxdb
+
         self.period_from = period_from
         self.last_retrieved_hour = last_retrieved_hour
 
