@@ -10,7 +10,7 @@ packages = [{include = "octopus_monitoring"}]
 python = "^3.11"
 requests = "^2.31.0"
 influxdb = "^5.3.1"
-cryptography = "41.0.7"
+cryptography = "42.0.0"
 pyyaml = "^6.0.1"
 
 
@@ -18,9 +18,9 @@ pyyaml = "^6.0.1"
 isort = "^5.13.2"
 black = "^23.12.1"
 mypy = "^1.8.0"
-ruff = "^0.1.11"
+ruff = "^0.1.14"
 pre-commit = "^3.6.0"
-ipykernel = "^6.28.0"
+ipykernel = "^6.29.0"
 types-requests = "^2.31.0.20240106"
 types-pyyaml = "^6.0.12.12"
 
