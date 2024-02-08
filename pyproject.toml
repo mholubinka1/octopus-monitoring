@@ -20,7 +20,7 @@ black = "^24.1.1"
 mypy = "^1.8.0"
 ruff = "^0.2.1"
 pre-commit = "^3.6.0"
-ipykernel = "^6.29.1"
+ipykernel = "^6.29.2"
 types-requests = "^2.31.0.20240125"
 types-pyyaml = "^6.0.12.12"
 
