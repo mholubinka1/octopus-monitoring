@@ -10,18 +10,18 @@ packages = [{include = "octopus_monitoring"}]
 python = "^3.11"
 requests = "^2.31.0"
 influxdb = "^5.3.1"
-cryptography = "42.0.2"
+cryptography = "42.0.4"
 pyyaml = "^6.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.13.2"
-black = "^24.1.1"
+black = "^24.2.0"
 mypy = "^1.8.0"
-ruff = "^0.2.1"
-pre-commit = "^3.6.0"
-ipykernel = "^6.29.1"
-types-requests = "^2.31.0.20240125"
+ruff = "^0.2.2"
+pre-commit = "^3.6.2"
+ipykernel = "^6.29.2"
+types-requests = "^2.31.0.20240218"
 types-pyyaml = "^6.0.12.12"
 
 [build-system]
