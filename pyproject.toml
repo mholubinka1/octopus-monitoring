@@ -16,7 +16,7 @@ pyyaml = "^6.0.1"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.13.2"
-black = "^24.2.0"
+black = "^24.3.0"
 mypy = "^1.8.0"
 ruff = "^0.2.2"
 pre-commit = "^3.6.2"
