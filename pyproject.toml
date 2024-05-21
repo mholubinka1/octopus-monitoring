@@ -8,7 +8,7 @@ packages = [{include = "octopus_monitoring"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-requests = "^2.31.0"
+requests = "^2.32.0"
 influxdb = "^5.3.1"
 cryptography = "42.0.5"
 pyyaml = "^6.0.1"
