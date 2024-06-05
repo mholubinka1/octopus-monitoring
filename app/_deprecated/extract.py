@@ -1,19 +1,19 @@
+"""
 import logging.config
 from datetime import datetime, timedelta
 from logging import Logger, getLogger
 from typing import List
 
-from common.constants import APP_LOGGER_NAME
-from common.logging import config
-from data.api import Consumption, OctopusAPI
+from common.logging import APP_LOGGER_NAME, config
 from data.influx import InfluxDB
+from data.octopus.api import Consumption, OctopusEnergyAPIClient
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
 def write_new_consumption_history(
-    period_from: datetime, api: OctopusAPI, influxdb: InfluxDB
+    period_from: datetime, api: OctopusEnergyAPIClient, influxdb: InfluxDB
 ) -> datetime:
     logger.info("Retrieving full consumption history.")
 
@@ -30,7 +30,7 @@ def write_new_consumption_history(
     return new_period_from
 
 
-def write_full_consumption_history(api: OctopusAPI, influxdb: InfluxDB) -> datetime:
+def write_full_consumption_history(api: OctopusEnergyAPIClient, influxdb: InfluxDB) -> datetime:
     logger.info("Retrieving full consumption history.")
 
     latest_period_to, consumption_history = extract_consumption_history(api)
@@ -83,3 +83,4 @@ def extract_month_to_date_consumption(api: OctopusAPI) -> List[Consumption]:
 
 
 # endregion
+"""

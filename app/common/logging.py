@@ -1,4 +1,5 @@
-from common.constants import APP_LOGGER_NAME, LOG_LEVEL
+APP_LOGGER_NAME = "octopus-monitor"
+LOG_LEVEL = "DEBUG"
 
 config = {
     "version": 1,

@@ -5,13 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
-            "type": "python",
+            "name": "Python Debugger: Main",
+            "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "${workspaceFolder}/app/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--config-file", "C:\\Users\\mehol\\git\\octopus-monitoring\\config.yml"],
+            "args": [
+                "--config-file",
+                "C:\\Users\\mehol\\git\\octopus-monitoring\\config.yml"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/app"
+            }
         }
     ]
-} 
+}

@@ -160,3 +160,7 @@ cython_debug/
 #.idea/
 
 config.yml
+
+.vscode/
+
+*.ipynb

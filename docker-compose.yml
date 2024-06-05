@@ -2,11 +2,26 @@ version: "3"
 
 services:
   energy-monitor:
-      container_name: energy-monitor
-      image: mholubinka1/octopus-monitoring:latest
-      volumes:
-        - /home/pi/.config/energy-monitor:/config
-        - /home/pi/.log/energy-monitor:/log
-      extra_hosts:
-        - "host.docker.internal:host-gateway"
-      restart: unless-stopped
+    container_name: energy-monitor
+    image: mholubinka1/octopus-monitoring:latest
+    volumes:
+      - /home/pi/.config/energy-monitor:/config
+      - /home/pi/.log/energy-monitor:/log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+  postgres:
+    container: energy-db
+    restart: always
+    build: postgres
+    env_file:
+      - postgres/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      -
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U energy-monitor -d octopus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

@@ -1,49 +1,70 @@
+import datetime
 import logging.config
-from datetime import datetime, timedelta
+import time
+from datetime import datetime as dt
+from datetime import timedelta
 from logging import Logger, getLogger
+from typing import Any, Callable
 
-from common.constants import APP_LOGGER_NAME
-from common.logging import config
-from data.api import OctopusAPI
-from data.extract import write_new_consumption_history
-from data.influx import InfluxDB
+from common.config import RefreshSettings
+from common.logging import APP_LOGGER_NAME, config
+from data.consumption import ConsumptionRetriever
+from data.pricing import PricingRetriever
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
-class ConsumptionPoller:
-    api: OctopusAPI
-    influxdb: InfluxDB
+def every(delay: int, poll: Callable) -> None:
+    next_time = time.time() + delay
+    while True:
+        time.sleep(max(0, next_time - time.time()))
+        try:
+            poll()
+        except Exception as e:
+            logger.exception(f"Failed to run consumption poll: {e}")
+        next_time += (time.time() - next_time) // delay * delay + delay
 
-    period_from: datetime
-    last_retrieved_hour: int
+
+class Poller:
+    _refresh_interval_seconds: int
+    _last_retrieved_time: dt
+
+    _initial_retrieval: bool
+
+    _consumption_retriever: ConsumptionRetriever
 
     def __init__(
         self,
-        api: OctopusAPI,
-        influxdb: InfluxDB,
-        period_from: datetime,
-        last_retrieved_hour: int,
+        refresh_settings: RefreshSettings,
+        consumption: ConsumptionRetriever,
+        pricing: PricingRetriever,
     ) -> None:
-        self.api = api
-        self.influxdb = influxdb
+        self._refresh_interval_seconds = refresh_settings.update_interval
+        self._consumption_retriever = consumption
+        self._pricing = pricing
+        self._initial_retrieval = True
 
-        self.period_from = period_from
-        self.last_retrieved_hour = last_retrieved_hour
+    def poll(self) -> Any:
+        current_time = dt.now(datetime.UTC)
+        if self._initial_retrieval:
+            logging.info("Initial run. Retrieving entire consumption history.")
+            self._consumption_retriever.retrieve_consumption()
+            self._last_retrieved_time = current_time
+            self._initial_retrieval = False
+            return
 
-    def poll(self) -> None:
-        current_time = datetime.utcnow()
-        if not self.last_retrieved_hour == current_time.hour:
+        polling_delta = (current_time - self._last_retrieved_time).seconds
+        if polling_delta > self._refresh_interval_seconds:
             logging.info(
-                "Update interval threshold reached, retrieving any new consumption data..."
+                "Update interval threshold reached, retrieving any new consumption data."
             )
-            self.period_from = write_new_consumption_history(
-                self.period_from, self.api, self.influxdb
-            )
-            self.last_retrieved_hour = current_time.hour
+            self._consumption_retriever.retrieve_latest_consumption()
+            self._last_retrieved_time = current_time
             logging.info(
-                f"New consumption will be retrieved after {(current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')}"
+                f"New consumption data will be retrieved after {(current_time + timedelta(seconds=3600)).replace(minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')}"
             )
+            return
 
         logging.debug("Update interval threshold not reached, waiting to poll again.")
+        return
