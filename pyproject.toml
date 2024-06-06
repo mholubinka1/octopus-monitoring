@@ -8,20 +8,20 @@ packages = [{include = "octopus_monitoring"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-requests = "^2.31.0"
-influxdb = "^5.3.1"
-cryptography = "42.0.5"
+requests = "^2.32.3"
+influxdb = "^5.3.2"
+cryptography = "42.0.8"
 pyyaml = "^6.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
 isort = "^5.13.2"
-black = "^24.4.0"
-mypy = "^1.9.0"
-ruff = "^0.3.7"
-pre-commit = "^3.7.0"
+black = "^24.4.2"
+mypy = "^1.10.0"
+ruff = "^0.4.8"
+pre-commit = "^3.7.1"
 ipykernel = "^6.29.4"
-types-requests = "^2.31.0.20240406"
+types-requests = "^2.32.0.20240602"
 types-pyyaml = "^6.0.12.20240311"
 
 [build-system]
