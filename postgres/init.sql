@@ -7,7 +7,7 @@ CREATE SCHEMA octopus
         period_from timestamptz,
         period_to timestamptz,
         raw_value double precision,
-        est_kwh double precision,
+        est_kwh double precision
     )
     CREATE TABLE cost
     (
@@ -16,7 +16,7 @@ CREATE SCHEMA octopus
         is_active boolean,
         period_from timestamptz,
         period_to timestamptz,
-        cost_gbp double precision,
+        cost_gbp double precision
     )
     CREATE TABLE tariffs
     (
@@ -29,5 +29,5 @@ CREATE SCHEMA octopus
         period_from timestamptz,
         period_to timestamptz,
         standing_charge double precision,
-        unit_rate double precision,
+        unit_rate double precision
     )

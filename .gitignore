@@ -164,3 +164,6 @@ config.yml
 .vscode/
 
 *.ipynb
+
+#testing
+energy-monitor-temp
