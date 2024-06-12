@@ -1,56 +1,45 @@
 import argparse
+import datetime as dt
 import logging.config
-import time
+import sys
 from datetime import datetime
 from logging import Logger, getLogger
-from typing import Any, Callable, Optional
 
-from common.constants import APP_LOGGER_NAME
-from common.logging import config
-from data.api import OctopusAPI
-from data.extract import write_full_consumption_history
-from data.influx import InfluxDB
-from data.poll import ConsumptionPoller
-from startup import get_api_settings, parse_api_settings
+from common.config import get_settings
+from common.logging import APP_LOGGER_NAME, config
+from data.base import MonitoringClient
+from data.consumption import ConsumptionRetriever
+from data.poll import Poller, every
+from data.pricing import PricingRetriever
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
-logger.info("Starting octopus-monitoring...")
+logger.info("Starting octopus-monitoring.")
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--config-file")
-args = parser.parse_args()
+try:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config-file")
+    args = parser.parse_args()
+    settings = get_settings(config_file_path=args.config_file)
+    refresh_config = settings.refresh_settings
+    logger.info("Startup complete.")
+except Exception as e:
+    logger.critical(f"Error loading startup configurations: {e}.")
+    sys.exit(1)
 
-settings = get_api_settings(args)
-(api_key, electricity, gas) = parse_api_settings(settings)
-
-api = OctopusAPI(api_key, electricity, gas)
-influxdb = InfluxDB(settings)
-
-logger.info("Startup complete.")
-
-latest_period_to: datetime = write_full_consumption_history(api, influxdb)
-
-polling_interval_seconds = 60
-logger.info("Starting periodic retrieval service...")
-logger.info(
-    f"Consumption data update interval ~ 1 hour and polling interval: {polling_interval_seconds} seconds."
-)
-
-last_retrieved_hour = datetime.utcnow().hour
-poller = ConsumptionPoller(api, influxdb, latest_period_to, last_retrieved_hour)
-
-
-def every(delay: int, poll: Callable[..., Optional[Any]]) -> None:
-    next_time = time.time() + polling_interval_seconds
-    while True:
-        time.sleep(max(0, next_time - time.time()))
-        try:
-            poller.poll()
-        except Exception as e:
-            logger.exception(f"Failed to run consumption poll to completion: {e}")
-        next_time += (time.time() - next_time) // delay * delay + delay
-
-
-every(polling_interval_seconds, poller.poll())
+try:
+    client = MonitoringClient(settings)
+    consumption = ConsumptionRetriever(client)
+    pricing = PricingRetriever(client)
+    logger.info(
+        f"Consumption data update interval {refresh_config.update_interval}  and polling interval: {refresh_config.polling_interval} seconds."
+    )
+    polling_start_time = datetime.now(dt.UTC)
+    poller = Poller(refresh_config, consumption, pricing)
+    logger.info("Starting periodic retrieval service.")
+    every(refresh_config.polling_interval, poller.poll())
+    sys.exit(0)
+except Exception as e:
+    logger.critical(f"Unexpected application error: {e}.")
+    sys.exit(1)

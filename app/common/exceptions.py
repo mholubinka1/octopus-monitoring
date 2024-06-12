@@ -1,8 +1,16 @@
-class ConfigurationFileError(Exception):
+class APIError(Exception):
     pass
 
 
-class APIError(Exception):
+class ArgumentError(ValueError):
+    pass
+
+
+class ConfigurationError(Exception):
+    pass
+
+
+class ConfigurationFileError(Exception):
     pass
 
 

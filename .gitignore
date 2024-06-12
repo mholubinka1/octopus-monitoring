@@ -160,3 +160,10 @@ cython_debug/
 #.idea/
 
 config.yml
+
+.vscode/
+
+*.ipynb
+
+#testing
+energy-monitor-temp

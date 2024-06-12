@@ -1,17 +1,19 @@
-influx:
-  host:
-  port:
+octopus:
+  account_number:
+  api_key: 
+
+influxv2:
+  url: "http://localhost:8086"
+  organization: 
+  bucket: energy
+  all-access-token: 
+
+postgres:
+  host: 
+  username: admin
+  password: 
   database:
-  user:
-  password:
 
-api:
-  key:
-
-electricity:
-  mpan:
-  sn:
-
-gas:
-  mprn:
-  sn:
+data_refresh:
+  polling_interval_seconds: 60
+  refresh_interval_seconds: 3600
