@@ -98,5 +98,6 @@ jobs:
       - name: Docker Build and Push    
         uses: docker/build-push-action@v4
         with:
+          context: "{{defaultContext}}:postgres"
           push: true
           tags: ${{ steps.prepare.outputs.docker_image }}:${{ steps.tag.outputs.tag }}
