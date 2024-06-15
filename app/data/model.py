@@ -1,28 +1,53 @@
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
+
+VOLUME_CORRECTION = Decimal(1.02264)
+AVERAGE_CALORIFIC_VALUE = Decimal(39.5)
+TO_KWH_DIVISOR = Decimal(3.6)
 
 
 class Energy(Enum):
-    dual = 0
+    electricity = 0
     gas = 1
-    electricity = 2
+
+
+def as_energy_char(energy: Energy) -> str:
+    match (energy):
+        case Energy.electricity:
+            return "E"
+        case Energy.gas:
+            return "G"
+
+
+class Unit(Enum):
+    kwh = 0
+    m3 = 1
 
 
 @dataclass
 class Consumption:
-    raw: float  # Electricity: kwh, Gas: m^3
+    raw: Decimal
+    est_kwh: Decimal
+    unit: Unit  # Electricity: kwh, Gas: m^3
     start: datetime
     end: datetime
 
 
-def to_estimated_kwh(energy: Energy, raw: float) -> float:
-    if energy == Energy.dual:
-        raise ValueError("Can not convert dual consumption to kwh.")
+def get_raw_unit(energy: Energy) -> Unit:
+    match (energy):
+        case Energy.gas:
+            return Unit.m3
+        case Energy.electricity:
+            return Unit.kwh
+        case _:
+            raise NotImplementedError(f"Unit unknown for energy of type: {energy}")
+
+
+def to_estimated_kwh(energy: Energy, raw: Decimal) -> Decimal:
     if energy == Energy.electricity:
         return raw
-
-    volume_correction = 1.02264
-    average_calorific_value = 39.5
-    to_kwh_divisor = 3.6
-    return (raw * volume_correction * average_calorific_value) / to_kwh_divisor
+    if energy == Energy.gas:
+        return (raw * VOLUME_CORRECTION * AVERAGE_CALORIFIC_VALUE) / TO_KWH_DIVISOR
+    raise NotImplementedError("Unknown Energy type.")

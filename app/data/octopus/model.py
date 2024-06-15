@@ -3,6 +3,7 @@ import re
 from abc import ABC
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from logging import Logger, getLogger
 from typing import List, Optional
@@ -29,8 +30,8 @@ class Price:
     energy: Energy
     tariff_code: str
     is_active: bool
-    unit_rate: float
-    standing_charge: float
+    unit_rate: Decimal
+    standing_charge: Decimal
     valid_from: datetime
     valid_to: Optional[datetime]
 
