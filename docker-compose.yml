@@ -1,36 +1,37 @@
 services:
-  #energy-monitor:
-  #  container_name: energy-monitor
-  #  image: mholubinka1/octopus-monitoring:dev
-  #  volumes:
-  #    - /mnt/media/pi-media/monitoring/config/energy-monitor:/config
-  #    - /mnt/media/pi-media/monitoring/log/energy-monitor:/log
-  #  extra_hosts:
-  #    - "host.docker.internal:host-gateway"
-  #  restart: unless-stopped
+  energy-monitor:
+    container_name: energy-monitor
+    image: mholubinka1/octopus-monitoring:dev
+    volumes:
+      - /mnt/media/pi-media/monitoring/config/energy-monitor:/config
+      - /mnt/media/pi-media/monitoring/log/energy-monitor:/log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
   postgres:
-    container_name: energy-db
+    container_name: energy-monitor-postgres
+    image: mholubinka1/octopus-postgres:latest
     build: postgres
     env_file:
       - postgres/.env
     ports:
       - "5432:5432"
     volumes:
-      - ./energy-monitor-temp/postgres/data:/var/lib/postgresql/data
+      - /mnt/media/pi-media/monitoring/data/postgres/:/var/lib/postgresql/
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U energy-monitor -d octopus"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: always
-  #influxdb2:
-  #  container_name: influxdb2
-  #  image: influxdb:2.7.6
-  #  ports:
-  #    - "8082:8082"
-  #    - "8086:8086"
-  #    - "8089:8089"
-  #  volumes:
-  #    - /mnt/media/pi-media/monitoring/data/influxdb2:/var/lib/influxdb2
-  #    - /mnt/media/pi-media/monitoring/config/influxdb2:/etc/influxdb2
-  #  restart: always
+#  influxdb2:
+#    container_name: influxdb2
+#    image: influxdb:2.7.6
+#    ports:
+#      - "8082:8082"
+#      - "8086:8086"
+#      - "8089:8089"
+#    volumes:
+#      - /mnt/media/pi-media/monitoring/data/influxdb2:/var/lib/influxdb2
+#      - /mnt/media/pi-media/monitoring/config/influxdb2:/etc/influxdb2
+#    restart: always
