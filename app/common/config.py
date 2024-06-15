@@ -27,6 +27,7 @@ class InfluxV2Settings:
 class PostgresSettings:
     def __init__(self, yaml_settings: Dict) -> None:
         self.host = yaml_settings["postgres"]["host"]
+        self.port = yaml_settings["postgres"]["port"]
         self.database = yaml_settings["postgres"]["database"]
         self.username = yaml_settings["postgres"]["username"]
         self.password = yaml_settings["postgres"]["password"]
@@ -38,6 +39,7 @@ class RefreshSettings:
             "polling_interval_seconds"
         ]
         self.update_interval = yaml_settings["data_refresh"]["update_interval_seconds"]
+        self.historical_limit = yaml_settings["data_refresh"]["historical_limit_days"]
 
 
 class ApplicationSettings:

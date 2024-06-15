@@ -1,15 +1,13 @@
-version: "3"
-
 services:
-  energy-monitor:
-    container_name: energy-monitor
-    build: ./
-    volumes:
-      - ./energy-monitor-temp/.config/energy-monitor:/config
-      - ./energy-monitor-temp/.log/energy-monitor:/log
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
+  #energy-monitor:
+  #  container_name: energy-monitor
+  #  image: mholubinka1/octopus-monitoring:dev
+  #  volumes:
+  #    - /mnt/media/pi-media/monitoring/config/energy-monitor:/config
+  #    - /mnt/media/pi-media/monitoring/log/energy-monitor:/log
+  #  extra_hosts:
+  #    - "host.docker.internal:host-gateway"
+  #  restart: unless-stopped
   postgres:
     container_name: energy-db
     build: postgres

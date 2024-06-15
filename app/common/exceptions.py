@@ -2,6 +2,14 @@ class APIError(Exception):
     pass
 
 
+class InfluxDBError(Exception):
+    pass
+
+
+class PostgresDBError(Exception):
+    pass
+
+
 class ArgumentError(ValueError):
     pass
 

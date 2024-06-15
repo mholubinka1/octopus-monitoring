@@ -1,51 +1,23 @@
 import logging.config
 import re
-import time
 from datetime import datetime
 from logging import Logger, getLogger
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import data.octopus.api_utils as api_utils
 import requests
 from common.config import OctopusAPISettings
+from common.decorator import retry
 from common.exceptions import APIError, ConfigurationError
 from common.logging import APP_LOGGER_NAME, config
 from common.utils import is_none_or_whitespace
-from data.model import Consumption, Energy
+from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
 from data.octopus.model import Account, Electricity, Gas, Meter
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 DEFAULT_PAGE_SIZE = 100
-
-
-def retry(
-    stop_after: int = 3, retry_delay: int = 10
-) -> Callable[[Callable[..., Optional[Any]]], Callable[..., Any]]:
-    def decorator(func: Callable[..., Optional[Any]]) -> Callable[..., Any]:
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            attempt = 1
-            while attempt < stop_after:
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    logger.warning(
-                        f"Error attempting to execute {func}: {e}.\nRetrying."
-                    )
-                    attempt += 1
-                    time.sleep(retry_delay)
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                logger.critical(
-                    f"Error attempting to execute {func}: {e}.\nRetries exhausted."
-                )
-                raise e
-
-        return wrapper
-
-    return decorator
 
 
 class OctopusEnergyAPIClient:
@@ -267,7 +239,9 @@ class OctopusEnergyAPIClient:
         api_endpoint = self.build_api_endpoint_from_params(
             api_endpoint, period_from, period_to, page_size
         )
-        return self.get_consumption_directly_from_endpoint(api_endpoint)
+        return self.get_consumption_directly_from_endpoint(
+            Energy.electricity, api_endpoint
+        )
 
     def get_gas_consumption(
         self,
@@ -283,7 +257,7 @@ class OctopusEnergyAPIClient:
         api_endpoint = self.build_api_endpoint_from_params(
             api_endpoint, period_from, period_to, page_size
         )
-        return self.get_consumption_directly_from_endpoint(api_endpoint)
+        return self.get_consumption_directly_from_endpoint(Energy.gas, api_endpoint)
 
     def build_api_endpoint_from_params(
         self,
@@ -306,6 +280,7 @@ class OctopusEnergyAPIClient:
 
     def get_consumption_directly_from_endpoint(
         self,
+        energy: Energy,
         api_endpoint: str,
     ) -> Tuple[Optional[str], List[Consumption]]:
         consumption = list()
@@ -320,6 +295,8 @@ class OctopusEnergyAPIClient:
                 consumption.append(
                     Consumption(
                         raw=result["consumption"],
+                        est_kwh=to_estimated_kwh(energy, result["consumption"]),
+                        unit=get_raw_unit(energy),
                         start=datetime.fromisoformat(result["interval_start"]),
                         end=datetime.fromisoformat(result["interval_end"]),
                     )

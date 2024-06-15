@@ -1,8 +1,8 @@
 import argparse
-import datetime as dt
+import datetime
 import logging.config
 import sys
-from datetime import datetime
+from datetime import datetime as dt
 from logging import Logger, getLogger
 
 from common.config import get_settings
@@ -33,9 +33,9 @@ try:
     consumption = ConsumptionRetriever(client)
     pricing = PricingRetriever(client)
     logger.info(
-        f"Consumption data update interval {refresh_config.update_interval}  and polling interval: {refresh_config.polling_interval} seconds."
+        f"Consumption data update interval {refresh_config.update_interval} and polling interval: {refresh_config.polling_interval} seconds."
     )
-    polling_start_time = datetime.now(dt.UTC)
+    polling_start_time = dt.now(datetime.UTC)
     poller = Poller(refresh_config, consumption, pricing)
     logger.info("Starting periodic retrieval service.")
     every(refresh_config.polling_interval, poller.poll())

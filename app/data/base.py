@@ -4,7 +4,7 @@ from common.config import ApplicationSettings
 from data.influx.client import InfluxV2Client
 from data.octopus.api import OctopusEnergyAPIClient
 from data.octopus.model import Account, Meter
-from data.postrgres.client import PostgresClient
+from data.postgres.client import PostgresClient
 
 
 class MonitoringClient:
