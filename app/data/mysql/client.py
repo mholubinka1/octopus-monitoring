@@ -8,8 +8,8 @@ from common.decorator import retry
 from common.exceptions import PostgresDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
+from data.mysql import sql_models
 from data.octopus.model import Meter
-from data.postgres import sql_models
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -43,7 +43,7 @@ class SessionBuilder:
     session: sessionmaker
 
     def __init__(self, settings: PostgresSettings):
-        uri = f"postgresql://{settings.username}:{settings.password}@{settings.host}:{settings.port}/{settings.database}"
+        uri = f"mysql+pymysql://{settings.username}:{settings.password}@{settings.host}:{settings.port}/{settings.database}"
         engine = create_engine(uri)
         self.session = sessionmaker(bind=engine)
 
