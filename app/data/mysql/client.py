@@ -3,13 +3,13 @@ from contextlib import contextmanager
 from logging import Logger, getLogger
 from typing import Any, Generator, List
 
-from common.config import PostgresSettings
+from common.config import MariaDBSettings
 from common.decorator import retry
-from common.exceptions import PostgresDBError
+from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
+from data.mysql import sql_models
 from data.octopus.model import Meter
-from data.postgres import sql_models
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -42,14 +42,14 @@ def upsert(s: Session, record: Any) -> None:
 class SessionBuilder:
     session: sessionmaker
 
-    def __init__(self, settings: PostgresSettings):
-        uri = f"postgresql://{settings.username}:{settings.password}@{settings.host}:{settings.port}/{settings.database}"
+    def __init__(self, settings: MariaDBSettings):
+        uri = f"mysql+pymysql://{settings.username}:{settings.password}@{settings.host}:{settings.port}/{settings.database}"
         engine = create_engine(uri)
         self.session = sessionmaker(bind=engine)
 
 
-class PostgresClient:
-    def __init__(self, settings: PostgresSettings) -> None:
+class MariaDBClient:
+    def __init__(self, settings: MariaDBSettings) -> None:
         self._session_builder = SessionBuilder(settings)
 
     @contextmanager
@@ -91,9 +91,9 @@ class PostgresClient:
                     )
                     upsert(s, record)
                 logger.debug(
-                    f"Consumption data written to PostgresDB: {len(consumption)} points."
+                    f"Consumption data written to MariaDB: {len(consumption)} points."
                 )
                 return
         except Exception as e:
             logger.error(f"Failed to write consumption data: {e}")
-            raise PostgresDBError(e)
+            raise MariaDBError(e)

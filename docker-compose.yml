@@ -8,21 +8,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
-  postgres:
-    container_name: energy-monitor-postgres
-    image: mholubinka1/octopus-postgres:latest
-    build: postgres
+    depends_on:
+      - mysql
+  mysql:
+    container_name: energy-monitor-db
+    image: mariadb
     env_file:
-      - postgres/.env
+      - maria-db/.env
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - /mnt/media/pi-media/monitoring/data/postgres/:/var/lib/postgresql/
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U energy-monitor -d octopus"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - /mnt/media/pi-media/monitoring/data/mysql/:/var/lib/mysql/
+      - /mnt/media/pi-media/monitoring/config/mysql/:/docker-entrypoint-initdb.d/init.sql
     restart: always
 #  influxdb2:
 #    container_name: influxdb2

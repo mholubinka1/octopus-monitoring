@@ -8,7 +8,7 @@ influxv2:
   bucket: energy
   all-access-token: 
 
-postgres:
+maria-db:
   host: 
   username: admin
   password: 

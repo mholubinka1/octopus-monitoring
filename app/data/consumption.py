@@ -67,5 +67,5 @@ class ConsumptionRetriever:
         logger.info(f"Writing consumption data from {_min} to {_max} to database.")
 
         self._client.influx.write_consumption(meter, consumption)
-        self._client.postgres.write_consumption(meter, consumption)
+        self._client.mariadb.write_consumption(meter, consumption)
         return

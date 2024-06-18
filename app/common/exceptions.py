@@ -6,7 +6,7 @@ class InfluxDBError(Exception):
     pass
 
 
-class PostgresDBError(Exception):
+class MariaDBError(Exception):
     pass
 
 
