@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS consumption
     PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS cost
+
+DROP TABLE IF EXISTS cost;
+CREATE TABLE cost
 (
     id VARCHAR(50) NOT NULL,
     tariff_id VARCHAR(50) NOT NULL,
@@ -29,7 +31,9 @@ CREATE TABLE IF NOT EXISTS cost
     PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS tariff
+DROP TABLE IF EXISTS tariff;
+
+CREATE TABLE tariff
 (
     id VARCHAR(50) NOT NULL,
     consumption_id VARCHAR(50),

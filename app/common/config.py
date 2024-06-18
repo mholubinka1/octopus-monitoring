@@ -24,13 +24,13 @@ class InfluxV2Settings:
         self.token = yaml_settings["influxv2"]["all-access-token"]
 
 
-class PostgresSettings:
+class MariaDBSettings:
     def __init__(self, yaml_settings: Dict) -> None:
-        self.host = yaml_settings["postgres"]["host"]
-        self.port = yaml_settings["postgres"]["port"]
-        self.database = yaml_settings["postgres"]["database"]
-        self.username = yaml_settings["postgres"]["username"]
-        self.password = yaml_settings["postgres"]["password"]
+        self.host = yaml_settings["maria-db"]["host"]
+        self.port = yaml_settings["maria-db"]["port"]
+        self.database = yaml_settings["maria-db"]["database"]
+        self.username = yaml_settings["maria-db"]["username"]
+        self.password = yaml_settings["maria-db"]["password"]
 
 
 class RefreshSettings:
@@ -46,7 +46,7 @@ class ApplicationSettings:
     def __init__(self, yaml_settings: Dict) -> None:
         self.octopus = OctopusAPISettings(yaml_settings)
         self.influxdb = InfluxV2Settings(yaml_settings)
-        self.postgresdb = PostgresSettings(yaml_settings)
+        self.mariadb = MariaDBSettings(yaml_settings)
         self.refresh_settings = RefreshSettings(yaml_settings)
 
 

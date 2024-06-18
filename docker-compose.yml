@@ -9,8 +9,8 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     depends_on:
-      - postgres
-  maria-db:
+      - mysql
+  mysql:
     container_name: energy-monitor-db
     image: mariadb
     env_file:
@@ -19,11 +19,7 @@ services:
       - "3306:3306"
     volumes:
       - /mnt/media/pi-media/monitoring/data/mysql/:/var/lib/mysql/
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U energy-monitor -d octopus"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - /mnt/media/pi-media/monitoring/config/mysql/:/docker-entrypoint-initdb.d/init.sql
     restart: always
 #  influxdb2:
 #    container_name: influxdb2
