@@ -1,5 +1,5 @@
 APP_LOGGER_NAME = "octopus-monitor"
-LOG_LEVEL = "DEBUG"
+LOG_LEVEL = "INFO"
 
 config = {
     "version": 1,

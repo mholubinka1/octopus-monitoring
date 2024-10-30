@@ -1,6 +1,7 @@
 import logging.config
 import re
 from datetime import datetime
+from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Dict, List, Optional, Tuple
 
@@ -294,8 +295,10 @@ class OctopusEnergyAPIClient:
             for result in response_json["results"]:
                 consumption.append(
                     Consumption(
-                        raw=result["consumption"],
-                        est_kwh=to_estimated_kwh(energy, result["consumption"]),
+                        raw=Decimal(result["consumption"]),
+                        est_kwh=to_estimated_kwh(
+                            energy, Decimal(result["consumption"])
+                        ),
                         unit=get_raw_unit(energy),
                         start=datetime.fromisoformat(result["interval_start"]),
                         end=datetime.fromisoformat(result["interval_end"]),
@@ -303,8 +306,8 @@ class OctopusEnergyAPIClient:
                 )
             next = response_json.get("next", None)
             return (next, consumption)
-        except Exception:
+        except Exception as e:
             response_json = response.json()
-            raise APIError(response_json)
+            raise APIError(e)
 
     # endregion
