@@ -3,6 +3,7 @@ from datetime import datetime
 from logging import Logger, getLogger
 from typing import Dict, List, Optional
 
+from common.decorator import retry
 from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.model import Consumption, Energy
@@ -21,13 +22,13 @@ class ConsumptionRetriever:
         self._client = client
         self._latest_retrieved_date: Dict[Energy, datetime] = {}
 
-    def retrieve_consumption(self, period_from: Optional[datetime]) -> None:
+    def retrieve(self, period_from: Optional[datetime]) -> None:
         self._client.refresh_meters()
         for meter in self._client.meters:
             self.get_meter_consumption(meter, period_from)
         return
 
-    def retrieve_latest_consumption(self) -> None:
+    def refresh(self) -> None:
         self._client.refresh_meters()
         for meter in self._client.meters:
             self.get_meter_consumption(
@@ -36,6 +37,7 @@ class ConsumptionRetriever:
             )
         return
 
+    @retry()
     def get_meter_consumption(
         self,
         meter: Meter,
@@ -43,7 +45,7 @@ class ConsumptionRetriever:
     ) -> None:
         if not period_from:
             period_from = meter.start_date()
-        logger.info(f"Retrieving consumption from {period_from}.")
+        logger.debug(f"Retrieving {meter.energy.name} consumption from {period_from}.")
         (next, consumption) = self._client.octopus.get_consumption(meter, period_from)
         self.write(meter, consumption)
         while next is not None:
@@ -64,8 +66,9 @@ class ConsumptionRetriever:
     def write(self, meter: Meter, consumption: List[Consumption]) -> None:
         _min = min(c.start for c in consumption)
         _max = max(c.end for c in consumption)
-        logger.info(f"Writing consumption data from {_min} to {_max} to database.")
+        logger.info(
+            f"Writing {meter.energy.name} consumption data from {_min} to {_max} to database."
+        )
 
-        self._client.influx.write_consumption(meter, consumption)
         self._client.mariadb.write_consumption(meter, consumption)
         return

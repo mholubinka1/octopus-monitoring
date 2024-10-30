@@ -16,21 +16,13 @@ class OctopusAPISettings:
         self.api_key = yaml_settings["octopus"]["api_key"]
 
 
-class InfluxV2Settings:
-    def __init__(self, yaml_settings: Dict) -> None:
-        self.url = yaml_settings["influxv2"]["url"]
-        self.organization = yaml_settings["influxv2"]["organization"]
-        self.bucket = yaml_settings["influxv2"]["bucket"]
-        self.token = yaml_settings["influxv2"]["all-access-token"]
-
-
 class MariaDBSettings:
     def __init__(self, yaml_settings: Dict) -> None:
-        self.host = yaml_settings["maria-db"]["host"]
-        self.port = yaml_settings["maria-db"]["port"]
-        self.database = yaml_settings["maria-db"]["database"]
-        self.username = yaml_settings["maria-db"]["username"]
-        self.password = yaml_settings["maria-db"]["password"]
+        self.host = yaml_settings["mariadb"]["host"]
+        self.port = yaml_settings["mariadb"]["port"]
+        self.database = yaml_settings["mariadb"]["database"]
+        self.username = yaml_settings["mariadb"]["username"]
+        self.password = yaml_settings["mariadb"]["password"]
 
 
 class RefreshSettings:
@@ -38,14 +30,13 @@ class RefreshSettings:
         self.polling_interval = yaml_settings["data_refresh"][
             "polling_interval_seconds"
         ]
-        self.update_interval = yaml_settings["data_refresh"]["update_interval_seconds"]
+        self.refresh_interval = yaml_settings["data_refresh"]["refresh_interval_hours"]
         self.historical_limit = yaml_settings["data_refresh"]["historical_limit_days"]
 
 
 class ApplicationSettings:
     def __init__(self, yaml_settings: Dict) -> None:
         self.octopus = OctopusAPISettings(yaml_settings)
-        self.influxdb = InfluxV2Settings(yaml_settings)
         self.mariadb = MariaDBSettings(yaml_settings)
         self.refresh_settings = RefreshSettings(yaml_settings)
 

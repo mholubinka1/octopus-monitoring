@@ -49,5 +49,10 @@ def to_estimated_kwh(energy: Energy, raw: Decimal) -> Decimal:
     if energy == Energy.electricity:
         return raw
     if energy == Energy.gas:
-        return (raw * VOLUME_CORRECTION * AVERAGE_CALORIFIC_VALUE) / TO_KWH_DIVISOR
-    raise NotImplementedError("Unknown Energy type.")
+        try:
+            result = (
+                raw * VOLUME_CORRECTION * AVERAGE_CALORIFIC_VALUE
+            ) / TO_KWH_DIVISOR
+            return result
+        except Exception as e:
+            raise e

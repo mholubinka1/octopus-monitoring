@@ -10,9 +10,9 @@ CREATE TABLE IF NOT EXISTS consumption
     energy CHAR,
     period_from TIMESTAMP NOT NULL,
     period_to TIMESTAMP NOT NULL,
-    raw_value DECIMAL UNSIGNED NOT NULL,
+    raw_value DECIMAL(8,5) UNSIGNED NOT NULL,
     unit VARCHAR(5),
-    est_kwh DECIMAL UNSIGNED NOT NULL,
+    est_kwh DECIMAL(8,5) UNSIGNED NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -27,7 +27,7 @@ CREATE TABLE cost
     is_active BOOLEAN NOT NULL,
     period_from TIMESTAMP NOT NULL,
     period_to TIMESTAMP,
-    cost_gbp DECIMAL NOT NULL,
+    cost_gbp DECIMAL(8,5) NOT NULL,
     PRIMARY KEY (id)
 );
 
@@ -45,7 +45,7 @@ CREATE TABLE tariff
     valid_to TIMESTAMP,
     period_from TIMESTAMP NOT NULL,
     period_to TIMESTAMP,
-    standing_charge DECIMAL NOT NULL,
-    unit_rate DECIMAL NOT NULL,
+    standing_charge DECIMAL(9,6) NOT NULL,
+    unit_rate DECIMAL(9,6) NOT NULL,
     PRIMARY KEY (id)
 );
