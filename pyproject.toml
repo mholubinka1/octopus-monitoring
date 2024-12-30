@@ -21,12 +21,12 @@ schedule = "^1.2.2"
 [tool.poetry.group.dev.dependencies]
 isort = "^5.13.2"
 black = "^24.10.0"
-mypy = "^1.13.0"
-ruff = "^0.8.3"
+mypy = "^1.14.0"
+ruff = "^0.8.4"
 pre-commit = "^4.0.1"
 ipykernel = "^6.29.5"
 types-requests = "^2.32.0.20241016"
-types-pyyaml = "^6.0.12.20240917"
+types-pyyaml = "^6.0.12.20241230"
 sqlalchemy-stubs = "^0.4"
 
 [build-system]
