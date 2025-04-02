@@ -26,7 +26,7 @@ ruff = "^0.11.2"
 pre-commit = "^4.2.0"
 ipykernel = "^6.29.5"
 types-requests = "^2.32.0.20250328"
-types-pyyaml = "^6.0.12.20250326"
+types-pyyaml = "^6.0.12.20250402"
 sqlalchemy-stubs = "^0.4"
 
 [build-system]
