@@ -510,9 +510,9 @@ platformdirs==4.3.7 ; python_version >= "3.11" and python_version < "4.0" \
 pre-commit==4.2.0 ; python_version >= "3.11" and python_version < "4.0" \
     --hash=sha256:601283b9757afd87d40c4c4a9b2b5de9637a8ea02eaff7adc2d0fb4e04841146 \
     --hash=sha256:a009ca7205f1eb497d10b845e52c838a98b6cdd2102a6c8e4540e94ee75c58bd
-prompt-toolkit==3.0.50 ; python_version >= "3.11" and python_version < "4.0" \
-    --hash=sha256:544748f3860a2623ca5cd6d2795e7a14f3d0e1c3c9728359013f79877fc89bab \
-    --hash=sha256:9b6427eb19e479d98acff65196a307c555eb567989e6d88ebbb1b509d9779198
+prompt-toolkit==3.0.51 ; python_version >= "3.11" and python_version < "4.0" \
+    --hash=sha256:52742911fde84e2d423e2f9a4cf1de7d7ac4e51958f648d9540e0fb8db077b07 \
+    --hash=sha256:931a162e3b27fc90c86f1b48bb1fb2c528c2761475e57c9c06de13311c7b54ed
 psutil==7.0.0 ; python_version >= "3.11" and python_version < "4.0" \
     --hash=sha256:101d71dc322e3cffd7cea0650b09b3d08b8e7c4109dd6809fe452dfd00e58b25 \
     --hash=sha256:1e744154a6580bc968a0195fd25e80432d3afec619daf145b9e5ba16cc1d688e \
