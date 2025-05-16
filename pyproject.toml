@@ -22,11 +22,11 @@ schedule = "^1.2.2"
 isort = "^6.0.1"
 black = "^25.1.0"
 mypy = "^1.15.0"
-ruff = "^0.11.9"
+ruff = "^0.11.10"
 pre-commit = "^4.2.0"
 ipykernel = "^6.29.5"
 types-requests = "^2.32.0.20250515"
-types-pyyaml = "^6.0.12.20250402"
+types-pyyaml = "^6.0.12.20250516"
 sqlalchemy-stubs = "^0.4"
 
 [build-system]
