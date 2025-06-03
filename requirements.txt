@@ -369,9 +369,9 @@ influxdb==5.3.2 ; python_version >= "3.11" and python_version < "4.0" \
 ipykernel==6.29.5 ; python_version >= "3.11" and python_version < "4.0" \
     --hash=sha256:afdb66ba5aa354b09b91379bac28ae4afebbb30e8b39510c9690afb7a10421b5 \
     --hash=sha256:f093a22c4a40f8828f8e330a9c297cb93dcab13bd9678ded6de8e5cf81c56215
-ipython==9.2.0 ; python_version >= "3.11" and python_version < "4.0" \
-    --hash=sha256:62a9373dbc12f28f9feaf4700d052195bf89806279fc8ca11f3f54017d04751b \
-    --hash=sha256:fef5e33c4a1ae0759e0bba5917c9db4eb8c53fee917b6a526bd973e1ca5159f6
+ipython==9.3.0 ; python_version >= "3.11" and python_version < "4.0" \
+    --hash=sha256:1a0b6dd9221a1f5dddf725b57ac0cb6fddc7b5f470576231ae9162b9b3455a04 \
+    --hash=sha256:79eb896f9f23f50ad16c3bc205f686f6e030ad246cc309c6279a242b14afe9d8
 isort==6.0.1 ; python_version >= "3.11" and python_version < "4.0" \
     --hash=sha256:1cb5df28dfbc742e490c5e41bad6da41b805b0a8be7bc93cd0fb2a8a890ac450 \
     --hash=sha256:2dc5d7f65c9678d94c88dfc29161a320eec67328bc97aad576874cb4be1e9615
