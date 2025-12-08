@@ -20,7 +20,7 @@ schedule = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 isort = "^7.0.0"
-black = "^25.11.0"
+black = "^25.12.0"
 mypy = "^1.19.0"
 ruff = "^0.14.8"
 pre-commit = "^4.5.0"
