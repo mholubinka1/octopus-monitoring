@@ -19,10 +19,10 @@ schedule = "^1.2.2"
 
 
 [tool.poetry.group.dev.dependencies]
-isort = "^7.0.0"
+isort = "^8.0.0"
 black = "^26.1.0"
 mypy = "^1.19.1"
-ruff = "^0.15.1"
+ruff = "^0.15.2"
 pre-commit = "^4.5.1"
 ipykernel = "^7.2.0"
 types-requests = "^2.32.4.20260107"
