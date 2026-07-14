@@ -14,11 +14,60 @@ from common.logging import APP_LOGGER_NAME, config
 from common.utils import is_none_or_whitespace
 from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
 from data.octopus.model import Account, Electricity, Gas, Meter
+from pydantic import BaseModel
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 DEFAULT_PAGE_SIZE = 100
+
+
+class ConsumptionReading(BaseModel):
+    consumption: Decimal
+    interval_start: datetime
+    interval_end: datetime
+
+
+class ConsumptionResponse(BaseModel):
+    results: List[ConsumptionReading]
+    next: Optional[str] = None
+
+
+class MeterSerialInfo(BaseModel):
+    serial_number: str
+
+
+class AgreementInfo(BaseModel):
+    tariff_code: str
+    valid_from: str
+    valid_to: Optional[str] = None
+
+
+class ElectricityMeterPointInfo(BaseModel):
+    mpan: str
+    meters: List[MeterSerialInfo]
+    agreements: Optional[List[AgreementInfo]] = None
+
+
+class GasMeterPointInfo(BaseModel):
+    mprn: str
+    meters: List[MeterSerialInfo]
+    agreements: Optional[List[AgreementInfo]] = None
+
+
+class PropertyInfo(BaseModel):
+    postcode: str
+    address_line_1: str = ""
+    address_line_2: str = ""
+    address_line_3: str = ""
+    town: str = ""
+    county: str = ""
+    electricity_meter_points: List[ElectricityMeterPointInfo] = []
+    gas_meter_points: List[GasMeterPointInfo] = []
+
+
+class AccountMeterInformationResponse(BaseModel):
+    properties: List[PropertyInfo]
 
 
 class OctopusEnergyAPIClient:
@@ -56,20 +105,20 @@ class OctopusEnergyAPIClient:
                 auth=(self._api_key, ""),
             )
             response.raise_for_status()
-            response_json = response.json()
+            parsed = AccountMeterInformationResponse.model_validate(response.json())
 
-            properties = next(iter(response_json.get("properties", None)), None)
+            properties = next(iter(parsed.properties), None)
             if properties is None:
                 raise APIError("")
 
-            postcode = re.sub(r"\s", "", properties.get("postcode", None))
+            postcode = re.sub(r"\s", "", properties.postcode)
 
             address_lines = [
-                properties.get("address_line_1", None).strip(),
-                properties.get("address_line_2", None).strip(),
-                properties.get("address_line_3", None).strip(),
-                properties.get("town", None).strip(),
-                properties.get("county", None).strip(),
+                properties.address_line_1.strip(),
+                properties.address_line_2.strip(),
+                properties.address_line_3.strip(),
+                properties.town.strip(),
+                properties.county.strip(),
             ]
             account = Account(
                 self._account_number,
@@ -85,19 +134,18 @@ class OctopusEnergyAPIClient:
 
             meters: List[Meter] = list()
 
-            electricity_meter_information = properties.get(
-                "electricity_meter_points", None
-            )
-            gas_meter_information = properties.get("gas_meter_points", None)
-
-            if electricity_meter_information:
-                if len(electricity_meter_information) != 0:
-                    meters.append(
-                        api_utils.to_electricity_meter(electricity_meter_information)
+            if properties.electricity_meter_points:
+                meters.append(
+                    api_utils.to_electricity_meter(
+                        [p.model_dump() for p in properties.electricity_meter_points]
                     )
-            if gas_meter_information:
-                if len(gas_meter_information) != 0:
-                    meters.append(api_utils.to_gas_meter(gas_meter_information))
+                )
+            if properties.gas_meter_points:
+                meters.append(
+                    api_utils.to_gas_meter(
+                        [p.model_dump() for p in properties.gas_meter_points]
+                    )
+                )
             return (account, meters)
         except Exception as e:
             if response.status_code != 200:
@@ -291,23 +339,19 @@ class OctopusEnergyAPIClient:
                 auth=(self._api_key, ""),
             )
             response.raise_for_status()
-            response_json = response.json()
-            for result in response_json["results"]:
+            parsed = ConsumptionResponse.model_validate(response.json())
+            for reading in parsed.results:
                 consumption.append(
                     Consumption(
-                        raw=Decimal(result["consumption"]),
-                        est_kwh=to_estimated_kwh(
-                            energy, Decimal(result["consumption"])
-                        ),
+                        raw=reading.consumption,
+                        est_kwh=to_estimated_kwh(energy, reading.consumption),
                         unit=get_raw_unit(energy),
-                        start=datetime.fromisoformat(result["interval_start"]),
-                        end=datetime.fromisoformat(result["interval_end"]),
+                        start=reading.interval_start,
+                        end=reading.interval_end,
                     )
                 )
-            next = response_json.get("next", None)
-            return (next, consumption)
+            return (parsed.next, consumption)
         except Exception as e:
-            response_json = response.json()
             raise APIError(e)
 
     # endregion

@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
 import responses
 from common.config import OctopusAPISettings
+from common.exceptions import APIError
 from data.model import Energy
 from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
@@ -62,3 +64,35 @@ def test_consumption_fetched_from_octopus_is_persisted_and_queryable(
     assert len(stored) == 1
     assert stored[0].id == "E20260101000000"
     assert Decimal(str(stored[0].est_kwh)) == Decimal("1.234")
+
+
+@responses.activate
+def test_consumption_response_missing_a_required_field_raises_a_clear_validation_error() -> (
+    None
+):
+    responses.add(
+        responses.GET,
+        CONSUMPTION_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "interval_start": "2026-01-01T00:00:00+00:00",
+                    "interval_end": "2026-01-01T00:30:00+00:00",
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    with pytest.raises(APIError) as exc_info:
+        octopus.get_consumption_directly_from_endpoint(
+            Energy.electricity, CONSUMPTION_ENDPOINT
+        )
+
+    assert "consumption" in str(exc_info.value)
+    assert "field required" in str(exc_info.value).lower()
