@@ -25,14 +25,10 @@ def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
     )
 
     settings = MariaDBSettings(
-        {
-            "mariadb": {
-                "host": "localhost",
-                "port": 3306,
-                "database": "octopus",
-                "username": "test",
-                "password": "test",
-            }
-        }
+        host="localhost",
+        port=3306,
+        database="octopus",
+        username="test",
+        password="test",
     )
     return MariaDBClient(settings)

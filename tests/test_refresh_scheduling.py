@@ -9,13 +9,7 @@ from main import register_jobs, run_pending_safely
 from schedule import Scheduler
 
 REFRESH_CONFIG = RefreshSettings(
-    {
-        "data_refresh": {
-            "polling_interval_seconds": 1,
-            "refresh_interval_hours": 4,
-            "historical_limit_days": 45,
-        }
-    }
+    polling_interval=1, refresh_interval=4, historical_limit=45
 )
 
 

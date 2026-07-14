@@ -36,9 +36,7 @@ def test_consumption_fetched_from_octopus_is_persisted_and_queryable(
     )
 
     octopus = OctopusEnergyAPIClient(
-        OctopusAPISettings(
-            {"octopus": {"account_number": "A-1234ABCD", "api_key": "sk_live_test"}}
-        )
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     )
     meter = Electricity(
         mpan="1234567890123",

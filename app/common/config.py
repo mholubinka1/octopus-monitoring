@@ -1,44 +1,42 @@
 import logging.config
 import sys
 from logging import Logger, getLogger
-from typing import Dict
 
 import yaml
 from common.logging import APP_LOGGER_NAME, config
+from pydantic import BaseModel, ConfigDict, Field
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
-class OctopusAPISettings:
-    def __init__(self, yaml_settings: Dict) -> None:
-        self.account_number = yaml_settings["octopus"]["account_number"]
-        self.api_key = yaml_settings["octopus"]["api_key"]
+class OctopusAPISettings(BaseModel):
+    account_number: str
+    api_key: str
 
 
-class MariaDBSettings:
-    def __init__(self, yaml_settings: Dict) -> None:
-        self.host = yaml_settings["mariadb"]["host"]
-        self.port = yaml_settings["mariadb"]["port"]
-        self.database = yaml_settings["mariadb"]["database"]
-        self.username = yaml_settings["mariadb"]["username"]
-        self.password = yaml_settings["mariadb"]["password"]
+class MariaDBSettings(BaseModel):
+    host: str
+    port: int
+    database: str
+    username: str
+    password: str
 
 
-class RefreshSettings:
-    def __init__(self, yaml_settings: Dict) -> None:
-        self.polling_interval = yaml_settings["data_refresh"][
-            "polling_interval_seconds"
-        ]
-        self.refresh_interval = yaml_settings["data_refresh"]["refresh_interval_hours"]
-        self.historical_limit = yaml_settings["data_refresh"]["historical_limit_days"]
+class RefreshSettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    polling_interval: int = Field(alias="polling_interval_seconds")
+    refresh_interval: int = Field(alias="refresh_interval_hours")
+    historical_limit: int = Field(alias="historical_limit_days")
 
 
-class ApplicationSettings:
-    def __init__(self, yaml_settings: Dict) -> None:
-        self.octopus = OctopusAPISettings(yaml_settings)
-        self.mariadb = MariaDBSettings(yaml_settings)
-        self.refresh_settings = RefreshSettings(yaml_settings)
+class ApplicationSettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    octopus: OctopusAPISettings
+    mariadb: MariaDBSettings
+    refresh_settings: RefreshSettings = Field(alias="data_refresh")
 
 
 def get_settings(
@@ -46,9 +44,10 @@ def get_settings(
 ) -> ApplicationSettings:
     try:
         with open(config_file_path, "r") as file:
-            settings = yaml.safe_load(file)
+            yaml_settings = yaml.safe_load(file)
+        settings = ApplicationSettings.model_validate(yaml_settings)
         logger.info(f"Successfully loaded settings from {config_file_path}")
-        return ApplicationSettings(settings)
+        return settings
     except Exception as e:
         logger.critical(
             f"Failed to load application settings from {config_file_path}: {e}"
