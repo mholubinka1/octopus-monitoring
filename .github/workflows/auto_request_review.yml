@@ -11,10 +11,10 @@ jobs:
     name: Auto Request Review
     runs-on: ubuntu-latest
     permissions:
-        contents: read
-        pull-requests: write
+      contents: read
+      pull-requests: write
     steps:
-      - name: Request review based on files changes and/or groups the author belongs to
+      - name: Request review based on file changes and/or reviewer groups
         uses: necojackarc/auto-request-review@v0.13.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
