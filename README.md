@@ -34,7 +34,7 @@ initialise the database container.
 
 ## Running
 
-```
+```bash
 docker compose up
 ```
 

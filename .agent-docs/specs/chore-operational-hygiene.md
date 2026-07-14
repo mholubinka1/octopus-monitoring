@@ -44,17 +44,17 @@ This is the foundational branch. `feature/tariff-pricing-pipeline` depends on th
 
 ---
 
-# Part 2: Tooling Modernization
+## Part 2: Tooling Modernization
 
-## Problem Statement
+### Problem Statement
 
 Once the CI gate landed (issue #366), several gaps in the tooling itself became visible: the coverage gate is a fixed 58% floor that can silently regress down to that number without anyone noticing; `common/config.py` and the Octopus API response parsing use raw `dict`/`.get()` indexing with no validation, so a malformed `config.yml` or an unexpected API response shape fails with a confusing `KeyError`/`AttributeError` deep in the stack instead of a clear error at the boundary; pre-commit only covers formatting/typing, not security (secrets, known-vulnerable patterns), YAML/Markdown correctness, or spelling; and the project still runs on Poetry, which is slower to install and adds indirection (venv + resolver + build backend) that `uv` collapses into one binary.
 
-## Solution
+### Solution
 
 Turn the fixed coverage floor into a ratchet that can only hold steady or improve. Introduce Pydantic models at the two places raw dicts currently stand in for validated data: config loading and Octopus API response parsing. Expand pre-commit to cover security scanning, YAML/Markdown linting, spelling, and secret detection, fixing whatever it surfaces across the existing tree. Migrate the whole dependency/build toolchain from Poetry to `uv`.
 
-## User Stories
+### User Stories
 
 6. As the operator, I want CI's coverage gate to never accept a regression from the last run, so that test coverage only trends up over time, not down.
 7. As a developer (or agent), I want `config.yml` validation errors to name the exact missing/invalid field, so that a misconfigured deployment fails fast with a clear message instead of a raw `KeyError`.
@@ -62,7 +62,7 @@ Turn the fixed coverage floor into a ratchet that can only hold steady or improv
 9. As the operator, I want pre-commit to catch secrets, known security anti-patterns, and spelling/lint issues before they're committed, so that these classes of problems never reach `main`.
 10. As the operator, I want the project on `uv` instead of Poetry, so that installs and CI are faster and there's one less layer of indirection to reason about.
 
-## Implementation Decisions
+### Implementation Decisions
 
 - **Coverage ratchet**: `.github/coverage-baseline.txt` holds a single integer (current measured baseline). CI's test step runs `pytest --cov=app --cov-report=json:coverage.json --cov-fail-under=$(cat .github/coverage-baseline.txt)`. A second CI step, gated to `push` events only (not `pull_request`, to avoid pushing to a ref it doesn't own), reads the actual percentage from `coverage.json`, and if `floor(actual) > baseline`, rewrites the baseline file and commits+pushes it with a `[skip ci]`-tagged message (native GitHub Actions support for that marker prevents a retrigger loop). Needs `permissions: contents: write` on the job.
 - **Pydantic config**: `common/config.py`'s `OctopusAPISettings`, `MariaDBSettings`, `RefreshSettings`, `ApplicationSettings` become `pydantic.BaseModel` subclasses (nested to mirror the YAML shape), constructed via `ApplicationSettings.model_validate(yaml_settings)` in `get_settings()`. Plain `BaseModel`, not `pydantic-settings` — the existing flow is YAML-file-only, no env-var override capability was requested.
@@ -70,7 +70,7 @@ Turn the fixed coverage floor into a ratchet that can only hold steady or improv
 - **Pre-commit hooks**: add to `.pre-commit-config.yaml` — `bandit`, `pylint`, `yamllint`, `markdownlint`, `markdown-link-check`, `codespell`, `gitleaks` (default `protect --staged` mode, not a full-history scan), and the standard `pre-commit/pre-commit-hooks` entries (`trailing-whitespace`, `end-of-file-fixer`, `check-merge-conflict`, `check-added-large-files`, `detect-private-key`, `debug-statements`, `check-toml`). Add a local `pytest` hook (`language: system`, runs in the project's own env) so the suite runs on every commit, not just in CI. Fix every finding these surface across the existing tree — no blanket suppressions.
 - **Poetry → uv**: replace `[tool.poetry]` sections in `pyproject.toml` with PEP 621 `[project]` + `[tool.uv]`; `poetry.lock` → `uv.lock`; `Dockerfile`'s venv+Poetry install sequence replaced with `uv`'s own sync/install flow; CI's `Install Poetry`/`poetry install` steps replaced with `uv` setup; `.pre-commit-config.yaml`'s `poetry-check`/`poetry-lock`/`poetry-export` hooks replaced with the `uv-lock` hook from `astral-sh/uv-pre-commit`; `requirements.txt` deleted (no longer generated); `.github/dependabot.yml`'s `pip` ecosystem entry changed to `uv`. See [ADR-0004](../adr/0004-poetry-to-uv-migration.md).
 
-## Testing Decisions
+### Testing Decisions
 
 - Continues the seams already established in Part 1: HTTP mocked via `responses`, DB writes tested against a real SQLite in-memory `Session`. No new seams introduced.
 - Config Pydantic models: unit tests asserting valid YAML produces the expected typed settings, and that a missing/invalid required field raises a `pydantic.ValidationError` with a message naming the field — extending the existing `common.config` test surface (currently untested; this is new coverage, not a rewrite of existing tests).
@@ -78,10 +78,10 @@ Turn the fixed coverage floor into a ratchet that can only hold steady or improv
 - Coverage ratchet: no pytest seam — the bash/CI logic is verified by running it (a real `push` to the branch) and inspecting the workflow run and the resulting baseline-file commit.
 - Pre-commit hooks and the uv migration: no pytest seam — verified by `pre-commit run --all-files` passing clean and `uv run pytest` / `docker build` succeeding locally.
 
-## Out of Scope
+### Out of Scope
 
 Domain model conversion to Pydantic (Account, Meter, Agreement, Consumption) — explicitly decided against; see design session notes. `pydantic-settings`/env-var config overrides. A full `gitleaks` git-history scan (only staged-diff protection is added). Backfilling legacy test coverage to hit 80% — tracked separately in [#371](https://github.com/mholubinka1/octopus-monitoring/issues/371).
 
-## Further Notes
+### Further Notes (Part 2)
 
 This part depends on Part 1 having landed (it did — issues #366-#370 are implemented and committed on this branch, code-review passed). The coverage ratchet's initial baseline value should be set from the actual measured coverage at implementation time, not copied from this document.
