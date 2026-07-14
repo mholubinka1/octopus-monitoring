@@ -11,11 +11,14 @@ from common.config import RefreshSettings, get_settings
 from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
+from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from schedule import Job, Scheduler, default_scheduler
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
+
+CONSUMPTION_REFRESH_JOB = "consumption_refresh"
 
 
 def startup(
@@ -34,9 +37,15 @@ def register_jobs(
     scheduler: Scheduler,
     refresh_config: RefreshSettings,
     consumption: ConsumptionRetriever,
+    mariadb: MariaDBClient,
 ) -> Job:
     def refresh() -> None:
-        consumption.refresh()
+        try:
+            consumption.refresh()
+            mariadb.record_job_run(CONSUMPTION_REFRESH_JOB, "success")
+        except Exception as e:
+            mariadb.record_job_run(CONSUMPTION_REFRESH_JOB, "failure", error=str(e))
+            raise
 
     return scheduler.every(refresh_config.refresh_interval).hours.do(refresh)
 
@@ -62,7 +71,7 @@ def main() -> None:
     pricing = PricingRetriever(client)
 
     startup(consumption, pricing, refresh_config)
-    register_jobs(default_scheduler, refresh_config, consumption)
+    register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
 
     while True:
         default_scheduler.run_pending()

@@ -1,7 +1,8 @@
 import logging.config
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from logging import Logger, getLogger
-from typing import Any, Generator, List
+from typing import Any, Generator, List, Optional
 
 from common.config import MariaDBSettings
 from common.decorator import retry
@@ -96,4 +97,22 @@ class MariaDBClient:
                 return
         except Exception as e:
             logger.error(f"Failed to write consumption data: {e}")
+            raise MariaDBError(e)
+
+    def record_job_run(
+        self, job_name: str, status: str, error: Optional[str] = None
+    ) -> None:
+        try:
+            with self.session_write_scope() as s:
+                record = sql_models.job_run(
+                    job_name=job_name,
+                    status=status,
+                    ran_at=datetime.now(timezone.utc),
+                    error_message=error,
+                )
+                s.add(record)
+                logger.debug(f"Recorded job run: {job_name} ({status}).")
+                return
+        except Exception as e:
+            logger.error(f"Failed to record job run for {job_name}: {e}")
             raise MariaDBError(e)
