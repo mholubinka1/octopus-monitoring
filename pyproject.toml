@@ -28,7 +28,13 @@ ipykernel = "^6.29.5"
 types-requests = "^2.32.4.20250611"
 types-pyyaml = "^6.0.12.20250516"
 sqlalchemy-stubs = "^0.4"
+pytest = "^8.3.4"
+responses = "^0.25.3"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["app"]
+testpaths = ["tests"]

@@ -19,6 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Set up Python
+        if: success()
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        if: success()
+        run: pip install poetry
+
+      - name: Install dependencies
+        if: success()
+        run: poetry install --no-root
+
+      - name: Run tests
+        if: success()
+        run: poetry run pytest
+
       - name: Prepare
         if: success()
         id: prepare
