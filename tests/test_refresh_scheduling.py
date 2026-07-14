@@ -5,7 +5,7 @@ from common.config import RefreshSettings
 from data.consumption import ConsumptionRetriever
 from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
-from main import register_jobs
+from main import register_jobs, run_pending_safely
 from schedule import Scheduler
 
 REFRESH_CONFIG = RefreshSettings(
@@ -68,3 +68,10 @@ def test_failed_refresh_is_recorded_as_a_failed_job_run_and_still_raises(
     assert len(runs) == 1
     assert runs[0].status == "failure"
     assert runs[0].error_message == "Octopus API unavailable"
+
+
+def test_run_pending_safely_does_not_propagate_a_scheduled_job_failure() -> None:
+    scheduler = Mock(spec=Scheduler)
+    scheduler.run_pending.side_effect = RuntimeError("boom")
+
+    run_pending_safely(scheduler)

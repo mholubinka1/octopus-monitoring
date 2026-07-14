@@ -50,6 +50,13 @@ def register_jobs(
     return scheduler.every(refresh_config.refresh_interval).hours.do(refresh)
 
 
+def run_pending_safely(scheduler: Scheduler) -> None:
+    try:
+        scheduler.run_pending()
+    except Exception as e:
+        logger.error(f"Unhandled error while running scheduled jobs: {e}")
+
+
 def main() -> None:
     logger.info("Starting octopus-monitoring.")
 
@@ -74,7 +81,7 @@ def main() -> None:
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
 
     while True:
-        default_scheduler.run_pending()
+        run_pending_safely(default_scheduler)
         time.sleep(1)
 
 

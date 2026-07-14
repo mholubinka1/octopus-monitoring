@@ -38,7 +38,7 @@ class job_run(SQLBase):
     __table_args__ = {"schema": "octopus"}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    job_name = Column(String)
-    status = Column(String)
-    ran_at = Column(DateTime)
+    job_name = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    ran_at = Column(DateTime, nullable=False)
     error_message = Column(String)
