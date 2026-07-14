@@ -1,4 +1,4 @@
-import logging
+import logging.config
 import re
 from abc import ABC
 from dataclasses import dataclass

@@ -7,55 +7,67 @@ from datetime import datetime as dt
 from datetime import timedelta
 from logging import Logger, getLogger
 
-from common.config import get_settings
+from common.config import RefreshSettings, get_settings
 from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
 from data.pricing import PricingRetriever
-from schedule import every, repeat, run_pending
+from schedule import Job, Scheduler, default_scheduler
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
-logger.info("Starting octopus-monitoring.")
 
-try:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config-file")
-    args = parser.parse_args()
-    settings = get_settings(config_file_path=args.config_file)
-    refresh_config = settings.refresh_settings
-    logger.info("Startup complete.")
-except Exception as e:
-    logger.critical(f"Error loading startup configurations: {e}.")
-    sys.exit(1)
-
-logger.info(f"Consumption data update interval {refresh_config.refresh_interval}.")
-
-client = MonitoringClient(settings)
-
-consumption = ConsumptionRetriever(client)
-pricing = PricingRetriever(client)
-
-
-def startup(consumption: ConsumptionRetriever, pricing: PricingRetriever) -> None:
+def startup(
+    consumption: ConsumptionRetriever,
+    pricing: PricingRetriever,
+    refresh_config: RefreshSettings,
+) -> None:
     current_time = dt.now(datetime.UTC)
     limit = (current_time - timedelta(days=refresh_config.historical_limit)).date()
     limit_dt = dt(limit.year, limit.month, limit.day, tzinfo=datetime.UTC)
     logger.info(f"Startup. Retrieving consumption history from {limit_dt}.")
     consumption.retrieve(period_from=limit_dt)
-    pass
 
 
-startup(consumption, pricing)
+def register_jobs(
+    scheduler: Scheduler,
+    refresh_config: RefreshSettings,
+    consumption: ConsumptionRetriever,
+) -> Job:
+    def refresh() -> None:
+        consumption.refresh()
+
+    return scheduler.every(refresh_config.refresh_interval).hours.do(refresh)
 
 
-# @repeat(every(refresh_config.refresh_interval).hours, client, consumption, pricing)
-@repeat(every(60).seconds, client, consumption, pricing)
-def refresh(consumption: ConsumptionRetriever, pricing: PricingRetriever) -> None:
-    consumption.refresh()
+def main() -> None:
+    logger.info("Starting octopus-monitoring.")
+
+    try:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--config-file")
+        args = parser.parse_args()
+        settings = get_settings(config_file_path=args.config_file)
+        refresh_config = settings.refresh_settings
+        logger.info("Startup complete.")
+    except Exception as e:
+        logger.critical(f"Error loading startup configurations: {e}.")
+        sys.exit(1)
+
+    logger.info(f"Consumption data update interval {refresh_config.refresh_interval}.")
+
+    client = MonitoringClient(settings)
+    consumption = ConsumptionRetriever(client)
+    pricing = PricingRetriever(client)
+
+    startup(consumption, pricing, refresh_config)
+    register_jobs(default_scheduler, refresh_config, consumption)
+
+    while True:
+        default_scheduler.run_pending()
+        time.sleep(1)
 
 
-while True:
-    run_pending()
-    time.sleep(1)
+if __name__ == "__main__":
+    main()
