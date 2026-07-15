@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 from common.config import OctopusAPISettings
 from common.decorator import retry
-from common.exceptions import APIError, ConfigurationError
+from common.exceptions import APIError
 from common.logging import APP_LOGGER_NAME, config
 from common.utils import is_none_or_whitespace
 from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
@@ -79,14 +79,8 @@ class OctopusEnergyAPIClient:
     _consumption_funcs: Dict
 
     def __init__(self, settings: OctopusAPISettings) -> None:
-        api_key = settings.api_key
-        account_number = settings.account_number
-        if api_key is None:
-            raise ConfigurationError("API Key not set.")
-        if account_number is None:
-            raise ConfigurationError("Account Number not set.")
-        self._api_key = api_key
-        self._account_number = account_number
+        self._api_key = settings.api_key
+        self._account_number = settings.account_number
 
         self._consumption_funcs: Dict = {
             Energy.electricity: self.get_electricity_consumption,
@@ -100,6 +94,7 @@ class OctopusEnergyAPIClient:
         self,
     ) -> Tuple[Account, List[Meter]]:
         api_endpoint = self._base_url + f"accounts/{self._account_number}"
+        response: Optional[requests.Response] = None
         try:
             response = requests.get(
                 url=api_endpoint,
@@ -150,7 +145,7 @@ class OctopusEnergyAPIClient:
                 )
             return (account, meters)
         except Exception as e:
-            if response.status_code != 200:
+            if response is not None and response.status_code != 200:
                 response_json = response.json()
                 raise APIError(response_json) from e
             raise RuntimeError(
@@ -161,6 +156,7 @@ class OctopusEnergyAPIClient:
     def get_region_code(self, postcode: str) -> str:
         api_endpoint = self._base_url + "industry/grid-supply-points"
         params = {"postcode": postcode}
+        response: Optional[requests.Response] = None
         try:
             response = requests.get(
                 url=api_endpoint,
@@ -174,7 +170,7 @@ class OctopusEnergyAPIClient:
             results = response_json.get("results", None)
             return results[0].get("group_id")
         except Exception as e:
-            if response.status_code != 200:
+            if response is not None and response.status_code != 200:
                 response_json = response.json()
                 raise APIError(response_json) from e
             raise RuntimeError(

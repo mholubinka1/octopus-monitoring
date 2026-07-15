@@ -49,17 +49,37 @@ ignore-paths = ["app/_deprecated"]
 source-roots = ["app"]
 
 [tool.pylint."messages control"]
+# Each disable below is a deliberate fit to this codebase's established conventions,
+# not a blanket suppression. Re-enable individually if the underlying convention changes.
 disable = [
+    # This codebase has no docstrings anywhere by design — self-documenting code,
+    # comments reserved for non-obvious WHY (.agent-docs/agent.md, "Production Code Quality").
     "missing-module-docstring",
     "missing-class-docstring",
     "missing-function-docstring",
+    # Small data/config/model classes (Pydantic settings, SQLAlchemy models, dataclass-style
+    # value objects) are intentionally simple and don't need >=2 public methods.
     "too-few-public-methods",
+    # The retry()/API-wrapper architecture (common/decorator.py, data/octopus/api.py,
+    # data/mysql/client.py) deliberately catches/raises bare Exception as its error boundary.
     "broad-exception-caught",
     "broad-exception-raised",
+    # f-string logging is this codebase's consistent existing convention; the lazy-%
+    # performance case pylint optimizes for doesn't apply at this app's log volume.
     "logging-fstring-interpolation",
+    # TODOs are tracked via GitHub issues, not blocked by lint.
     "fixme",
+    # Enum members and SQLAlchemy ORM classes intentionally use lowercase names
+    # (e.g. Energy.electricity, sql_models.consumption) matching table names — an
+    # established, deliberate deviation from PEP8 UPPER_CASE/PascalCase defaults.
     "invalid-name",
+    # False-positive on match/case blocks whose default arm raises rather than falls
+    # through; mypy already verifies the declared return type is honored on every path.
     "inconsistent-return-statements",
+    # Line length is already owned by black/ruff (both configured to 88 chars);
+    # pylint's own line-too-long would just re-flag under different, conflicting rules.
     "line-too-long",
+    # Noisy on test files, where explicit repetition of setup/assertions aids
+    # readability (BDD principle) more than a shared helper would.
     "duplicate-code",
 ]

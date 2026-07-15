@@ -1,8 +1,12 @@
+from pathlib import Path
+from typing import Any, Dict
+
 import pytest
-from common.config import ApplicationSettings
+import yaml
+from common.config import ApplicationSettings, get_settings
 from pydantic import ValidationError
 
-VALID_CONFIG = {
+VALID_CONFIG: Dict[str, Any] = {
     "octopus": {"account_number": "A-1234ABCD", "api_key": "sk_live_test"},
     "mariadb": {
         "host": "localhost",
@@ -43,3 +47,28 @@ def test_missing_required_config_field_raises_a_validation_error_naming_the_fiel
 
     with pytest.raises(ValidationError, match="api_key"):
         ApplicationSettings.model_validate(invalid_config)
+
+
+def test_malformed_config_field_value_is_not_leaked_to_logs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    leaked_marker = "hunter2-do-not-log-me"
+    mariadb_config = dict(VALID_CONFIG["mariadb"])
+    mariadb_config["password"] = [leaked_marker]
+    invalid_config = {
+        "octopus": VALID_CONFIG["octopus"],
+        "mariadb": mariadb_config,
+        "data_refresh": VALID_CONFIG["data_refresh"],
+    }
+    config_file = tmp_path / "config.yml"
+    config_file.write_text(yaml.safe_dump(invalid_config))
+
+    logged_messages: list[str] = []
+    monkeypatch.setattr("common.config.logger.critical", logged_messages.append)
+
+    with pytest.raises(SystemExit):
+        get_settings(str(config_file))
+
+    logged_text = " ".join(logged_messages)
+    assert leaked_marker not in logged_text
+    assert "password" in logged_text

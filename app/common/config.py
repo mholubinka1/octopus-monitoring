@@ -4,7 +4,7 @@ from logging import Logger, getLogger
 
 import yaml
 from common.logging import APP_LOGGER_NAME, config
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -48,6 +48,15 @@ def get_settings(
         settings = ApplicationSettings.model_validate(yaml_settings)
         logger.info(f"Successfully loaded settings from {config_file_path}")
         return settings
+    except ValidationError as e:
+        invalid_fields = ", ".join(
+            ".".join(str(part) for part in error["loc"]) for error in e.errors()
+        )
+        logger.critical(
+            f"Failed to load application settings from {config_file_path}: "
+            f"invalid or missing field(s): {invalid_fields}"
+        )
+        sys.exit(1)
     except Exception as e:
         logger.critical(
             f"Failed to load application settings from {config_file_path}: {e}"

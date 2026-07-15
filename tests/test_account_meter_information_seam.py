@@ -1,4 +1,5 @@
 import pytest
+import requests
 import responses
 from common.config import OctopusAPISettings
 from data.octopus.api import OctopusEnergyAPIClient
@@ -78,8 +79,27 @@ def test_account_response_missing_a_required_field_raises_a_clear_validation_err
         OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     )
 
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(RuntimeError) as exc_info:
         octopus.get_account_meter_information()
 
     assert "postcode" in str(exc_info.value)
     assert "field required" in str(exc_info.value).lower()
+
+
+@responses.activate
+def test_account_meter_information_connection_failure_raises_a_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    responses.add(
+        responses.GET,
+        ACCOUNT_ENDPOINT,
+        body=requests.exceptions.ConnectTimeout("connection timed out"),
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    with pytest.raises(RuntimeError, match="connection timed out"):
+        octopus.get_account_meter_information()
