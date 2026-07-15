@@ -146,8 +146,11 @@ class OctopusEnergyAPIClient:
             return (account, meters)
         except Exception as e:
             if response is not None and response.status_code != 200:
-                response_json = response.json()
-                raise APIError(response_json) from e
+                try:
+                    error_body: object = response.json()
+                except ValueError:
+                    error_body = response.text
+                raise APIError(error_body) from e
             raise RuntimeError(
                 f"Failed to fetch account/meter information: {e}."
             ) from e
@@ -171,8 +174,11 @@ class OctopusEnergyAPIClient:
             return results[0].get("group_id")
         except Exception as e:
             if response is not None and response.status_code != 200:
-                response_json = response.json()
-                raise APIError(response_json) from e
+                try:
+                    error_body: object = response.json()
+                except ValueError:
+                    error_body = response.text
+                raise APIError(error_body) from e
             raise RuntimeError(
                 f"Failed to fetch region code for {postcode}: {e}."
             ) from e

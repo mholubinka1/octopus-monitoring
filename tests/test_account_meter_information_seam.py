@@ -2,6 +2,7 @@ import pytest
 import requests
 import responses
 from common.config import OctopusAPISettings
+from common.exceptions import APIError
 from data.octopus.api import OctopusEnergyAPIClient
 from data.octopus.model import Electricity
 
@@ -102,4 +103,25 @@ def test_account_meter_information_connection_failure_raises_a_clear_error(
     )
 
     with pytest.raises(RuntimeError, match="connection timed out"):
+        octopus.get_account_meter_information()
+
+
+@responses.activate
+def test_account_meter_information_non_json_error_response_raises_a_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    responses.add(
+        responses.GET,
+        ACCOUNT_ENDPOINT,
+        body="Internal Server Error",
+        status=500,
+        content_type="text/plain",
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    with pytest.raises(APIError, match="Internal Server Error"):
         octopus.get_account_meter_information()

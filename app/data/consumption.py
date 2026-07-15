@@ -47,16 +47,21 @@ class ConsumptionRetriever:
         (next_page, consumption) = self._client.octopus.get_consumption(
             meter, period_from
         )
-        self.write(meter, consumption)
-        while next_page is not None:
+        latest_retrieved_date = period_from
+        while True:
+            if consumption:
+                self.write(meter, consumption)
+                latest_retrieved_date = max(
+                    latest_retrieved_date, max(c.end for c in consumption)
+                )
+            if next_page is None:
+                break
             (
                 next_page,
                 consumption,
             ) = self._client.octopus.get_consumption_directly_from_endpoint(
                 meter.energy, next_page
             )
-            self.write(meter, consumption)
-        latest_retrieved_date = max(c.end for c in consumption)
         logger.info(
             f"Successfully retrieved consumption from {period_from} to {latest_retrieved_date}"
         )
