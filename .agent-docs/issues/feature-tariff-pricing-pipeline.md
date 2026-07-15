@@ -69,10 +69,10 @@ account's region (`MonitoringClient.region_code` — reuse, don't re-derive) and
 
 ### Acceptance criteria
 
-- [ ] `api.py` has product-catalogue and region-availability fetch methods, with HTTP-mocked tests via `responses`
-- [ ] `write_product` upserts `product_code`/`display_name`/`direction`
-- [ ] `PricingRetriever.refresh()` persists the fetched catalogue for the account's region
-- [ ] Unit tests: HTTP boundary (mocked Octopus responses) and DB boundary (SQLite) for the new write path
+- [x] `api.py` has product-catalogue and region-availability fetch methods, with HTTP-mocked tests via `responses`
+- [x] `write_product` upserts `product_code`/`display_name`/`direction`
+- [x] `PricingRetriever.refresh()` persists the fetched catalogue for the account's region
+- [x] Unit tests: HTTP boundary (mocked Octopus responses) and DB boundary (SQLite) for the new write path
 
 ---
 
