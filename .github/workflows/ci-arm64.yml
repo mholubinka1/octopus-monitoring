@@ -21,33 +21,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Set up Python
+      - name: Install uv
         if: success()
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.11'
 
-      - name: Install Poetry
-        if: success()
-        run: pip install poetry
-
       - name: Install dependencies
         if: success()
-        run: poetry install --no-root
+        run: uv sync --locked
 
       - name: Run tests
         if: success()
         shell: bash
         run: |
           BASELINE=$(cat .github/coverage-baseline.txt)
-          poetry run pytest --cov=app --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under="$BASELINE"
+          uv run pytest --cov=app --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under="$BASELINE"
 
       - name: Raise coverage baseline
         if: success() && github.event_name == 'push'
         shell: bash
         run: |
           BASELINE=$(cat .github/coverage-baseline.txt)
-          ACTUAL=$(poetry run python -c "import json; print(int(json.load(open('coverage.json'))['totals']['percent_covered']))")
+          ACTUAL=$(uv run python -c "import json; print(int(json.load(open('coverage.json'))['totals']['percent_covered']))")
           if [ "$ACTUAL" -gt "$BASELINE" ]; then
             echo "$ACTUAL" > .github/coverage-baseline.txt
             git config user.name "github-actions[bot]"

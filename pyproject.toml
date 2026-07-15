@@ -1,42 +1,41 @@
-[tool.poetry]
+[project]
 name = "octopus-monitoring"
 version = "0.1.0"
 description = ""
-authors = ["Matt Holubinka <meholubinka@gmail.com>"]
+authors = [{name = "Matt Holubinka", email = "meholubinka@gmail.com"}]
 readme = "README.md"
-packages = [{include = "octopus_monitoring"}]
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.32.4",
+    "influxdb>=5.3.2",
+    "cryptography==45.0.4",
+    "pyyaml>=6.0.2",
+    "influxdb-client>=1.49.0",
+    "sqlalchemy>=2.0.41",
+    "pymysql>=1.1.1",
+    "schedule>=1.2.2",
+    "pydantic>=2.13.4",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-requests = "^2.32.4"
-influxdb = "^5.3.2"
-cryptography = "45.0.4"
-pyyaml = "^6.0.2"
-influxdb-client = "^1.49.0"
-sqlalchemy = "^2.0.41"
-pymysql = "^1.1.1"
-schedule = "^1.2.2"
-pydantic = "^2.13.4"
+[tool.uv]
+package = false
 
-
-[tool.poetry.group.dev.dependencies]
-isort = "^6.0.1"
-black = "^25.1.0"
-mypy = "^1.16.1"
-ruff = "^0.12.0"
-pre-commit = "^4.2.0"
-ipykernel = "^6.29.5"
-types-requests = "^2.32.4.20250611"
-types-pyyaml = "^6.0.12.20250516"
-sqlalchemy-stubs = "^0.4"
-pytest = "^8.3.4"
-responses = "^0.25.3"
-pytest-cov = "^7.1.0"
-pylint = "^4.0.6"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "isort>=6.0.1",
+    "black>=25.1.0",
+    "mypy>=1.16.1",
+    "ruff>=0.12.0",
+    "pre-commit>=4.2.0",
+    "ipykernel>=6.29.5",
+    "types-requests>=2.32.4.20250611",
+    "types-pyyaml>=6.0.12.20250516",
+    "sqlalchemy-stubs>=0.4",
+    "pytest>=8.3.4",
+    "responses>=0.25.3",
+    "pytest-cov>=7.1.0",
+    "pylint>=4.0.6",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["app"]
