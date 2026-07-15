@@ -51,8 +51,8 @@ def register_jobs(
 def run_pending_safely(scheduler: Scheduler) -> None:
     try:
         scheduler.run_pending()
-    except Exception as e:
-        logger.error(f"Unhandled error while running scheduled jobs: {e}")
+    except Exception:
+        logger.exception("Unhandled error while running scheduled jobs.")
 
 
 def main() -> None:

@@ -8,9 +8,7 @@ from data.mysql.client import MariaDBClient
 from main import register_jobs, run_pending_safely
 from schedule import Scheduler
 
-REFRESH_CONFIG = RefreshSettings(
-    polling_interval=1, refresh_interval=4, historical_limit=45
-)
+REFRESH_CONFIG = RefreshSettings(refresh_interval=4, historical_limit=45)
 
 
 def test_registered_job_runs_on_the_configured_refresh_interval(

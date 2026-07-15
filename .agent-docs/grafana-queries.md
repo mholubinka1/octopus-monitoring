@@ -398,8 +398,8 @@ ORDER BY time;
 ```sql
 SELECT
   job_name,
-  MAX(CASE WHEN status = 'SUCCESS' THEN ran_at END) AS last_success,
-  TIMESTAMPDIFF(MINUTE, MAX(CASE WHEN status = 'SUCCESS' THEN ran_at END), NOW()) AS minutes_since_success
+  MAX(CASE WHEN status = 'success' THEN ran_at END) AS last_success,
+  TIMESTAMPDIFF(MINUTE, MAX(CASE WHEN status = 'success' THEN ran_at END), NOW()) AS minutes_since_success
 FROM job_run
 GROUP BY job_name
 ORDER BY job_name;

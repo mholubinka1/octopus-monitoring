@@ -26,7 +26,6 @@ class MariaDBSettings(BaseModel):
 class RefreshSettings(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    polling_interval: int = Field(alias="polling_interval_seconds")
     refresh_interval: int = Field(alias="refresh_interval_hours")
     historical_limit: int = Field(alias="historical_limit_days")
 

@@ -16,7 +16,6 @@ VALID_CONFIG: Dict[str, Any] = {
         "password": "test",
     },
     "data_refresh": {
-        "polling_interval_seconds": 5,
         "refresh_interval_hours": 4,
         "historical_limit_days": 45,
     },
@@ -31,7 +30,6 @@ def test_valid_config_yaml_produces_correctly_typed_settings() -> None:
     assert settings.mariadb.host == "localhost"
     assert settings.mariadb.port == 3306
     assert settings.mariadb.database == "octopus"
-    assert settings.refresh_settings.polling_interval == 5
     assert settings.refresh_settings.refresh_interval == 4
     assert settings.refresh_settings.historical_limit == 45
 

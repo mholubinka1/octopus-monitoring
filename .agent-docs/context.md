@@ -83,7 +83,7 @@ The one-time historical consumption retrieval run on process start, bounded by `
 _Avoid_: initial sync, bootstrap
 
 **Refresh Loop**:
-The recurring poll of the Octopus API, driven by the `schedule` library. Currently hardcoded to every 60 seconds, overriding the configured `refresh_interval_hours`.
+The recurring poll of the Octopus API, driven by the `schedule` library on the configured `refresh_interval_hours`.
 _Avoid_: polling loop, cron job
 
 **`ConsumptionRetriever`**:
