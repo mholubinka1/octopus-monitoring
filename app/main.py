@@ -12,7 +12,6 @@ from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
 from data.mysql.client import MariaDBClient
-from data.pricing import PricingRetriever
 from schedule import Job, Scheduler, default_scheduler
 
 logging.config.dictConfig(config)
@@ -23,7 +22,6 @@ CONSUMPTION_REFRESH_JOB = "consumption_refresh"
 
 def startup(
     consumption: ConsumptionRetriever,
-    pricing: PricingRetriever,
     refresh_config: RefreshSettings,
 ) -> None:
     current_time = dt.now(datetime.UTC)
@@ -75,9 +73,8 @@ def main() -> None:
 
     client = MonitoringClient(settings)
     consumption = ConsumptionRetriever(client)
-    pricing = PricingRetriever(client)
 
-    startup(consumption, pricing, refresh_config)
+    startup(consumption, refresh_config)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
 
     while True:

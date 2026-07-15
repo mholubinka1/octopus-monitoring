@@ -58,8 +58,6 @@ class MariaDBClient:
         session = self._session_builder.session()
         try:
             yield session
-        except Exception:
-            raise
         finally:
             session.close()
 
@@ -80,9 +78,9 @@ class MariaDBClient:
             with self.session_write_scope() as s:
                 for point in consumption:
                     energy_char = as_energy_char(meter.energy)
-                    id = energy_char + point.start.strftime("%Y%m%d%H%M%S")
+                    record_id = energy_char + point.start.strftime("%Y%m%d%H%M%S")
                     record = sql_models.consumption(
-                        id=id,
+                        id=record_id,
                         energy=energy_char,
                         period_from=point.start,
                         period_to=point.end,
@@ -97,7 +95,7 @@ class MariaDBClient:
                 return
         except Exception as e:
             logger.error(f"Failed to write consumption data: {e}")
-            raise MariaDBError(e)
+            raise MariaDBError(e) from e
 
     def record_job_run(
         self, job_name: str, status: str, error: Optional[str] = None
@@ -115,4 +113,4 @@ class MariaDBClient:
                 return
         except Exception as e:
             logger.error(f"Failed to record job run for {job_name}: {e}")
-            raise MariaDBError(e)
+            raise MariaDBError(e) from e

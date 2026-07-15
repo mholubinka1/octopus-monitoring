@@ -75,10 +75,10 @@ class Agreement:
         self.product_code = product_code_match.groupdict()["product_code"]
         self.valid_from = valid_from
         self.valid_to = valid_to
-        self.price_history: List[Price] = list()
+        self.price_history: List[Price] = []
 
 
-class Meter(ABC, object):
+class Meter(ABC):
     energy: Energy
     serial_number: str
     agreements: List[Agreement]

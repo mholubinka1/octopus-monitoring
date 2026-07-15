@@ -26,7 +26,6 @@ class ConsumptionRetriever:
         self._client.refresh_meters()
         for meter in self._client.meters:
             self.get_meter_consumption(meter, period_from)
-        return
 
     def refresh(self) -> None:
         self._client.refresh_meters()
@@ -35,7 +34,6 @@ class ConsumptionRetriever:
                 meter,
                 self._latest_retrieved_date[meter.energy],
             )
-        return
 
     @retry()
     def get_meter_consumption(
@@ -46,14 +44,16 @@ class ConsumptionRetriever:
         if not period_from:
             period_from = meter.start_date()
         logger.debug(f"Retrieving {meter.energy.name} consumption from {period_from}.")
-        (next, consumption) = self._client.octopus.get_consumption(meter, period_from)
+        (next_page, consumption) = self._client.octopus.get_consumption(
+            meter, period_from
+        )
         self.write(meter, consumption)
-        while next is not None:
+        while next_page is not None:
             (
-                next,
+                next_page,
                 consumption,
             ) = self._client.octopus.get_consumption_directly_from_endpoint(
-                meter.energy, next
+                meter.energy, next_page
             )
             self.write(meter, consumption)
         latest_retrieved_date = max(c.end for c in consumption)
@@ -61,7 +61,6 @@ class ConsumptionRetriever:
             f"Successfully retrieved consumption from {period_from} to {latest_retrieved_date}"
         )
         self._latest_retrieved_date[meter.energy] = latest_retrieved_date
-        return
 
     def write(self, meter: Meter, consumption: List[Consumption]) -> None:
         _min = min(c.start for c in consumption)
@@ -71,4 +70,3 @@ class ConsumptionRetriever:
         )
 
         self._client.mariadb.write_consumption(meter, consumption)
-        return

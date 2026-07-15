@@ -43,7 +43,7 @@ def get_settings(
     config_file_path: str,
 ) -> ApplicationSettings:
     try:
-        with open(config_file_path, "r") as file:
+        with open(config_file_path, "r", encoding="utf-8") as file:
             yaml_settings = yaml.safe_load(file)
         settings = ApplicationSettings.model_validate(yaml_settings)
         logger.info(f"Successfully loaded settings from {config_file_path}")
