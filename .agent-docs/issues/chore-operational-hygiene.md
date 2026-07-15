@@ -1,5 +1,7 @@
 # Issues: chore-operational-hygiene
 
+> Work complete — PR ready to merge.
+
 ## Test infrastructure + CI gate
 
 **GitHub issue**: [#366](https://github.com/mholubinka1/octopus-monitoring/issues/366)
@@ -14,10 +16,10 @@ Add `pytest` and `responses` as dev dependencies, create a `tests/` directory, a
 
 ### Acceptance criteria
 
-- [ ] `pytest` and `responses` added to `pyproject.toml`'s dev dependency group
-- [ ] `tests/` directory created with at least one passing test establishing the SQLite in-memory + `responses` seam pattern
-- [ ] `.github/workflows/ci-arm64.yml` runs `pytest` before the "Docker Build and Push" step
-- [ ] CI fails fast (build/push does not run) if `pytest` fails
+- [x] `pytest` and `responses` added to `pyproject.toml`'s dev dependency group
+- [x] `tests/` directory created with at least one passing test establishing the SQLite in-memory + `responses` seam pattern
+- [x] `.github/workflows/ci-arm64.yml` runs `pytest` before the "Docker Build and Push" step
+- [x] CI fails fast (build/push does not run) if `pytest` fails
 
 ---
 
@@ -35,10 +37,10 @@ Extract job registration in `app/main.py` into a testable function, and replace 
 
 ### Acceptance criteria
 
-- [ ] Job registration extracted into a testable function in `app/main.py`
-- [ ] Hardcoded 60-second repeat replaced with a job driven by `refresh_config.refresh_interval`
-- [ ] Unit test asserts the configured interval (not a hardcoded value) is what gets registered
-- [ ] Manual verification: changing `refresh_interval_hours` in config changes the polling cadence
+- [x] Job registration extracted into a testable function in `app/main.py`
+- [x] Hardcoded 60-second repeat replaced with a job driven by `refresh_config.refresh_interval`
+- [x] Unit test asserts the configured interval (not a hardcoded value) is what gets registered
+- [x] Manual verification: changing `refresh_interval_hours` in config changes the polling cadence
 
 ---
 
@@ -56,10 +58,10 @@ Add a `job_run` table (`id, job_name, status, ran_at, error_message`) to `mariad
 
 ### Acceptance criteria
 
-- [ ] `job_run` table added to `mariadb/init.sql` and `app/data/mysql/sql_models.py`
-- [ ] `MariaDBClient.record_job_run(job_name, status, error=None)` implemented following the existing upsert pattern
-- [ ] Consumption refresh job wrapped so both success and failure are recorded via `record_job_run`
-- [ ] Unit tests against a SQLite in-memory session cover both the success and failure paths
+- [x] `job_run` table added to `mariadb/init.sql` and `app/data/mysql/sql_models.py`
+- [x] `MariaDBClient.record_job_run(job_name, status, error=None)` implemented following the existing upsert pattern
+- [x] Consumption refresh job wrapped so both success and failure are recorded via `record_job_run`
+- [x] Unit tests against a SQLite in-memory session cover both the success and failure paths
 
 ---
 
@@ -77,9 +79,9 @@ Uncomment/restore the `energy-monitor` service block in `docker-compose.yml` so 
 
 ### Acceptance criteria
 
-- [ ] `energy-monitor` service uncommented/restored in `docker-compose.yml`
-- [ ] `docker compose up` starts both the `mariadb` and `energy-monitor` containers
-- [ ] `energy-monitor` successfully connects to `mariadb` with no manual steps beyond `docker compose up`
+- [x] `energy-monitor` service uncommented/restored in `docker-compose.yml`
+- [x] `docker compose up` starts both the `mariadb` and `energy-monitor` containers
+- [x] `energy-monitor` successfully connects to `mariadb` with no manual steps beyond `docker compose up`
 
 ---
 
@@ -97,9 +99,9 @@ Rewrite `README.md` to describe the actual MariaDB + Grafana architecture, remov
 
 ### Acceptance criteria
 
-- [ ] README describes the MariaDB + Grafana architecture
-- [ ] InfluxDB/Flux references removed
-- [ ] Configuration instructions (`config.yml.template` usage) remain accurate
+- [x] README describes the MariaDB + Grafana architecture
+- [x] InfluxDB/Flux references removed
+- [x] Configuration instructions (`config.yml.template` usage) remain accurate
 
 ---
 
@@ -117,10 +119,10 @@ Replace the fixed `--cov-fail-under=58` gate with a ratchet. A checked-in `.gith
 
 ### Acceptance criteria
 
-- [ ] `.github/coverage-baseline.txt` exists, seeded from actual measured coverage at implementation time
-- [ ] CI fails if coverage drops below the stored baseline
-- [ ] CI auto-commits a raised baseline on `push` events when coverage increases, without retriggering itself
-- [ ] `pull_request` runs enforce the gate but never attempt to commit
+- [x] `.github/coverage-baseline.txt` exists, seeded from actual measured coverage at implementation time
+- [x] CI fails if coverage drops below the stored baseline
+- [x] CI auto-commits a raised baseline on `push` events when coverage increases, without retriggering itself
+- [x] `pull_request` runs enforce the gate but never attempt to commit
 
 ---
 
@@ -138,10 +140,10 @@ Convert `OctopusAPISettings`, `MariaDBSettings`, `RefreshSettings`, `Application
 
 ### Acceptance criteria
 
-- [ ] All four settings classes are `pydantic.BaseModel` subclasses
-- [ ] `get_settings()` validates through `model_validate` instead of raw dict indexing
-- [ ] A missing/invalid required config field raises a `pydantic.ValidationError` naming the field
-- [ ] Unit tests cover both valid YAML producing correct typed settings, and a missing-field case raising a clear validation error
+- [x] All four settings classes are `pydantic.BaseModel` subclasses
+- [x] `get_settings()` validates through `model_validate` instead of raw dict indexing
+- [x] A missing/invalid required config field raises a `pydantic.ValidationError` naming the field
+- [x] Unit tests cover both valid YAML producing correct typed settings, and a missing-field case raising a clear validation error
 
 ---
 
@@ -159,10 +161,10 @@ Define Pydantic models for the Octopus account/meter-information response and th
 
 ### Acceptance criteria
 
-- [ ] Account/meter-information response parsed through a Pydantic model before being mapped to domain objects
-- [ ] Consumption response parsed through a Pydantic model before being mapped to `Consumption` objects
-- [ ] Existing `responses`-mocked tests continue to pass unchanged (behavior preserved from the caller's perspective)
-- [ ] A malformed-response test (missing required field) asserts a clear validation error surfaces instead of a `KeyError`/`AttributeError`
+- [x] Account/meter-information response parsed through a Pydantic model before being mapped to domain objects
+- [x] Consumption response parsed through a Pydantic model before being mapped to `Consumption` objects
+- [x] Existing `responses`-mocked tests continue to pass unchanged (behavior preserved from the caller's perspective)
+- [x] A malformed-response test (missing required field) asserts a clear validation error surfaces instead of a `KeyError`/`AttributeError`
 
 ---
 
@@ -180,9 +182,9 @@ Add to `.pre-commit-config.yaml`: `bandit`, `pylint`, `yamllint`, `markdownlint`
 
 ### Acceptance criteria
 
-- [ ] All listed hooks present in `.pre-commit-config.yaml`
-- [ ] `pre-commit run --all-files` passes clean
-- [ ] No finding is suppressed without a documented reason (false positive), and no real issue is silenced
+- [x] All listed hooks present in `.pre-commit-config.yaml`
+- [x] `pre-commit run --all-files` passes clean
+- [x] No finding is suppressed without a documented reason (false positive), and no real issue is silenced
 
 ---
 
@@ -200,11 +202,11 @@ Replace `[tool.poetry]` sections in `pyproject.toml` with PEP 621 `[project]` + 
 
 ### Acceptance criteria
 
-- [ ] `pyproject.toml` uses PEP 621 `[project]` + `[tool.uv]`, no `[tool.poetry]` sections remain
-- [ ] `uv.lock` committed, `poetry.lock` and `requirements.txt` removed
-- [ ] `Dockerfile` builds successfully using `uv`
-- [ ] CI installs dependencies and runs tests via `uv`
-- [ ] `.pre-commit-config.yaml` and `.github/dependabot.yml` reference `uv`, not Poetry
+- [x] `pyproject.toml` uses PEP 621 `[project]` + `[tool.uv]`, no `[tool.poetry]` sections remain
+- [x] `uv.lock` committed, `poetry.lock` and `requirements.txt` removed
+- [x] `Dockerfile` builds successfully using `uv`
+- [x] CI installs dependencies and runs tests via `uv`
+- [x] `.pre-commit-config.yaml` and `.github/dependabot.yml` reference `uv`, not Poetry
 
 ---
 
@@ -222,9 +224,9 @@ Upgrade the pinned Python interpreter from 3.11 to 3.13 across `.python-version`
 
 ### Acceptance criteria
 
-- [ ] `.python-version`, `pyproject.toml`, `Dockerfile`, and `ci-arm64.yml` all reference Python 3.13
-- [ ] `uv.lock` regenerated against the 3.13 interpreter
-- [ ] Full test suite, mypy, and pylint pass on 3.13 with unchanged dependency pins
-- [ ] `docker build` succeeds with the new base image
+- [x] `.python-version`, `pyproject.toml`, `Dockerfile`, and `ci-arm64.yml` all reference Python 3.13
+- [x] `uv.lock` regenerated against the 3.13 interpreter
+- [x] Full test suite, mypy, and pylint pass on 3.13 with unchanged dependency pins
+- [x] `docker build` succeeds with the new base image
 
 ---
