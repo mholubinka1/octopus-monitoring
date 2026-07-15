@@ -5,7 +5,6 @@ from logging import Logger, getLogger
 from typing import Any, Generator, List, Optional
 
 from common.config import MariaDBSettings
-from common.decorator import retry
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
@@ -19,14 +18,13 @@ logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
-@retry()
 def upsert(s: Session, record: Any) -> None:
     try:
         with s.begin_nested():
             s.add(record)
             s.flush()
             return
-    except IntegrityError:
+    except IntegrityError as exc:
         pk_columns = [col.name for col in inspect(type(record)).primary_key]
         pk_filter = {col: getattr(record, col) for col in pk_columns}
         update_dict = {
@@ -38,8 +36,17 @@ def upsert(s: Session, record: Any) -> None:
             .update(update_dict, synchronize_session=False)
         ):
             return
+        raise RuntimeError(
+            f"Upsert conflict resolution failed: no {type(record).__name__} row "
+            f"matched primary key {pk_filter}. The IntegrityError was likely caused "
+            "by a non-primary-key constraint violation."
+        ) from exc
     except Exception as e:
         raise e
+
+
+def _energy_scoped_id(energy_char: str, dt: datetime) -> str:
+    return energy_char + dt.strftime("%Y%m%d%H%M%S")
 
 
 class SessionBuilder:
@@ -75,71 +82,55 @@ class MariaDBClient:
         finally:
             session.close()
 
-    def write_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
+    def _write_all(self, records: List[Any], description: str) -> None:
         try:
             with self.session_write_scope() as s:
-                for point in consumption:
-                    energy_char = as_energy_char(meter.energy)
-                    record_id = energy_char + point.start.strftime("%Y%m%d%H%M%S")
-                    record = sql_models.consumption(
-                        id=record_id,
-                        energy=energy_char,
-                        period_from=point.start,
-                        period_to=point.end,
-                        raw_value=point.raw,
-                        unit=point.unit.name,
-                        est_kwh=point.est_kwh,
-                    )
+                for record in records:
                     upsert(s, record)
-                logger.debug(
-                    f"Consumption data written to MariaDB: {len(consumption)} points."
-                )
+                logger.debug(f"{description}: {len(records)} written to MariaDB.")
                 return
         except Exception as e:
-            logger.error(f"Failed to write consumption data: {e}")
+            logger.error(f"Failed to write {description}: {e}")
             raise MariaDBError(e) from e
+
+    def write_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
+        energy_char = as_energy_char(meter.energy)
+        records = [
+            sql_models.consumption(
+                id=_energy_scoped_id(energy_char, point.start),
+                energy=energy_char,
+                period_from=point.start,
+                period_to=point.end,
+                raw_value=point.raw,
+                unit=point.unit.name,
+                est_kwh=point.est_kwh,
+            )
+            for point in consumption
+        ]
+        self._write_all(records, "Consumption data")
 
     def write_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
-        try:
-            with self.session_write_scope() as s:
-                for agreement in agreements:
-                    energy_char = as_energy_char(meter.energy)
-                    record_id = energy_char + agreement.valid_from.strftime(
-                        "%Y%m%d%H%M%S"
-                    )
-                    record = sql_models.agreement(
-                        id=record_id,
-                        energy=energy_char,
-                        product_code=agreement.product_code,
-                        tariff_code=agreement.tariff_code,
-                        valid_from=agreement.valid_from,
-                        valid_to=agreement.valid_to,
-                    )
-                    upsert(s, record)
-                logger.debug(
-                    f"Agreement data written to MariaDB: {len(agreements)} agreements."
-                )
-                return
-        except Exception as e:
-            logger.error(f"Failed to write agreement data: {e}")
-            raise MariaDBError(e) from e
+        energy_char = as_energy_char(meter.energy)
+        records = [
+            sql_models.agreement(
+                id=_energy_scoped_id(energy_char, agreement.valid_from),
+                energy=energy_char,
+                product_code=agreement.product_code,
+                tariff_code=agreement.tariff_code,
+                valid_from=agreement.valid_from,
+                valid_to=agreement.valid_to,
+            )
+            for agreement in agreements
+        ]
+        self._write_all(records, "Agreement data")
 
     def write_product(self, product: Product) -> None:
-        try:
-            with self.session_write_scope() as s:
-                record = sql_models.product(
-                    product_code=product.product_code,
-                    display_name=product.display_name,
-                    direction=product.direction,
-                )
-                upsert(s, record)
-                logger.debug(
-                    f"Product data written to MariaDB: {product.product_code}."
-                )
-                return
-        except Exception as e:
-            logger.error(f"Failed to write product data: {e}")
-            raise MariaDBError(e) from e
+        record = sql_models.product(
+            product_code=product.product_code,
+            display_name=product.display_name,
+            direction=product.direction,
+        )
+        self._write_all([record], "Product data")
 
     def record_job_run(
         self, job_name: str, status: str, error: Optional[str] = None
