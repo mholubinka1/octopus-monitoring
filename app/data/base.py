@@ -29,4 +29,3 @@ class MonitoringClient:
     ) -> None:
         (_, meters) = self.octopus.get_account_meter_information()
         self.meters = meters
-        return

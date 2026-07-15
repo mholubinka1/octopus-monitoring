@@ -5,20 +5,70 @@ from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Dict, List, Optional, Tuple
 
-import data.octopus.api_utils as api_utils
 import requests
 from common.config import OctopusAPISettings
 from common.decorator import retry
-from common.exceptions import APIError, ConfigurationError
+from common.exceptions import APIError
 from common.logging import APP_LOGGER_NAME, config
 from common.utils import is_none_or_whitespace
 from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
+from data.octopus import api_utils
 from data.octopus.model import Account, Electricity, Gas, Meter
+from pydantic import BaseModel
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 DEFAULT_PAGE_SIZE = 100
+REQUEST_TIMEOUT_SECONDS = 30
+
+
+class ConsumptionReading(BaseModel):
+    consumption: Decimal
+    interval_start: datetime
+    interval_end: datetime
+
+
+class ConsumptionResponse(BaseModel):
+    results: List[ConsumptionReading]
+    next: Optional[str] = None
+
+
+class MeterSerialInfo(BaseModel):
+    serial_number: str
+
+
+class AgreementInfo(BaseModel):
+    tariff_code: str
+    valid_from: str
+    valid_to: Optional[str] = None
+
+
+class ElectricityMeterPointInfo(BaseModel):
+    mpan: str
+    meters: List[MeterSerialInfo]
+    agreements: Optional[List[AgreementInfo]] = None
+
+
+class GasMeterPointInfo(BaseModel):
+    mprn: str
+    meters: List[MeterSerialInfo]
+    agreements: Optional[List[AgreementInfo]] = None
+
+
+class PropertyInfo(BaseModel):
+    postcode: str
+    address_line_1: str = ""
+    address_line_2: str = ""
+    address_line_3: str = ""
+    town: str = ""
+    county: str = ""
+    electricity_meter_points: List[ElectricityMeterPointInfo] = []
+    gas_meter_points: List[GasMeterPointInfo] = []
+
+
+class AccountMeterInformationResponse(BaseModel):
+    properties: List[PropertyInfo]
 
 
 class OctopusEnergyAPIClient:
@@ -29,14 +79,8 @@ class OctopusEnergyAPIClient:
     _consumption_funcs: Dict
 
     def __init__(self, settings: OctopusAPISettings) -> None:
-        api_key = settings.api_key
-        account_number = settings.account_number
-        if api_key is None:
-            raise ConfigurationError("API Key not set.")
-        if account_number is None:
-            raise ConfigurationError("Account Number not set.")
-        self._api_key = api_key
-        self._account_number = account_number
+        self._api_key = settings.api_key
+        self._account_number = settings.account_number
 
         self._consumption_funcs: Dict = {
             Energy.electricity: self.get_electricity_consumption,
@@ -50,26 +94,28 @@ class OctopusEnergyAPIClient:
         self,
     ) -> Tuple[Account, List[Meter]]:
         api_endpoint = self._base_url + f"accounts/{self._account_number}"
+        response: Optional[requests.Response] = None
         try:
             response = requests.get(
                 url=api_endpoint,
                 auth=(self._api_key, ""),
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
-            response_json = response.json()
+            parsed = AccountMeterInformationResponse.model_validate(response.json())
 
-            properties = next(iter(response_json.get("properties", None)), None)
+            properties = next(iter(parsed.properties), None)
             if properties is None:
                 raise APIError("")
 
-            postcode = re.sub(r"\s", "", properties.get("postcode", None))
+            postcode = re.sub(r"\s", "", properties.postcode)
 
             address_lines = [
-                properties.get("address_line_1", None).strip(),
-                properties.get("address_line_2", None).strip(),
-                properties.get("address_line_3", None).strip(),
-                properties.get("town", None).strip(),
-                properties.get("county", None).strip(),
+                properties.address_line_1.strip(),
+                properties.address_line_2.strip(),
+                properties.address_line_3.strip(),
+                properties.town.strip(),
+                properties.county.strip(),
             ]
             account = Account(
                 self._account_number,
@@ -83,37 +129,43 @@ class OctopusEnergyAPIClient:
                 postcode,
             )
 
-            meters: List[Meter] = list()
+            meters: List[Meter] = []
 
-            electricity_meter_information = properties.get(
-                "electricity_meter_points", None
-            )
-            gas_meter_information = properties.get("gas_meter_points", None)
-
-            if electricity_meter_information:
-                if len(electricity_meter_information) != 0:
-                    meters.append(
-                        api_utils.to_electricity_meter(electricity_meter_information)
+            if properties.electricity_meter_points:
+                meters.append(
+                    api_utils.to_electricity_meter(
+                        [p.model_dump() for p in properties.electricity_meter_points]
                     )
-            if gas_meter_information:
-                if len(gas_meter_information) != 0:
-                    meters.append(api_utils.to_gas_meter(gas_meter_information))
+                )
+            if properties.gas_meter_points:
+                meters.append(
+                    api_utils.to_gas_meter(
+                        [p.model_dump() for p in properties.gas_meter_points]
+                    )
+                )
             return (account, meters)
         except Exception as e:
-            if response.status_code != 200:
-                response_json = response.json()
-                raise APIError(response_json)
-            raise Exception(f"Failed to fetch account/meter information: {e}.")
+            if response is not None and response.status_code != 200:
+                try:
+                    error_body: object = response.json()
+                except ValueError:
+                    error_body = response.text
+                raise APIError(error_body) from e
+            raise RuntimeError(
+                f"Failed to fetch account/meter information: {e}."
+            ) from e
 
     @retry()
     def get_region_code(self, postcode: str) -> str:
         api_endpoint = self._base_url + "industry/grid-supply-points"
         params = {"postcode": postcode}
+        response: Optional[requests.Response] = None
         try:
             response = requests.get(
                 url=api_endpoint,
                 auth=(self._api_key, ""),
                 params=params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             response_json = response.json()
@@ -121,99 +173,15 @@ class OctopusEnergyAPIClient:
             results = response_json.get("results", None)
             return results[0].get("group_id")
         except Exception as e:
-            if response.status_code != 200:
-                response_json = response.json()
-                raise APIError(response_json)
-            raise Exception(f"Failed to fetch region code for {postcode}: {e}.")
-
-    # endregion
-
-    # region Pricing
-    """
-    def get_product_information(self, product_code: str):
-        api_endpoint = self._base_url + f"products/{product_code}"
-        try:
-            response = requests.get(
-                url=api_endpoint,
-            )
-            response.raise_for_status()
-            response_json = response.json()
-            return response_json
-        except Exception as e:
-            if response.status_code != 200:
-                response_json = response.json()
-                raise APIError(response_json)
-            raise Exception(
-                f"Failed to fetch product information for {product_code}: {e}."
-            )
-
-    def get_full_price_history(
-        self, meters: List[Meter], region_code: str
-    ) -> List[Meter]:
-        for meter in meters:
-            for agreement in meter.agreements:
-                agreement = self.get_tariff_price_history(agreement, meter.energy)
-                pass
-
-    def get_tariff_price_history(self, agreement: Agreement, fuel: Energy) -> Agreement:
-        api_endpoint = self._base_url + f"products/{agreement.product_code}/"
-        match fuel:
-            case Energy.electricity:
-                tariff_api_endpoint = (
-                    api_endpoint + f"electricity-tariffs/{agreement.tariff_code}/"
-                )
-                if agreement.tariff_type == TariffType.economy7:
-                    raise NotImplementedError(
-                        "Economy7 tariffs are not currently supported."
-                    )
-                agreement.price_history.extend(
-                    self.get_price_history(
-                        tariff_api_endpoint, agreement.valid_from, agreement.valid_to
-                    )
-                )
-            case Energy.gas:
-                tariff_api_endpoint = (
-                    api_endpoint + f"gas-tariffs/{agreement.tariff_code}"
-                )
-                agreement.price_history.extend(
-                    self.get_price_history(
-                        tariff_api_endpoint, agreement.valid_from, agreement.valid_to
-                    )
-                )
-        return agreement
-
-    def get_price_history(
-        self,
-        api_endpoint: str,
-        period_from: datetime,
-        period_to: Optional[datetime] = None,
-        page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> List[Price]:
-        unit_rates_endpoint = api_endpoint + "standard-unit-rates/"
-        standing_charges_endpoint = api_endpoint + "standing-charges/"
-        params: Dict[str, Union[int, str]] = {
-            "page_size": page_size,
-            "period_from": period_from.isoformat().replace("+00:00", "Z"),
-        }
-        for endpoint in [unit_rates_endpoint, standing_charges_endpoint]:
-            try:
-                if period_to:
-                    params["period_to"] = period_to.isoformat().replace("+00:00", "Z")
-                response = requests.get(
-                    url=endpoint,
-                    params=params,
-                )
-                response.raise_for_status()
-                response_json = response.json()
-
-            except Exception as e:
-                if response.status_code != 200:
-                    response_json = response.json()
-                    raise APIError(response_json)
-                raise Exception(
-                    f"Failed to fetch tariff price history from {endpoint}: {e}"
-                )
-    """
+            if response is not None and response.status_code != 200:
+                try:
+                    error_body: object = response.json()
+                except ValueError:
+                    error_body = response.text
+                raise APIError(error_body) from e
+            raise RuntimeError(
+                f"Failed to fetch region code for {postcode}: {e}."
+            ) from e
 
     # endregion
 
@@ -284,30 +252,27 @@ class OctopusEnergyAPIClient:
         energy: Energy,
         api_endpoint: str,
     ) -> Tuple[Optional[str], List[Consumption]]:
-        consumption = list()
+        consumption = []
         try:
             response = requests.get(
                 url=api_endpoint,
                 auth=(self._api_key, ""),
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
-            response_json = response.json()
-            for result in response_json["results"]:
+            parsed = ConsumptionResponse.model_validate(response.json())
+            for reading in parsed.results:
                 consumption.append(
                     Consumption(
-                        raw=Decimal(result["consumption"]),
-                        est_kwh=to_estimated_kwh(
-                            energy, Decimal(result["consumption"])
-                        ),
+                        raw=reading.consumption,
+                        est_kwh=to_estimated_kwh(energy, reading.consumption),
                         unit=get_raw_unit(energy),
-                        start=datetime.fromisoformat(result["interval_start"]),
-                        end=datetime.fromisoformat(result["interval_end"]),
+                        start=reading.interval_start,
+                        end=reading.interval_end,
                     )
                 )
-            next = response_json.get("next", None)
-            return (next, consumption)
+            return (parsed.next, consumption)
         except Exception as e:
-            response_json = response.json()
-            raise APIError(e)
+            raise APIError(e) from e
 
     # endregion

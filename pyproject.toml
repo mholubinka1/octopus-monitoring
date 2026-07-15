@@ -1,34 +1,83 @@
-[tool.poetry]
+[project]
 name = "octopus-monitoring"
 version = "0.1.0"
 description = ""
-authors = ["Matt Holubinka <meholubinka@gmail.com>"]
+authors = [{name = "Matt Holubinka", email = "meholubinka@gmail.com"}]
 readme = "README.md"
-packages = [{include = "octopus_monitoring"}]
+requires-python = ">=3.13"
+dependencies = [
+    "requests>=2.33.1",
+    "cryptography==49.0.0",
+    "pyyaml>=6.0.3",
+    "sqlalchemy>=2.0.49",
+    "pymysql>=1.1.2",
+    "schedule>=1.2.2",
+    "pydantic>=2.13.4",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-requests = "^2.33.1"
-influxdb = "^5.3.2"
-cryptography = "49.0.0"
-pyyaml = "^6.0.3"
-influxdb-client = "^1.50.0"
-sqlalchemy = "^2.0.49"
-pymysql = "^1.1.2"
-schedule = "^1.2.2"
+[tool.uv]
+package = false
 
+[dependency-groups]
+dev = [
+    "isort>=8.0.1",
+    "black>=26.3.1",
+    "mypy>=1.20.1",
+    "ruff>=0.15.10",
+    "pre-commit>=4.5.1",
+    "ipykernel>=7.2.0",
+    "types-requests>=2.33.0.20260408",
+    "types-pyyaml>=6.0.12.20260408",
+    "sqlalchemy-stubs>=0.4",
+    "pytest>=8.3.4",
+    "responses>=0.25.3",
+    "pytest-cov>=7.1.0",
+    "pylint>=4.0.6",
+]
 
-[tool.poetry.group.dev.dependencies]
-isort = "^8.0.1"
-black = "^26.3.1"
-mypy = ">=1.20.1,<3.0.0"
-ruff = "^0.15.10"
-pre-commit = "^4.5.1"
-ipykernel = "^7.2.0"
-types-requests = "^2.33.0.20260408"
-types-pyyaml = "^6.0.12.20260408"
-sqlalchemy-stubs = "^0.4"
+[tool.pytest.ini_options]
+pythonpath = ["app"]
+testpaths = ["tests"]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.coverage.run]
+source = ["app"]
+
+[tool.pylint.main]
+ignore-paths = ["app/_deprecated"]
+source-roots = ["app"]
+
+[tool.pylint."messages control"]
+# Each disable below is a deliberate fit to this codebase's established conventions,
+# not a blanket suppression. Re-enable individually if the underlying convention changes.
+disable = [
+    # This codebase has no docstrings anywhere by design — self-documenting code,
+    # comments reserved for non-obvious WHY (.agent-docs/agent.md, "Production Code Quality").
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    # Small data/config/model classes (Pydantic settings, SQLAlchemy models, dataclass-style
+    # value objects) are intentionally simple and don't need >=2 public methods.
+    "too-few-public-methods",
+    # The retry()/API-wrapper architecture (common/decorator.py, data/octopus/api.py,
+    # data/mysql/client.py) deliberately catches/raises bare Exception as its error boundary.
+    "broad-exception-caught",
+    "broad-exception-raised",
+    # f-string logging is this codebase's consistent existing convention; the lazy-%
+    # performance case pylint optimizes for doesn't apply at this app's log volume.
+    "logging-fstring-interpolation",
+    # TODOs are tracked via GitHub issues, not blocked by lint.
+    "fixme",
+    # Enum members and SQLAlchemy ORM classes intentionally use lowercase names
+    # (e.g. Energy.electricity, sql_models.consumption) matching table names — an
+    # established, deliberate deviation from PEP8 UPPER_CASE/PascalCase defaults.
+    "invalid-name",
+    # False-positive on match/case blocks whose default arm raises rather than falls
+    # through; mypy already verifies the declared return type is honored on every path.
+    "inconsistent-return-statements",
+    # Line length is already owned by black/ruff (both configured to 88 chars);
+    # pylint's own line-too-long would just re-flag under different, conflicting rules.
+    "line-too-long",
+    # Noisy on test files, where explicit repetition of setup/assertions aids
+    # readability (BDD principle) more than a shared helper would.
+    "duplicate-code",
+]

@@ -10,7 +10,9 @@ on:
 
 jobs:
   ARM64_App_Image_Build_and_Push:
-    runs-on: [ ARM64 ]
+    runs-on: [ARM64]
+    permissions:
+      contents: write
     env:
       DOCKER_REGISTRY: docker.io
       DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/octopus-monitoring
@@ -19,10 +21,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Install uv
+        if: success()
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        if: success()
+        run: uv sync --locked
+
+      - name: Run tests
+        if: success()
+        shell: bash
+        run: |
+          BASELINE=$(cat .github/coverage-baseline.txt)
+          uv run pytest --cov=app --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under="$BASELINE"
+
+      - name: Raise coverage baseline
+        if: success() && github.event_name == 'push'
+        shell: bash
+        run: |
+          BASELINE=$(cat .github/coverage-baseline.txt)
+          ACTUAL=$(uv run python -c "import json; print(int(json.load(open('coverage.json'))['totals']['percent_covered']))")
+          if [ "$ACTUAL" -gt "$BASELINE" ]; then
+            echo "$ACTUAL" > .github/coverage-baseline.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/coverage-baseline.txt
+            git commit -m "Raise coverage baseline to ${ACTUAL}% [skip ci]"
+            git push
+          else
+            echo "Coverage unchanged at ${ACTUAL}%, baseline stays at ${BASELINE}%."
+          fi
+
       - name: Prepare
         if: success()
         id: prepare
-        run: | 
+        run: |
           echo "docker_platform=${DOCKER_TARGET_PLATFORM}" >> $GITHUB_OUTPUT
           echo "docker_image=${DOCKER_REGISTRY}/${DOCKER_IMAGE}" >> $GITHUB_OUTPUT
           echo "version=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
@@ -34,9 +70,9 @@ jobs:
           docker ps
 
       - name: Docker Login
-        if: success()
+        if: success() && github.event_name == 'push'
         uses: docker/login-action@v2
-        with: 
+        with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -49,7 +85,8 @@ jobs:
           if [ $branchName != 'main' ]; then image_tag='dev'; else image_tag='latest'; fi
           echo "tag=$(echo $image_tag)" >> $GITHUB_OUTPUT
 
-      - name: Docker Build and Push    
+      - name: Docker Build and Push
+        if: success() && github.event_name == 'push'
         uses: docker/build-push-action@v4
         with:
           push: true

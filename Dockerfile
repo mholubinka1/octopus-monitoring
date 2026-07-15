@@ -1,23 +1,20 @@
-FROM python:3.11.0-alpine3.17
+FROM python:3.13.14-alpine3.24
 
-ENV POETRY_HOME=/opt/poetry
-ENV POETRY_VENV=/opt/poetry-venv
-ENV POETRY_CACHE_DIR=/opt/.cache
+COPY --from=ghcr.io/astral-sh/uv:0.11.28 /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
 
 RUN apk add --no-cache --virtual .deps g++ gcc musl-dev python3-dev libffi-dev openssl-dev cargo pkgconfig
 RUN apk add libpq-dev
 
-RUN python3 -m venv ${POETRY_VENV} \
-    && ${POETRY_VENV}/bin/pip install --upgrade pip setuptools wheel
-
-ENV PATH="${PATH}:${POETRY_VENV}/bin"
-
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml uv.lock ./
 
-RUN ${POETRY_VENV}/bin/pip install poetry
-RUN poetry install --no-root --only main
+RUN uv sync --frozen --no-dev --no-install-project
 
 RUN apk del .deps
 
@@ -28,4 +25,6 @@ VOLUME /config
 
 USER 999
 
-CMD [ "poetry", "run", "python", "./app/main.py", "--config-file", "/config/config.yml"]
+ENV PATH="/opt/venv/bin:${PATH}"
+
+CMD [ "python", "./app/main.py", "--config-file", "/config/config.yml"]
