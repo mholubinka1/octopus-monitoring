@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, Numeric, String
 from sqlalchemy.ext.declarative import declarative_base
 
 SQLBase = declarative_base()
@@ -17,20 +17,38 @@ class consumption(SQLBase):
     est_kwh = Column(Float)
 
 
-class tariff(SQLBase):
-    __tablename__ = "tariff"
+class agreement(SQLBase):
+    __tablename__ = "agreement"
     __table_args__ = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
-    consumption_id = Column(String)
+    energy = Column(String)
+    product_code = Column(String)
+    tariff_code = Column(String)
+    valid_from = Column(DateTime)
+    valid_to = Column(DateTime)
 
 
-class cost(SQLBase):
-    __tablename__ = "cost"
+class product(SQLBase):
+    __tablename__ = "product"
+    __table_args__ = {"schema": "octopus"}
+
+    product_code = Column(String, primary_key=True)
+    display_name = Column(String)
+    direction = Column(String)
+
+
+class product_rate(SQLBase):
+    __tablename__ = "product_rate"
     __table_args__ = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
-    consumption_id = Column(String)
+    product_code = Column(String)
+    region = Column(String)
+    valid_from = Column(DateTime)
+    valid_to = Column(DateTime)
+    unit_rate = Column(Numeric(9, 6))
+    standing_charge = Column(Numeric(9, 6))
 
 
 class job_run(SQLBase):

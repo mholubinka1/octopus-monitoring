@@ -18,35 +18,36 @@ CREATE TABLE IF NOT EXISTS consumption
 
 
 DROP TABLE IF EXISTS cost;
-CREATE TABLE cost
-(
-    id VARCHAR(50) NOT NULL,
-    tariff_id VARCHAR(50) NOT NULL,
-    consumption_id VARCHAR(50) NOT NULL,
-    energy CHAR,
-    is_active BOOLEAN NOT NULL,
-    period_from TIMESTAMP NOT NULL,
-    period_to TIMESTAMP,
-    cost_gbp DECIMAL(8,5) NOT NULL,
-    PRIMARY KEY (id)
-);
-
 DROP TABLE IF EXISTS tariff;
 
-CREATE TABLE tariff
+CREATE TABLE IF NOT EXISTS agreement
 (
     id VARCHAR(50) NOT NULL,
-    consumption_id VARCHAR(50),
     energy CHAR,
     product_code VARCHAR(50),
     tariff_code VARCHAR(50),
-    is_active BOOLEAN NOT NULL,
     valid_from TIMESTAMP NOT NULL,
     valid_to TIMESTAMP,
-    period_from TIMESTAMP NOT NULL,
-    period_to TIMESTAMP,
-    standing_charge DECIMAL(9,6) NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS product
+(
+    product_code VARCHAR(50) NOT NULL,
+    display_name VARCHAR(200),
+    direction VARCHAR(10),
+    PRIMARY KEY (product_code)
+);
+
+CREATE TABLE IF NOT EXISTS product_rate
+(
+    id VARCHAR(70) NOT NULL,
+    product_code VARCHAR(50) NOT NULL,
+    region CHAR,
+    valid_from TIMESTAMP NOT NULL,
+    valid_to TIMESTAMP,
     unit_rate DECIMAL(9,6) NOT NULL,
+    standing_charge DECIMAL(9,6) NOT NULL,
     PRIMARY KEY (id)
 );
 
