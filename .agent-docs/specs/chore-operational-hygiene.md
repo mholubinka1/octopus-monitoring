@@ -85,3 +85,40 @@ Domain model conversion to Pydantic (Account, Meter, Agreement, Consumption) —
 ### Further Notes (Part 2)
 
 This part depends on Part 1 having landed (it did — issues #366-#370 are implemented and committed on this branch, code-review passed). The coverage ratchet's initial baseline value should be set from the actual measured coverage at implementation time, not copied from this document.
+
+---
+
+## Part 3: Python Version Upgrade
+
+### Problem Statement
+
+The project still targets Python 3.11 (pinned via `.python-version`, `pyproject.toml`, and `Dockerfile`'s base image), which is now several releases behind current stable.
+
+### Solution
+
+Upgrade the pinned interpreter to Python 3.13 across every place it's declared. Keep existing dependency version pins as-is unless 3.13 compatibility genuinely requires a bump — verified empirically (full test suite, mypy, pylint) that none do.
+
+### User Stories
+
+11. As the operator, I want the project running on a current, well-supported Python version, so that it isn't stuck on an aging interpreter with a shrinking security-patch window.
+
+### Implementation Decisions
+
+- `.python-version`: `3.11` → `3.13`.
+- `pyproject.toml`: `requires-python` floor `>=3.11` → `>=3.13`.
+- `Dockerfile`: base image `python:3.11.0-alpine3.17` → `python:3.13.14-alpine3.24` — verified this exact tag exists and publishes `arm/v7` and `arm64/v8` manifests, matching the CI runner's `linux/arm/arm64` target platform.
+- `.github/workflows/ci-arm64.yml`: `astral-sh/setup-uv`'s `python-version: '3.11'` → `'3.13'`.
+- `uv.lock`: regenerated against the new interpreter.
+- No dependency version pins changed — `uv sync`, the full test suite, mypy, and pylint all pass unchanged on 3.13.
+
+### Testing Decisions
+
+- No new test seams — verified by running the existing suite (`uv run pytest`, `uv run mypy app`, `uv run pylint app tests`) against the 3.13 interpreter, plus a full `docker build` to confirm the new base image builds and the app imports cleanly.
+
+### Out of Scope
+
+Bumping any dependency version pins not required by the interpreter change itself.
+
+### Further Notes (Part 3)
+
+No ADR raised — a routine version bump, not an architecturally significant or surprising decision.

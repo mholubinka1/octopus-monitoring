@@ -207,3 +207,24 @@ Replace `[tool.poetry]` sections in `pyproject.toml` with PEP 621 `[project]` + 
 - [ ] `.pre-commit-config.yaml` and `.github/dependabot.yml` reference `uv`, not Poetry
 
 ---
+
+## Python version upgrade
+
+**GitHub issue**: [#377](https://github.com/mholubinka1/octopus-monitoring/issues/377)
+
+**Blocked by**: [#376](https://github.com/mholubinka1/octopus-monitoring/issues/376)
+
+**User stories**: 11
+
+### What to build
+
+Upgrade the pinned Python interpreter from 3.11 to 3.13 across `.python-version`, `pyproject.toml`'s `requires-python`, `Dockerfile`'s base image, and CI's `astral-sh/setup-uv` step. Regenerate `uv.lock`. No dependency version pins change unless 3.13 compatibility genuinely requires it.
+
+### Acceptance criteria
+
+- [ ] `.python-version`, `pyproject.toml`, `Dockerfile`, and `ci-arm64.yml` all reference Python 3.13
+- [ ] `uv.lock` regenerated against the 3.13 interpreter
+- [ ] Full test suite, mypy, and pylint pass on 3.13 with unchanged dependency pins
+- [ ] `docker build` succeeds with the new base image
+
+---
