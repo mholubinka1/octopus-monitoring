@@ -46,10 +46,10 @@ scaffold that later slices extend with additional `refresh()` steps.
 
 ### Acceptance criteria
 
-- [ ] `write_agreement` persists `id`/`energy`/`product_code`/`tariff_code`/`valid_from`/`valid_to` with upsert-on-conflict behaviour
-- [ ] `PricingRetriever.refresh()` writes each meter's current agreement to the DB
-- [ ] `PricingRetriever` is wired into the scheduler with `job_run` tracking, plus a startup call in `main.py`
-- [ ] Unit tests: DB boundary (SQLite in-memory) for `write_agreement` including upsert-on-conflict; `PricingRetriever` writes expected rows for a mocked meter/agreement fixture
+- [x] `write_agreement` persists `id`/`energy`/`product_code`/`tariff_code`/`valid_from`/`valid_to` with upsert-on-conflict behaviour
+- [x] `PricingRetriever.refresh()` writes each meter's current agreement to the DB
+- [x] `PricingRetriever` is wired into the scheduler with `job_run` tracking, plus a startup call in `main.py`
+- [x] Unit tests: DB boundary (SQLite in-memory) for `write_agreement` including upsert-on-conflict; `PricingRetriever` writes expected rows for a mocked meter/agreement fixture
 
 ---
 
