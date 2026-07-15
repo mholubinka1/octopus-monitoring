@@ -26,6 +26,13 @@ class Account:
 
 
 @dataclass
+class Product:
+    product_code: str
+    display_name: str
+    direction: str
+
+
+@dataclass
 class Price:
     energy: Energy
     tariff_code: str

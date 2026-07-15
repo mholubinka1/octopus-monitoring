@@ -10,8 +10,8 @@ from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
 from data.mysql import sql_models
-from data.octopus.model import Agreement, Meter
-from sqlalchemy import create_engine
+from data.octopus.model import Agreement, Meter, Product
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -27,12 +27,14 @@ def upsert(s: Session, record: Any) -> None:
             s.flush()
             return
     except IntegrityError:
+        pk_columns = [col.name for col in inspect(type(record)).primary_key]
+        pk_filter = {col: getattr(record, col) for col in pk_columns}
         update_dict = {
             col.name: getattr(record, col.name) for col in record.__table__.columns
         }
         if (
             s.query(type(record))
-            .filter_by(id=record.id)
+            .filter_by(**pk_filter)
             .update(update_dict, synchronize_session=False)
         ):
             return
@@ -120,6 +122,23 @@ class MariaDBClient:
                 return
         except Exception as e:
             logger.error(f"Failed to write agreement data: {e}")
+            raise MariaDBError(e) from e
+
+    def write_product(self, product: Product) -> None:
+        try:
+            with self.session_write_scope() as s:
+                record = sql_models.product(
+                    product_code=product.product_code,
+                    display_name=product.display_name,
+                    direction=product.direction,
+                )
+                upsert(s, record)
+                logger.debug(
+                    f"Product data written to MariaDB: {product.product_code}."
+                )
+                return
+        except Exception as e:
+            logger.error(f"Failed to write product data: {e}")
             raise MariaDBError(e) from e
 
     def record_job_run(

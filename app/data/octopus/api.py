@@ -13,7 +13,7 @@ from common.logging import APP_LOGGER_NAME, config
 from common.utils import is_none_or_whitespace
 from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
 from data.octopus import api_utils
-from data.octopus.model import Account, Electricity, Gas, Meter
+from data.octopus.model import Account, Electricity, Gas, Meter, Product
 from pydantic import BaseModel
 
 logging.config.dictConfig(config)
@@ -69,6 +69,23 @@ class PropertyInfo(BaseModel):
 
 class AccountMeterInformationResponse(BaseModel):
     properties: List[PropertyInfo]
+
+
+class ProductSummary(BaseModel):
+    code: str
+    display_name: str
+    direction: str
+
+
+class ProductListResponse(BaseModel):
+    results: List[ProductSummary]
+    next: Optional[str] = None
+
+
+class ProductDetailResponse(BaseModel):
+    single_register_electricity_tariffs: Dict[str, Dict] = {}
+    dual_register_electricity_tariffs: Dict[str, Dict] = {}
+    single_register_gas_tariffs: Dict[str, Dict] = {}
 
 
 class OctopusEnergyAPIClient:
@@ -182,6 +199,61 @@ class OctopusEnergyAPIClient:
             raise RuntimeError(
                 f"Failed to fetch region code for {postcode}: {e}."
             ) from e
+
+    # endregion
+
+    # region Pricing
+
+    def get_products(self) -> List[Product]:
+        products: List[Product] = []
+        api_endpoint: Optional[str] = self._base_url + "products/"
+        while api_endpoint:
+            (api_endpoint, page) = self.get_products_directly_from_endpoint(
+                api_endpoint
+            )
+            products.extend(page)
+        return products
+
+    def get_products_directly_from_endpoint(
+        self, api_endpoint: str
+    ) -> Tuple[Optional[str], List[Product]]:
+        try:
+            response = requests.get(
+                url=api_endpoint,
+                auth=(self._api_key, ""),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            parsed = ProductListResponse.model_validate(response.json())
+            products = [
+                Product(
+                    product_code=summary.code,
+                    display_name=summary.display_name,
+                    direction=summary.direction,
+                )
+                for summary in parsed.results
+            ]
+            return (parsed.next, products)
+        except Exception as e:
+            raise APIError(e) from e
+
+    def get_product_region_availability(self, product_code: str, region: str) -> bool:
+        api_endpoint = self._base_url + f"products/{product_code}/"
+        try:
+            response = requests.get(
+                url=api_endpoint,
+                auth=(self._api_key, ""),
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            parsed = ProductDetailResponse.model_validate(response.json())
+            return (
+                region in parsed.single_register_electricity_tariffs
+                or region in parsed.dual_register_electricity_tariffs
+                or region in parsed.single_register_gas_tariffs
+            )
+        except Exception as e:
+            raise APIError(e) from e
 
     # endregion
 
