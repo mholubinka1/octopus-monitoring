@@ -20,6 +20,7 @@ logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 DEFAULT_PAGE_SIZE = 100
+REQUEST_TIMEOUT_SECONDS = 30
 
 
 class ConsumptionReading(BaseModel):
@@ -103,6 +104,7 @@ class OctopusEnergyAPIClient:
             response = requests.get(
                 url=api_endpoint,
                 auth=(self._api_key, ""),
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             parsed = AccountMeterInformationResponse.model_validate(response.json())
@@ -162,6 +164,7 @@ class OctopusEnergyAPIClient:
                 url=api_endpoint,
                 auth=(self._api_key, ""),
                 params=params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             response_json = response.json()
@@ -337,6 +340,7 @@ class OctopusEnergyAPIClient:
             response = requests.get(
                 url=api_endpoint,
                 auth=(self._api_key, ""),
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             parsed = ConsumptionResponse.model_validate(response.json())
