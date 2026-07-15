@@ -20,10 +20,10 @@ slices can write to it.
 
 ### Acceptance criteria
 
-- [ ] `mariadb/init.sql` defines `agreement`, `product`, `product_rate`; `tariff` and `cost` are dropped
-- [ ] `app/data/mysql/sql_models.py` has matching SQLAlchemy models; `tariff`/`cost` model classes removed
-- [ ] `docker-compose up` brings up MariaDB cleanly against the new schema
-- [ ] Existing test suite remains green
+- [x] `mariadb/init.sql` defines `agreement`, `product`, `product_rate`; `tariff` and `cost` are dropped
+- [x] `app/data/mysql/sql_models.py` has matching SQLAlchemy models; `tariff`/`cost` model classes removed
+- [x] `docker-compose up` brings up MariaDB cleanly against the new schema
+- [x] Existing test suite remains green
 
 ---
 
