@@ -1,8 +1,49 @@
 from datetime import datetime, timezone
-from unittest.mock import Mock
+from typing import List
 
-from data.octopus.model import Agreement, Electricity, Gas, Product
+import responses
+from common.config import OctopusAPISettings
+from data.mysql import sql_models
+from data.mysql.client import MariaDBClient
+from data.octopus.api import OctopusEnergyAPIClient
+from data.octopus.model import Agreement, Electricity, Gas, Meter, Product
 from data.pricing import PricingRetriever
+
+PRODUCTS_ENDPOINT = "https://api.octopus.energy/v1/products/"
+
+
+class _RealPricingSource:
+    """A real PricingSource adapter for tests: genuine OctopusEnergyAPIClient
+    and MariaDBClient underneath, with meters/region_code fixed up front
+    rather than fetched, so tests only need to mock the HTTP endpoints
+    PricingRetriever.refresh() actually calls."""
+
+    def __init__(
+        self,
+        octopus: OctopusEnergyAPIClient,
+        mariadb: MariaDBClient,
+        meters: List[Meter],
+        region_code: str,
+    ) -> None:
+        self._octopus = octopus
+        self._mariadb = mariadb
+        self.meters = meters
+        self.region_code = region_code
+
+    def refresh_meters(self) -> None:
+        pass
+
+    def persist_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
+        self._mariadb.write_agreement(meter, agreements)
+
+    def fetch_products(self) -> List[Product]:
+        return self._octopus.get_products()
+
+    def is_product_available_in_region(self, product_code: str, region: str) -> bool:
+        return self._octopus.get_product_region_availability(product_code, region)
+
+    def persist_product(self, product: Product) -> None:
+        self._mariadb.write_product(product)
 
 
 def _make_electricity_meter() -> Electricity:
@@ -33,64 +74,124 @@ def _make_gas_meter() -> Gas:
     )
 
 
-def test_refresh_persists_every_meters_agreements() -> None:
+def _make_source(
+    mariadb_client: MariaDBClient, meters: List[Meter], region_code: str = "H"
+) -> _RealPricingSource:
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+    return _RealPricingSource(octopus, mariadb_client, meters, region_code)
+
+
+@responses.activate
+def test_refresh_persists_every_meters_agreements(
+    mariadb_client: MariaDBClient,
+) -> None:
+    responses.add(
+        responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
+    )
     electricity_meter = _make_electricity_meter()
     gas_meter = _make_gas_meter()
+    source = _make_source(mariadb_client, [electricity_meter, gas_meter])
 
-    client = Mock()
-    client.meters = [electricity_meter, gas_meter]
-    client.octopus.get_products.return_value = []
+    PricingRetriever(source).refresh()
 
-    retriever = PricingRetriever(client)
-    retriever.refresh()
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.agreement).all()
 
-    client.refresh_meters.assert_called_once()
-    assert client.mariadb.write_agreement.call_count == 2
-    client.mariadb.write_agreement.assert_any_call(
-        electricity_meter, electricity_meter.agreements
+    assert len(stored) == 2
+    assert {row.energy for row in stored} == {"E", "G"}
+
+
+@responses.activate
+def test_refresh_persists_products_available_in_the_account_s_region(
+    mariadb_client: MariaDBClient,
+) -> None:
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "code": "VAR-22-11-01",
+                    "display_name": "Flexible Octopus",
+                    "direction": "IMPORT",
+                },
+                {
+                    "code": "AGILE-24-10-01",
+                    "display_name": "Agile Octopus",
+                    "direction": "IMPORT",
+                },
+            ],
+            "next": None,
+        },
+        status=200,
     )
-    client.mariadb.write_agreement.assert_any_call(gas_meter, gas_meter.agreements)
-
-
-def test_refresh_persists_products_available_in_the_account_s_region() -> None:
-    available_product = Product(
-        product_code="VAR-22-11-01", display_name="Flexible Octopus", direction="IMPORT"
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "VAR-22-11-01/",
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
     )
-    unavailable_product = Product(
-        product_code="AGILE-24-10-01", display_name="Agile Octopus", direction="IMPORT"
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "AGILE-24-10-01/",
+        json={"single_register_electricity_tariffs": {}},
+        status=200,
     )
+    source = _make_source(mariadb_client, [])
 
-    client = Mock()
-    client.meters = []
-    client.region_code = "H"
-    client.octopus.get_products.return_value = [available_product, unavailable_product]
-    client.octopus.get_product_region_availability.side_effect = (
-        lambda product_code, region: product_code == "VAR-22-11-01"
+    PricingRetriever(source).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product).all()
+
+    assert [row.product_code for row in stored] == ["VAR-22-11-01"]
+
+
+@responses.activate
+def test_refresh_does_not_persist_export_products(
+    mariadb_client: MariaDBClient,
+) -> None:
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "code": "VAR-22-11-01",
+                    "display_name": "Flexible Octopus",
+                    "direction": "IMPORT",
+                },
+                {
+                    "code": "OUTGOING-24-10-01",
+                    "display_name": "Outgoing Octopus",
+                    "direction": "EXPORT",
+                },
+            ],
+            "next": None,
+        },
+        status=200,
     )
-
-    retriever = PricingRetriever(client)
-    retriever.refresh()
-
-    client.mariadb.write_product.assert_called_once_with(available_product)
-
-
-def test_refresh_does_not_persist_export_products() -> None:
-    import_product = Product(
-        product_code="VAR-22-11-01", display_name="Flexible Octopus", direction="IMPORT"
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "VAR-22-11-01/",
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
     )
-    export_product = Product(
-        product_code="OUTGOING-24-10-01",
-        display_name="Outgoing Octopus",
-        direction="EXPORT",
-    )
+    source = _make_source(mariadb_client, [])
 
-    client = Mock()
-    client.meters = []
-    client.region_code = "H"
-    client.octopus.get_products.return_value = [import_product, export_product]
-    client.octopus.get_product_region_availability.return_value = True
+    PricingRetriever(source).refresh()
 
-    retriever = PricingRetriever(client)
-    retriever.refresh()
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product).all()
 
-    client.mariadb.write_product.assert_called_once_with(import_product)
+    assert [row.product_code for row in stored] == ["VAR-22-11-01"]

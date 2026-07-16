@@ -1,11 +1,10 @@
 import logging.config
 from datetime import datetime
 from logging import Logger, getLogger
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Protocol, Tuple
 
 from common.decorator import retry
 from common.logging import APP_LOGGER_NAME, config
-from data.base import MonitoringClient
 from data.model import Consumption, Energy
 from data.octopus.model import Meter
 
@@ -13,12 +12,30 @@ logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
+class ConsumptionSource(Protocol):
+    meters: List[Meter]
+
+    def refresh_meters(self) -> None: ...
+
+    def fetch_consumption(
+        self, meter: Meter, period_from: datetime
+    ) -> Tuple[Optional[str], List[Consumption]]: ...
+
+    def fetch_consumption_page(
+        self, energy: Energy, next_page: str
+    ) -> Tuple[Optional[str], List[Consumption]]: ...
+
+    def persist_consumption(
+        self, meter: Meter, consumption: List[Consumption]
+    ) -> None: ...
+
+
 class ConsumptionRetriever:
-    _client: MonitoringClient
+    _client: ConsumptionSource
 
     _latest_retrieved_date: Dict[Energy, datetime]
 
-    def __init__(self, client: MonitoringClient) -> None:
+    def __init__(self, client: ConsumptionSource) -> None:
         self._client = client
         self._latest_retrieved_date: Dict[Energy, datetime] = {}
 
@@ -44,9 +61,7 @@ class ConsumptionRetriever:
         if not period_from:
             period_from = meter.start_date()
         logger.debug(f"Retrieving {meter.energy.name} consumption from {period_from}.")
-        (next_page, consumption) = self._client.octopus.get_consumption(
-            meter, period_from
-        )
+        (next_page, consumption) = self._client.fetch_consumption(meter, period_from)
         latest_retrieved_date = period_from
         while True:
             if consumption:
@@ -59,9 +74,7 @@ class ConsumptionRetriever:
             (
                 next_page,
                 consumption,
-            ) = self._client.octopus.get_consumption_directly_from_endpoint(
-                meter.energy, next_page
-            )
+            ) = self._client.fetch_consumption_page(meter.energy, next_page)
         logger.info(
             f"Successfully retrieved consumption from {period_from} to {latest_retrieved_date}"
         )
@@ -74,4 +87,4 @@ class ConsumptionRetriever:
             f"Writing {meter.energy.name} consumption data from {_min} to {_max} to database."
         )
 
-        self._client.mariadb.write_consumption(meter, consumption)
+        self._client.persist_consumption(meter, consumption)
