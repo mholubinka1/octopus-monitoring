@@ -9,8 +9,10 @@ from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
 from data.mysql import sql_models
+from data.mysql.sql_models import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -55,16 +57,21 @@ def _rate_scoped_id(product_code: str, region: str, valid_from: datetime) -> str
 
 class SessionBuilder:
     session: sessionmaker
+    engine: Engine
 
     def __init__(self, settings: MariaDBSettings):
         uri = f"mysql+pymysql://{settings.username}:{settings.password}@{settings.host}:{settings.port}/{settings.database}"
-        engine = create_engine(uri)
-        self.session = sessionmaker(bind=engine)
+        self.engine = create_engine(uri)
+        self.session = sessionmaker(bind=self.engine)
 
 
 class MariaDBClient:
     def __init__(self, settings: MariaDBSettings) -> None:
         self._session_builder = SessionBuilder(settings)
+        self._sync_schema()
+
+    def _sync_schema(self) -> None:
+        SQLBase.metadata.create_all(self._session_builder.engine, checkfirst=True)
 
     @contextmanager
     def session_read_scope(self) -> Generator[Session, None, None]:

@@ -31,15 +31,15 @@ The classification of a pricing plan — `variable`, `economy7`, `agile`, `fixed
 _Avoid_: plan type, rate type
 
 **Agile**:
-Octopus's half-hourly dynamic electricity pricing tariff. Detection exists but price retrieval for it is unimplemented.
+Octopus's half-hourly dynamic electricity pricing tariff, detected via tariff code containing `AGILE`. Its rates are fetched and stored through the same generic path as every other product (see `PricingRetriever`); a dedicated Agile forecast/comparison feature is still unbuilt (see Tariff Comparison and Forecasting below).
 _Avoid_: dynamic tariff, agile octopus
 
 **Standing Charge**:
-The fixed daily charge component of a tariff. Modelled in `Price` and the `tariff` table, but not yet populated by any code path.
+The fixed daily charge component of a tariff. Modelled in `Price`/`Rate` and persisted per product/region in the `product_rate` table by `PricingRetriever`.
 _Avoid_: daily charge, base fee
 
 **Unit Rate**:
-The per-kWh price component of a tariff. Same unimplemented status as standing charge.
+The per-kWh price component of a tariff. Same storage path as standing charge.
 _Avoid_: price per unit, rate
 
 **Consumption**:
@@ -61,16 +61,12 @@ _Avoid_: customer, user
 ### Data Storage
 
 **MariaDB `octopus` database**:
-The sole active persistence store for this app, created by `mariadb/init.sql`. Holds `consumption`, `tariff`, and `cost` tables.
+The sole active persistence store for this app. The database itself is created by `mariadb/init.sql`; every table inside it is defined solely by `app/data/mysql/sql_models.py` (see **Schema Sync**) and includes `consumption`, `agreement`, `product`, `product_rate`, and `job_run`.
 _Avoid_: the database, mysql db
 
-**`tariff` table**:
-Schema for tariff price periods (standing charge, unit rate, validity dates). Exists but nothing currently writes to it.
-_Avoid_: pricing table
-
-**`cost` table**:
-Schema linking consumption to tariff for computed cost in GBP. Exists but unused so far.
-_Avoid_: billing table
+**Schema Sync**:
+The additive-only schema reconciliation `MariaDBClient` runs automatically on every app startup — creates any table missing from the live database and adds any column missing from an existing table, both diffed against `sql_models.py`. Never drops or alters an existing column; that stays a deliberate manual action. See [ADR-0005](adr/0005-additive-only-schema-sync.md).
+_Avoid_: migration, schema migration (this project deliberately has no versioned migration tool)
 
 **InfluxDB (legacy)**:
 The time-series store described in the README and implemented under `app/_deprecated/`, no longer wired into `main.py`. MariaDB is the active sink.
@@ -91,7 +87,7 @@ Orchestrates paginated consumption retrieval from Octopus and writes it to Maria
 _Avoid_: consumption service
 
 **`PricingRetriever`**:
-Placeholder class for tariff/price-history retrieval. Currently unimplemented (`pass` stubs).
+Orchestrates syncing agreements, the product catalogue, the account's own product rates, and comparison rates for every other available product, writing all of it to MariaDB via `PricingSource`.
 _Avoid_: pricing service
 
 **`MonitoringClient`**:
