@@ -159,8 +159,8 @@ production code is expected beyond the join query itself.
 
 ### Acceptance criteria
 
-- [ ] Integration test seeds `consumption`, `agreement`, and `product_rate` fixtures
-- [ ] Test asserts the join produces the expected total cost for a known electricity fixture
-- [ ] Test asserts the join produces the expected total cost for a known gas fixture
+- [x] Integration test seeds `consumption`, `agreement`, and `product_rate` fixtures
+- [x] Test asserts the join produces the expected total cost for a known electricity fixture
+- [x] Test asserts the join produces the expected total cost for a known gas fixture
 
 ---
