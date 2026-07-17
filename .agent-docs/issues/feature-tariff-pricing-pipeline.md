@@ -115,10 +115,10 @@ later tariff-comparison feature.
 
 ### Acceptance criteria
 
-- [ ] `PricingRetriever.refresh()` fetches and persists rates for every catalogued electricity product/region combination
-- [ ] Edge case handled without crash: a product with no published rate for the account's region — skip and log
-- [ ] Edge case handled without crash: tariff types not yet supported by rate-fetching (e.g. fixed/prepay) — explicitly unhandled, matching the existing `TariffType` detection gap
-- [ ] Unit tests cover the skip/no-rate path and the unsupported-tariff-type path
+- [x] `PricingRetriever.refresh()` fetches and persists rates for every catalogued electricity product/region combination
+- [x] Edge case handled without crash: a product with no published rate for the account's region — skip and log
+- [x] Edge case handled without crash: tariff types not yet supported by rate-fetching (e.g. fixed/prepay) — explicitly unhandled, matching the existing `TariffType` detection gap
+- [x] Unit tests cover the skip/no-rate path and the unsupported-tariff-type path
 
 ---
 
