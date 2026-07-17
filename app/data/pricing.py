@@ -1,7 +1,7 @@
 import logging.config
 from datetime import datetime
 from logging import Logger, getLogger
-from typing import List, Optional, Protocol
+from typing import Iterator, List, Optional, Protocol, Tuple
 
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
@@ -77,29 +77,31 @@ class PricingRetriever:
                 continue
             self._client.persist_product(product)
 
-    def _sync_own_product_rates(self) -> None:
+    def _meter_agreement_pairs(self) -> Iterator[Tuple[Meter, Agreement]]:
         for meter in self._client.meters:
+            for agreement in meter.agreements:
+                yield meter, agreement
+
+    def _sync_own_product_rates(self) -> None:
+        for meter, agreement in self._meter_agreement_pairs():
             fetch_rates = (
                 self._client.fetch_electricity_rates
                 if meter.energy == Energy.electricity
                 else self._client.fetch_gas_rates
             )
-            for agreement in meter.agreements:
-                rates = fetch_rates(
-                    agreement.product_code,
-                    agreement.tariff_code,
-                    agreement.valid_from,
-                    agreement.valid_to,
-                )
-                self._client.persist_rate(
-                    agreement.product_code, self._client.region_code, rates
-                )
+            rates = fetch_rates(
+                agreement.product_code,
+                agreement.tariff_code,
+                agreement.valid_from,
+                agreement.valid_to,
+            )
+            self._client.persist_rate(
+                agreement.product_code, self._client.region_code, rates
+            )
 
     def _sync_comparison_rates(self, products: List[Product]) -> None:
         own_product_codes = {
-            agreement.product_code
-            for meter in self._client.meters
-            for agreement in meter.agreements
+            agreement.product_code for _, agreement in self._meter_agreement_pairs()
         }
         for product in products:
             if product.direction == Direction.EXPORT:
