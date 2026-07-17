@@ -137,9 +137,9 @@ only electricity comparison is in scope per the spec's user stories.
 
 ### Acceptance criteria
 
-- [ ] `api.py` has gas rate-fetch methods, with HTTP-mocked tests
-- [ ] `PricingRetriever.refresh()` persists gas rates for the account's own product
-- [ ] Unit tests assert gas rows are written in the same shape/pattern as electricity rows
+- [x] `api.py` has gas rate-fetch methods, with HTTP-mocked tests
+- [x] `PricingRetriever.refresh()` persists gas rates for the account's own product
+- [x] Unit tests assert gas rows are written in the same shape/pattern as electricity rows
 
 ---
 
