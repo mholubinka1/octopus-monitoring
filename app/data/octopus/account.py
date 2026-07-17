@@ -112,4 +112,7 @@ class AccountClient:
             params={"postcode": postcode},
             description=f"fetch region code for {postcode}",
         )
-        return parsed.results[0].group_id
+        result = next(iter(parsed.results), None)
+        if result is None:
+            raise APIError(f"No grid supply point found for postcode {postcode}.")
+        return result.group_id

@@ -7,6 +7,9 @@ from data.octopus.api import OctopusEnergyAPIClient
 from data.octopus.model import Electricity
 
 ACCOUNT_ENDPOINT = "https://api.octopus.energy/v1/accounts/A-1234ABCD"
+GRID_SUPPLY_POINTS_ENDPOINT = (
+    "https://api.octopus.energy/v1/industry/grid-supply-points"
+)
 
 VALID_ACCOUNT_RESPONSE = {
     "properties": [
@@ -125,3 +128,36 @@ def test_account_meter_information_non_json_error_response_raises_a_clear_error(
 
     with pytest.raises(APIError, match="Internal Server Error"):
         octopus.get_account_meter_information()
+
+
+@responses.activate
+def test_region_code_is_fetched_for_a_postcode() -> None:
+    responses.add(
+        responses.GET,
+        GRID_SUPPLY_POINTS_ENDPOINT,
+        json={"results": [{"group_id": "_H"}]},
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    assert octopus.get_region_code("AB1 2CD") == "_H"
+
+
+@responses.activate
+def test_a_postcode_with_no_matching_grid_supply_point_raises_a_clear_error() -> None:
+    responses.add(
+        responses.GET,
+        GRID_SUPPLY_POINTS_ENDPOINT,
+        json={"results": []},
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    with pytest.raises(APIError, match="AB1 2CD"):
+        octopus.get_region_code("AB1 2CD")

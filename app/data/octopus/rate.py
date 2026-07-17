@@ -5,6 +5,7 @@ from logging import Logger, getLogger
 from typing import List, Optional, Tuple
 
 from common.logging import APP_LOGGER_NAME, config
+from data.model import Energy
 from data.octopus.model import Rate
 from data.octopus.transport import OctopusTransport
 from pydantic import BaseModel
@@ -13,6 +14,11 @@ logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 DEFAULT_PAGE_SIZE = 1500
+
+TARIFF_PATH = {
+    Energy.electricity: "electricity-tariffs",
+    Energy.gas: "gas-tariffs",
+}
 
 
 class RateReading(BaseModel):
@@ -38,7 +44,7 @@ class RateClient:
         period_to: Optional[datetime] = None,
     ) -> List[Rate]:
         return self._get_rates(
-            "electricity-tariffs", product_code, tariff_code, period_from, period_to
+            Energy.electricity, product_code, tariff_code, period_from, period_to
         )
 
     def get_gas_rates(
@@ -49,28 +55,31 @@ class RateClient:
         period_to: Optional[datetime] = None,
     ) -> List[Rate]:
         return self._get_rates(
-            "gas-tariffs", product_code, tariff_code, period_from, period_to
+            Energy.gas, product_code, tariff_code, period_from, period_to
         )
 
     def _get_rates(
         self,
-        tariff_path: str,
+        energy: Energy,
         product_code: str,
         tariff_code: str,
         period_from: Optional[datetime],
         period_to: Optional[datetime],
     ) -> List[Rate]:
+        tariff_path = TARIFF_PATH[energy]
         unit_rates = self._get_all_readings(
             self._endpoint(
                 tariff_path, product_code, tariff_code, "standard-unit-rates"
             ),
             period_from,
             period_to,
+            f"fetch {energy.name} unit rates",
         )
         standing_charges = self._get_all_readings(
             self._endpoint(tariff_path, product_code, tariff_code, "standing-charges"),
             period_from,
             period_to,
+            f"fetch {energy.name} standing charges",
         )
         return self._pair(unit_rates, standing_charges)
 
@@ -87,13 +96,16 @@ class RateClient:
         api_endpoint: str,
         period_from: Optional[datetime],
         period_to: Optional[datetime],
+        description: str,
     ) -> List[RateReading]:
         readings: List[RateReading] = []
         endpoint: Optional[str] = self._build_endpoint(
             api_endpoint, period_from, period_to
         )
         while endpoint:
-            (endpoint, page) = self._get_readings_directly_from_endpoint(endpoint)
+            (endpoint, page) = self._get_readings_directly_from_endpoint(
+                endpoint, description
+            )
             readings.extend(page)
         return readings
 
@@ -113,10 +125,10 @@ class RateClient:
         return api_endpoint
 
     def _get_readings_directly_from_endpoint(
-        self, api_endpoint: str
+        self, api_endpoint: str, description: str
     ) -> Tuple[Optional[str], List[RateReading]]:
         parsed = self._transport.get(
-            api_endpoint, RateResponse, description="fetch electricity rates"
+            api_endpoint, RateResponse, description=description
         )
         return (parsed.next, parsed.results)
 

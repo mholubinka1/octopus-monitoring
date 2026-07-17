@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
+import requests
 import responses
 from common.config import OctopusAPISettings
 from data.octopus.api import OctopusEnergyAPIClient
@@ -63,3 +65,18 @@ def test_gas_unit_rates_are_paired_with_the_standing_charge_in_effect() -> None:
     assert rates[0].standing_charge == Decimal("29.11")
     assert rates[0].valid_from == datetime(2026, 1, 1, tzinfo=timezone.utc)
     assert rates[0].valid_to == datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+
+@responses.activate
+def test_a_gas_rate_fetch_failure_is_reported_as_a_gas_error_not_an_electricity_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    responses.add(
+        responses.GET,
+        UNIT_RATES_ENDPOINT,
+        body=requests.exceptions.ConnectTimeout("connection timed out"),
+    )
+
+    with pytest.raises(RuntimeError, match="gas.*connection timed out"):
+        _octopus().get_gas_rates(PRODUCT_CODE, TARIFF_CODE)

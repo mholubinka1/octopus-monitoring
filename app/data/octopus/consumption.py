@@ -84,10 +84,8 @@ class ConsumptionClient:
             api_endpoint += (
                 f"&period_from={period_from.isoformat().replace('+00:00', 'Z')}"
             )
-            if period_to:
-                api_endpoint += (
-                    f"&period_from={period_from.isoformat().replace('+00:00', 'Z')}"
-                )
+        if period_to:
+            api_endpoint += f"&period_to={period_to.isoformat().replace('+00:00', 'Z')}"
         api_endpoint += "&order_by=period"
         return api_endpoint
 
