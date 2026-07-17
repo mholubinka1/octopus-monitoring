@@ -10,11 +10,11 @@ class consumption(SQLBase):
 
     id = Column(String, primary_key=True)
     energy = Column(String)
-    period_from = Column(DateTime)
-    period_to = Column(DateTime)
-    raw_value = Column(Float)
+    period_from = Column(DateTime, nullable=False)
+    period_to = Column(DateTime, nullable=False)
+    raw_value = Column(Float, nullable=False)
     unit = Column(String)
-    est_kwh = Column(Float)
+    est_kwh = Column(Float, nullable=False)
 
 
 class agreement(SQLBase):
@@ -25,7 +25,7 @@ class agreement(SQLBase):
     energy = Column(String)
     product_code = Column(String)
     tariff_code = Column(String)
-    valid_from = Column(DateTime)
+    valid_from = Column(DateTime, nullable=False)
     valid_to = Column(DateTime)
 
 
@@ -43,12 +43,12 @@ class product_rate(SQLBase):
     __table_args__ = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
-    product_code = Column(String)
+    product_code = Column(String, nullable=False)
     region = Column(String)
-    valid_from = Column(DateTime)
+    valid_from = Column(DateTime, nullable=False)
     valid_to = Column(DateTime)
-    unit_rate = Column(Numeric(9, 6))
-    standing_charge = Column(Numeric(9, 6))
+    unit_rate = Column(Numeric(9, 6), nullable=False)
+    standing_charge = Column(Numeric(9, 6), nullable=False)
 
 
 class job_run(SQLBase):
