@@ -470,3 +470,59 @@ def test_refresh_skips_a_dual_register_only_product_without_crashing(
         stored = session.query(sql_models.product_rate).all()
 
     assert stored == []
+
+
+@responses.activate
+def test_refresh_does_not_refetch_the_account_s_own_product_during_the_comparison_pass(
+    mariadb_client: MariaDBClient,
+) -> None:
+    """The account's own product also appears in the general catalogue. Its
+    rates must come only from the agreement's actual tariff_code (the
+    own-product sync), never re-fetched via an arbitrarily-picked billing
+    method during the comparison-rates pass — that would risk upserting a
+    different billing method's numbers over the accurate rate, since
+    product_rate rows are keyed by product_code/region/valid_from, not
+    tariff_code."""
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "code": "VAR-22-11-01",
+                    "display_name": "Flexible Octopus",
+                    "direction": "IMPORT",
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "VAR-22-11-01/",
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
+    )
+    _mock_electricity_rate_endpoints(
+        product_code="VAR-22-11-01", tariff_code="E-1R-VAR-22-11-01-A"
+    )
+    electricity_meter = _make_electricity_meter()
+    source = _make_source(mariadb_client, [electricity_meter])
+
+    # The product-detail endpoint above is only ever hit once, by
+    # _sync_product_catalogue's availability check. If the comparison pass
+    # also tried to look up VAR-22-11-01's tariff code, it would fetch
+    # rates for the arbitrary "-H" billing method — but no rate endpoints
+    # are mocked for that tariff_code, so a connection error would occur.
+    PricingRetriever(source).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product_rate).all()
+
+    assert len(stored) == 1
+    assert stored[0].unit_rate == Decimal("24.53")

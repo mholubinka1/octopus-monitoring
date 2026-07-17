@@ -63,16 +63,17 @@ class PricingRetriever:
     def refresh(self) -> None:
         self._client.refresh_meters()
         self._sync_agreements()
-        self._sync_product_catalogue()
+        products = self._client.fetch_products()
+        self._sync_product_catalogue(products)
         self._sync_own_product_rates()
-        self._sync_comparison_rates()
+        self._sync_comparison_rates(products)
 
     def _sync_agreements(self) -> None:
         for meter in self._client.meters:
             self._client.persist_agreement(meter, meter.agreements)
 
-    def _sync_product_catalogue(self) -> None:
-        for product in self._client.fetch_products():
+    def _sync_product_catalogue(self, products: List[Product]) -> None:
+        for product in products:
             if product.direction == EXPORT_DIRECTION:
                 continue
             if not self._client.is_product_available_in_region(
@@ -99,9 +100,21 @@ class PricingRetriever:
                     agreement.product_code, self._client.region_code, rates
                 )
 
-    def _sync_comparison_rates(self) -> None:
-        for product in self._client.fetch_products():
+    def _sync_comparison_rates(self, products: List[Product]) -> None:
+        own_product_codes = {
+            agreement.product_code
+            for meter in self._client.meters
+            for agreement in meter.agreements
+        }
+        for product in products:
             if product.direction == EXPORT_DIRECTION:
+                continue
+            if product.product_code in own_product_codes:
+                # Already synced with the agreement's actual tariff_code by
+                # _sync_own_product_rates — re-fetching here would pick an
+                # arbitrary billing method and risk overwriting the accurate
+                # rate, since product_rate rows are keyed by product_code/
+                # region/valid_from, not tariff_code.
                 continue
             tariff_code = self._client.fetch_electricity_tariff_code(
                 product.product_code, self._client.region_code
