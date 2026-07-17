@@ -92,11 +92,11 @@ electricity product/tariff and persist to `product_rate`.
 
 ### Acceptance criteria
 
-- [ ] `api.py` has electricity rate-fetch methods (half-hourly for Agile), with HTTP-mocked tests
-- [ ] `write_product_rate` upserts `id`/`product_code`/`region`/`valid_from`/`valid_to`/`unit_rate`/`standing_charge` with upsert-on-conflict behaviour
-- [ ] `PricingRetriever.refresh()` persists the account's own-product electricity rates
-- [ ] Edge case handled without crash: gaps in Agile half-hourly rates
-- [ ] Unit tests: HTTP boundary and DB boundary (including upsert-on-conflict, mirroring `write_consumption` coverage)
+- [x] `api.py` has electricity rate-fetch methods (half-hourly for Agile), with HTTP-mocked tests
+- [x] `write_product_rate` upserts `id`/`product_code`/`region`/`valid_from`/`valid_to`/`unit_rate`/`standing_charge` with upsert-on-conflict behaviour
+- [x] `PricingRetriever.refresh()` persists the account's own-product electricity rates
+- [x] Edge case handled without crash: gaps in Agile half-hourly rates
+- [x] Unit tests: HTTP boundary and DB boundary (including upsert-on-conflict, mirroring `write_consumption` coverage)
 
 ---
 
