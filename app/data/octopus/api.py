@@ -5,8 +5,9 @@ from common.config import OctopusAPISettings
 from data.model import Consumption, Energy
 from data.octopus.account import AccountClient
 from data.octopus.consumption import ConsumptionClient
-from data.octopus.model import Account, Meter, Product
+from data.octopus.model import Account, Meter, Product, Rate
 from data.octopus.product import ProductClient
+from data.octopus.rate import RateClient
 from data.octopus.transport import OctopusTransport
 
 
@@ -15,6 +16,7 @@ class OctopusEnergyAPIClient:
         transport = OctopusTransport(settings)
         self._account = AccountClient(settings, transport)
         self._product = ProductClient(transport)
+        self._rate = RateClient(transport)
         self._consumption = ConsumptionClient(transport)
 
     # region Account Information
@@ -39,6 +41,17 @@ class OctopusEnergyAPIClient:
 
     def get_product_region_availability(self, product_code: str, region: str) -> bool:
         return self._product.get_product_region_availability(product_code, region)
+
+    def get_electricity_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime] = None,
+        period_to: Optional[datetime] = None,
+    ) -> List[Rate]:
+        return self._rate.get_electricity_rates(
+            product_code, tariff_code, period_from, period_to
+        )
 
     # endregion
 

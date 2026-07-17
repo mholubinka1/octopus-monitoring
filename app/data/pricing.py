@@ -1,6 +1,8 @@
-from typing import List, Protocol
+from datetime import datetime
+from typing import List, Optional, Protocol
 
-from data.octopus.model import Agreement, Meter, Product
+from data.model import Energy
+from data.octopus.model import Agreement, Meter, Product, Rate
 
 EXPORT_DIRECTION = "EXPORT"
 
@@ -21,6 +23,18 @@ class PricingSource(Protocol):
 
     def persist_product(self, product: Product) -> None: ...
 
+    def fetch_electricity_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime],
+        period_to: Optional[datetime],
+    ) -> List[Rate]: ...
+
+    def persist_rate(
+        self, product_code: str, region: str, rates: List[Rate]
+    ) -> None: ...
+
 
 class PricingRetriever:
     _client: PricingSource
@@ -32,6 +46,7 @@ class PricingRetriever:
         self._client.refresh_meters()
         self._sync_agreements()
         self._sync_product_catalogue()
+        self._sync_own_product_rates()
 
     def _sync_agreements(self) -> None:
         for meter in self._client.meters:
@@ -46,3 +61,18 @@ class PricingRetriever:
             ):
                 continue
             self._client.persist_product(product)
+
+    def _sync_own_product_rates(self) -> None:
+        for meter in self._client.meters:
+            if meter.energy != Energy.electricity:
+                continue
+            for agreement in meter.agreements:
+                rates = self._client.fetch_electricity_rates(
+                    agreement.product_code,
+                    agreement.tariff_code,
+                    agreement.valid_from,
+                    agreement.valid_to,
+                )
+                self._client.persist_rate(
+                    agreement.product_code, self._client.region_code, rates
+                )

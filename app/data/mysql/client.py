@@ -9,7 +9,7 @@ from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
 from data.mysql import sql_models
-from data.octopus.model import Agreement, Meter, Product
+from data.octopus.model import Agreement, Meter, Product, Rate
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -47,6 +47,10 @@ def upsert(s: Session, record: Any) -> None:
 
 def _energy_scoped_id(energy_char: str, dt: datetime) -> str:
     return energy_char + dt.strftime("%Y%m%d%H%M%S")
+
+
+def _rate_scoped_id(product_code: str, region: str, valid_from: datetime) -> str:
+    return f"{product_code}_{region}_{valid_from.strftime('%Y%m%d%H%M')}"
 
 
 class SessionBuilder:
@@ -131,6 +135,23 @@ class MariaDBClient:
             direction=product.direction,
         )
         self._write_all([record], "Product data")
+
+    def write_product_rate(
+        self, product_code: str, region: str, rates: List[Rate]
+    ) -> None:
+        records = [
+            sql_models.product_rate(
+                id=_rate_scoped_id(product_code, region, rate.valid_from),
+                product_code=product_code,
+                region=region,
+                valid_from=rate.valid_from,
+                valid_to=rate.valid_to,
+                unit_rate=rate.unit_rate,
+                standing_charge=rate.standing_charge,
+            )
+            for rate in rates
+        ]
+        self._write_all(records, "Product rate data")
 
     def record_job_run(
         self, job_name: str, status: str, error: Optional[str] = None

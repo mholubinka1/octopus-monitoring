@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 import responses
 from common.config import OctopusAPISettings
 from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
 from data.octopus.api import OctopusEnergyAPIClient
-from data.octopus.model import Agreement, Electricity, Gas, Meter, Product
+from data.octopus.model import Agreement, Electricity, Gas, Meter, Product, Rate
 from data.pricing import PricingRetriever
 
 PRODUCTS_ENDPOINT = "https://api.octopus.energy/v1/products/"
@@ -44,6 +44,20 @@ class _RealPricingSource:
 
     def persist_product(self, product: Product) -> None:
         self._mariadb.write_product(product)
+
+    def fetch_electricity_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime],
+        period_to: Optional[datetime],
+    ) -> List[Rate]:
+        return self._octopus.get_electricity_rates(
+            product_code, tariff_code, period_from, period_to
+        )
+
+    def persist_rate(self, product_code: str, region: str, rates: List[Rate]) -> None:
+        self._mariadb.write_product_rate(product_code, region, rates)
 
 
 def _make_electricity_meter() -> Electricity:
@@ -83,6 +97,41 @@ def _make_source(
     return _RealPricingSource(octopus, mariadb_client, meters, region_code)
 
 
+def _mock_own_product_rate_endpoints() -> None:
+    responses.add(
+        responses.GET,
+        "https://api.octopus.energy/v1/products/VAR-22-11-01/electricity-tariffs/"
+        "E-1R-VAR-22-11-01-A/standard-unit-rates/",
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 24.53,
+                    "valid_from": "2022-11-01T00:00:00Z",
+                    "valid_to": "2022-11-01T00:30:00Z",
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "https://api.octopus.energy/v1/products/VAR-22-11-01/electricity-tariffs/"
+        "E-1R-VAR-22-11-01-A/standing-charges/",
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 48.20,
+                    "valid_from": "2022-11-01T00:00:00Z",
+                    "valid_to": None,
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+
+
 @responses.activate
 def test_refresh_persists_every_meters_agreements(
     mariadb_client: MariaDBClient,
@@ -90,6 +139,7 @@ def test_refresh_persists_every_meters_agreements(
     responses.add(
         responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
     )
+    _mock_own_product_rate_endpoints()
     electricity_meter = _make_electricity_meter()
     gas_meter = _make_gas_meter()
     source = _make_source(mariadb_client, [electricity_meter, gas_meter])
@@ -151,6 +201,45 @@ def test_refresh_persists_products_available_in_the_account_s_region(
         stored = session.query(sql_models.product).all()
 
     assert [row.product_code for row in stored] == ["VAR-22-11-01"]
+
+
+@responses.activate
+def test_refresh_persists_the_account_s_own_product_electricity_rates(
+    mariadb_client: MariaDBClient,
+) -> None:
+    responses.add(
+        responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
+    )
+    _mock_own_product_rate_endpoints()
+    electricity_meter = _make_electricity_meter()
+    source = _make_source(mariadb_client, [electricity_meter])
+
+    PricingRetriever(source).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product_rate).all()
+
+    assert len(stored) == 1
+    assert stored[0].product_code == "VAR-22-11-01"
+    assert stored[0].region == "H"
+
+
+@responses.activate
+def test_refresh_does_not_fetch_rates_for_gas_meters(
+    mariadb_client: MariaDBClient,
+) -> None:
+    responses.add(
+        responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
+    )
+    gas_meter = _make_gas_meter()
+    source = _make_source(mariadb_client, [gas_meter])
+
+    PricingRetriever(source).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product_rate).all()
+
+    assert stored == []
 
 
 @responses.activate

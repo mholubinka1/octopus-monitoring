@@ -50,6 +50,14 @@ class Price:
     valid_to: Optional[datetime]
 
 
+@dataclass
+class Rate:
+    valid_from: datetime
+    valid_to: Optional[datetime]
+    unit_rate: Decimal
+    standing_charge: Decimal
+
+
 class TariffType(Enum):
     variable = (0,)
     economy7 = (1,)
