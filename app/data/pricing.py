@@ -5,19 +5,14 @@ from typing import List, Optional, Protocol
 
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
-from data.octopus.model import Agreement, Meter, Product, Rate
+from data.octopus.model import Agreement, Direction, Meter, MeterSource, Product, Rate
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
-EXPORT_DIRECTION = "EXPORT"
 
-
-class PricingSource(Protocol):
-    meters: List[Meter]
+class PricingSource(MeterSource, Protocol):
     region_code: str
-
-    def refresh_meters(self) -> None: ...
 
     def persist_agreement(self, meter: Meter, agreements: List[Agreement]) -> None: ...
 
@@ -74,7 +69,7 @@ class PricingRetriever:
 
     def _sync_product_catalogue(self, products: List[Product]) -> None:
         for product in products:
-            if product.direction == EXPORT_DIRECTION:
+            if product.direction == Direction.EXPORT:
                 continue
             if not self._client.is_product_available_in_region(
                 product.product_code, self._client.region_code
@@ -107,7 +102,7 @@ class PricingRetriever:
             for agreement in meter.agreements
         }
         for product in products:
-            if product.direction == EXPORT_DIRECTION:
+            if product.direction == Direction.EXPORT:
                 continue
             if product.product_code in own_product_codes:
                 # Already synced with the agreement's actual tariff_code by

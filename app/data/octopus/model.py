@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from logging import Logger, getLogger
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Protocol, Tuple
 
 from common.exceptions import ArgumentError, NullValueError
 from common.logging import APP_LOGGER_NAME, config
@@ -32,11 +32,16 @@ class Account:
     postcode: str
 
 
+class Direction(Enum):
+    IMPORT = "IMPORT"
+    EXPORT = "EXPORT"
+
+
 @dataclass
 class Product:
     product_code: str
     display_name: str
-    direction: str
+    direction: Direction
 
 
 @dataclass
@@ -193,3 +198,9 @@ class Gas(Meter):
         return cls(
             mprn=meter_point.mprn, serial_number=serial_number, agreements=agreements
         )
+
+
+class MeterSource(Protocol):
+    meters: List[Meter]
+
+    def refresh_meters(self) -> None: ...

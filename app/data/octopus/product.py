@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Tuple
 
-from data.octopus.model import Product
+from data.octopus.model import Direction, Product
 from data.octopus.transport import OctopusTransport
 from pydantic import BaseModel
 
@@ -46,7 +46,7 @@ class ProductClient:
             Product(
                 product_code=summary.code,
                 display_name=summary.display_name,
-                direction=summary.direction,
+                direction=Direction(summary.direction),
             )
             for summary in parsed.results
         ]

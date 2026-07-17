@@ -6,17 +6,13 @@ from typing import Dict, List, Optional, Protocol, Tuple
 from common.decorator import retry
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, Energy
-from data.octopus.model import Meter
+from data.octopus.model import Meter, MeterSource
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
-class ConsumptionSource(Protocol):
-    meters: List[Meter]
-
-    def refresh_meters(self) -> None: ...
-
+class ConsumptionSource(MeterSource, Protocol):
     def fetch_consumption(
         self, meter: Meter, period_from: datetime
     ) -> Tuple[Optional[str], List[Consumption]]: ...

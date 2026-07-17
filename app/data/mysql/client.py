@@ -132,7 +132,7 @@ class MariaDBClient:
         record = sql_models.product(
             product_code=product.product_code,
             display_name=product.display_name,
-            direction=product.direction,
+            direction=product.direction.value,
         )
         self._write_all([record], "Product data")
 
