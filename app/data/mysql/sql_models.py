@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, Numeric, String
 from sqlalchemy.ext.declarative import declarative_base
 
 SQLBase = declarative_base()
@@ -10,27 +10,45 @@ class consumption(SQLBase):
 
     id = Column(String, primary_key=True)
     energy = Column(String)
-    period_from = Column(DateTime)
-    period_to = Column(DateTime)
-    raw_value = Column(Float)
+    period_from = Column(DateTime, nullable=False)
+    period_to = Column(DateTime, nullable=False)
+    raw_value = Column(Float, nullable=False)
     unit = Column(String)
-    est_kwh = Column(Float)
+    est_kwh = Column(Float, nullable=False)
 
 
-class tariff(SQLBase):
-    __tablename__ = "tariff"
+class agreement(SQLBase):
+    __tablename__ = "agreement"
     __table_args__ = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
-    consumption_id = Column(String)
+    energy = Column(String, nullable=False)
+    product_code = Column(String, nullable=False)
+    tariff_code = Column(String, nullable=False)
+    valid_from = Column(DateTime, nullable=False)
+    valid_to = Column(DateTime)
 
 
-class cost(SQLBase):
-    __tablename__ = "cost"
+class product(SQLBase):
+    __tablename__ = "product"
+    __table_args__ = {"schema": "octopus"}
+
+    product_code = Column(String, primary_key=True)
+    display_name = Column(String)
+    direction = Column(String)
+
+
+class product_rate(SQLBase):
+    __tablename__ = "product_rate"
     __table_args__ = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
-    consumption_id = Column(String)
+    product_code = Column(String, nullable=False)
+    region = Column(String, nullable=False)
+    valid_from = Column(DateTime, nullable=False)
+    valid_to = Column(DateTime)
+    unit_rate = Column(Numeric(9, 6), nullable=False)
+    standing_charge = Column(Numeric(9, 6), nullable=False)
 
 
 class job_run(SQLBase):

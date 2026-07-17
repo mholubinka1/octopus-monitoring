@@ -6,11 +6,18 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from logging import Logger, getLogger
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Protocol, Tuple
 
 from common.exceptions import ArgumentError, NullValueError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
+
+if TYPE_CHECKING:
+    from data.octopus.account import (
+        AgreementInfo,
+        ElectricityMeterPointInfo,
+        GasMeterPointInfo,
+    )
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -25,6 +32,18 @@ class Account:
     postcode: str
 
 
+class Direction(Enum):
+    IMPORT = "IMPORT"
+    EXPORT = "EXPORT"
+
+
+@dataclass
+class Product:
+    product_code: str
+    display_name: str
+    direction: Direction
+
+
 @dataclass
 class Price:
     energy: Energy
@@ -34,6 +53,14 @@ class Price:
     standing_charge: Decimal
     valid_from: datetime
     valid_to: Optional[datetime]
+
+
+@dataclass
+class Rate:
+    valid_from: datetime
+    valid_to: Optional[datetime]
+    unit_rate: Decimal
+    standing_charge: Decimal
 
 
 class TariffType(Enum):
@@ -77,6 +104,13 @@ class Agreement:
         self.valid_to = valid_to
         self.price_history: List[Price] = []
 
+    @classmethod
+    def from_response(cls, info: "AgreementInfo") -> "Agreement":
+        tariff_code = info.tariff_code.upper()
+        valid_from = datetime.fromisoformat(info.valid_from)
+        valid_to = None if not info.valid_to else datetime.fromisoformat(info.valid_to)
+        return cls(tariff_code, valid_from, valid_to)
+
 
 class Meter(ABC):
     energy: Energy
@@ -85,6 +119,33 @@ class Meter(ABC):
 
     def start_date(self) -> datetime:
         return min(a.valid_from for a in self.agreements)
+
+    @staticmethod
+    def _single_meter_point_serial_number(
+        meter_points: List[Any], label: str
+    ) -> Tuple[Any, str]:
+        if len(meter_points) == 0:
+            raise NullValueError(f"No {label} meter points found.")
+        if len(meter_points) > 1:
+            raise ArgumentError(
+                f"This software does not currently handle multiple {label}s."
+            )
+        meter_point = meter_points[0]
+        if len(meter_point.meters) == 0:
+            raise NullValueError("Meter Serial Number information not available.")
+        if len(meter_point.meters) > 1:
+            raise ArgumentError(
+                f"This software does not currently handle multiple SNs per {label}."
+            )
+        return meter_point, meter_point.meters[0].serial_number
+
+    @staticmethod
+    def _require_agreements(agreements: List[Agreement]) -> None:
+        # Tracked in #387: should extract consumption data even without agreements.
+        if len(agreements) == 0:
+            raise ArgumentError(
+                "Meter must contain valid tariff information to extract pricing information."
+            )
 
 
 class Electricity(Meter):
@@ -96,12 +157,22 @@ class Electricity(Meter):
         self.energy = Energy.electricity
         self.mpan = mpan
         self.serial_number = serial_number
-        # TODO: enable this code to function but just extract consumption data if agreements are missing
-        if len(agreements) == 0:
-            raise ArgumentError(
-                "Meter must contain valid tariff information to extract pricing information."
-            )
+        Meter._require_agreements(agreements)
         self.agreements = agreements
+
+    @classmethod
+    def from_response(
+        cls, meter_points: List["ElectricityMeterPointInfo"]
+    ) -> "Electricity":
+        meter_point, serial_number = Meter._single_meter_point_serial_number(
+            meter_points, "MPAN"
+        )
+        agreements = [
+            Agreement.from_response(a) for a in (meter_point.agreements or [])
+        ]
+        return cls(
+            mpan=meter_point.mpan, serial_number=serial_number, agreements=agreements
+        )
 
 
 class Gas(Meter):
@@ -113,9 +184,23 @@ class Gas(Meter):
         self.energy = Energy.gas
         self.mprn = mprn
         self.serial_number = serial_number
-        # TODO: enable this code to function but just extract consumption data if agreements are missing
-        if len(agreements) == 0:
-            raise ArgumentError(
-                "Meter must contain valid tariff information to extract pricing information."
-            )
+        Meter._require_agreements(agreements)
         self.agreements = agreements
+
+    @classmethod
+    def from_response(cls, meter_points: List["GasMeterPointInfo"]) -> "Gas":
+        meter_point, serial_number = Meter._single_meter_point_serial_number(
+            meter_points, "MPRN"
+        )
+        agreements = [
+            Agreement.from_response(a) for a in (meter_point.agreements or [])
+        ]
+        return cls(
+            mprn=meter_point.mprn, serial_number=serial_number, agreements=agreements
+        )
+
+
+class MeterSource(Protocol):
+    meters: List[Meter]
+
+    def refresh_meters(self) -> None: ...

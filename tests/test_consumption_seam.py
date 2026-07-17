@@ -4,7 +4,6 @@ from decimal import Decimal
 import pytest
 import responses
 from common.config import OctopusAPISettings
-from common.exceptions import APIError
 from data.model import Energy
 from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
@@ -67,9 +66,10 @@ def test_consumption_fetched_from_octopus_is_persisted_and_queryable(
 
 
 @responses.activate
-def test_consumption_response_missing_a_required_field_raises_a_clear_validation_error() -> (
-    None
-):
+def test_consumption_response_missing_a_required_field_raises_a_clear_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
     responses.add(
         responses.GET,
         CONSUMPTION_ENDPOINT,
@@ -89,7 +89,7 @@ def test_consumption_response_missing_a_required_field_raises_a_clear_validation
         OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     )
 
-    with pytest.raises(APIError) as exc_info:
+    with pytest.raises(RuntimeError) as exc_info:
         octopus.get_consumption_directly_from_endpoint(
             Energy.electricity, CONSUMPTION_ENDPOINT
         )

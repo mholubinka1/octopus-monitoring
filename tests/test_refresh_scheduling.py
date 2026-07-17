@@ -5,7 +5,8 @@ from common.config import RefreshSettings
 from data.consumption import ConsumptionRetriever
 from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
-from main import register_jobs, run_pending_safely
+from data.pricing import PricingRetriever
+from main import register_jobs, register_pricing_job, run_pending_safely
 from schedule import Scheduler
 
 REFRESH_CONFIG = RefreshSettings(refresh_interval=4, historical_limit=45)
@@ -60,6 +61,27 @@ def test_failed_refresh_is_recorded_as_a_failed_job_run_and_still_raises(
     assert len(runs) == 1
     assert runs[0].status == "failure"
     assert runs[0].error_message == "Octopus API unavailable"
+
+
+def test_pricing_job_runs_on_the_configured_interval_and_records_its_outcome(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    pricing = Mock(spec=PricingRetriever)
+
+    job = register_pricing_job(scheduler, REFRESH_CONFIG, pricing, mariadb_client)
+
+    assert job.interval == REFRESH_CONFIG.refresh_interval
+    assert job.unit == "hours"
+
+    job.run()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(sql_models.job_run).all()
+
+    assert len(runs) == 1
+    assert runs[0].job_name == "pricing_refresh"
+    assert runs[0].status == "success"
 
 
 def test_run_pending_safely_does_not_propagate_a_scheduled_job_failure() -> None:
