@@ -115,4 +115,7 @@ class AccountClient:
         result = next(iter(parsed.results), None)
         if result is None:
             raise APIError(f"No grid supply point found for postcode {postcode}.")
-        return result.group_id
+        # The grid-supply-points endpoint returns group_id with a leading
+        # underscore (e.g. "_H"), but every other Octopus API — tariff codes,
+        # product region-availability maps — uses the bare letter ("H").
+        return result.group_id.removeprefix("_")

@@ -23,9 +23,9 @@ DROP TABLE IF EXISTS tariff;
 CREATE TABLE IF NOT EXISTS agreement
 (
     id VARCHAR(50) NOT NULL,
-    energy CHAR,
-    product_code VARCHAR(50),
-    tariff_code VARCHAR(50),
+    energy CHAR NOT NULL,
+    product_code VARCHAR(50) NOT NULL,
+    tariff_code VARCHAR(50) NOT NULL,
     valid_from TIMESTAMP NOT NULL,
     valid_to TIMESTAMP,
     PRIMARY KEY (id)
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS product_rate
 (
     id VARCHAR(70) NOT NULL,
     product_code VARCHAR(50) NOT NULL,
-    region CHAR,
+    region CHAR NOT NULL,
     valid_from TIMESTAMP NOT NULL,
     valid_to TIMESTAMP,
     unit_rate DECIMAL(9,6) NOT NULL,

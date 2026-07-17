@@ -22,9 +22,9 @@ class agreement(SQLBase):
     __table_args__ = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
-    energy = Column(String)
-    product_code = Column(String)
-    tariff_code = Column(String)
+    energy = Column(String, nullable=False)
+    product_code = Column(String, nullable=False)
+    tariff_code = Column(String, nullable=False)
     valid_from = Column(DateTime, nullable=False)
     valid_to = Column(DateTime)
 
@@ -44,7 +44,7 @@ class product_rate(SQLBase):
 
     id = Column(String, primary_key=True)
     product_code = Column(String, nullable=False)
-    region = Column(String)
+    region = Column(String, nullable=False)
     valid_from = Column(DateTime, nullable=False)
     valid_to = Column(DateTime)
     unit_rate = Column(Numeric(9, 6), nullable=False)

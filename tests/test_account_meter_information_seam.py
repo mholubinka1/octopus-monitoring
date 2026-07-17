@@ -143,7 +143,25 @@ def test_region_code_is_fetched_for_a_postcode() -> None:
         OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     )
 
-    assert octopus.get_region_code("AB1 2CD") == "_H"
+    # The API returns "_H" (leading underscore); normalized to "H" to match
+    # the bare-letter region format used by tariff codes and product maps.
+    assert octopus.get_region_code("AB1 2CD") == "H"
+
+
+@responses.activate
+def test_a_region_code_without_a_leading_underscore_is_left_unchanged() -> None:
+    responses.add(
+        responses.GET,
+        GRID_SUPPLY_POINTS_ENDPOINT,
+        json={"results": [{"group_id": "H"}]},
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    assert octopus.get_region_code("AB1 2CD") == "H"
 
 
 @responses.activate
