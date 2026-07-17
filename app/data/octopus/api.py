@@ -58,6 +58,17 @@ class OctopusEnergyAPIClient:
             product_code, tariff_code, period_from, period_to
         )
 
+    def get_gas_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime] = None,
+        period_to: Optional[datetime] = None,
+    ) -> List[Rate]:
+        return self._rate.get_gas_rates(
+            product_code, tariff_code, period_from, period_to
+        )
+
     # endregion
 
     # region Consumption

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import List, Optional
 
 import responses
@@ -53,6 +54,17 @@ class _RealPricingSource:
         period_to: Optional[datetime],
     ) -> List[Rate]:
         return self._octopus.get_electricity_rates(
+            product_code, tariff_code, period_from, period_to
+        )
+
+    def fetch_gas_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime],
+        period_to: Optional[datetime],
+    ) -> List[Rate]:
+        return self._octopus.get_gas_rates(
             product_code, tariff_code, period_from, period_to
         )
 
@@ -139,6 +151,43 @@ def _mock_electricity_rate_endpoints(
     )
 
 
+def _mock_gas_rate_endpoints(
+    product_code: str = "VAR-22-11-01", tariff_code: str = "G-1R-VAR-22-11-01-A"
+) -> None:
+    responses.add(
+        responses.GET,
+        f"https://api.octopus.energy/v1/products/{product_code}/gas-tariffs/"
+        f"{tariff_code}/standard-unit-rates/",
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 6.89,
+                    "valid_from": "2022-11-01T00:00:00Z",
+                    "valid_to": "2022-11-02T00:00:00Z",
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        f"https://api.octopus.energy/v1/products/{product_code}/gas-tariffs/"
+        f"{tariff_code}/standing-charges/",
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 29.11,
+                    "valid_from": "2022-11-01T00:00:00Z",
+                    "valid_to": None,
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+
+
 @responses.activate
 def test_refresh_persists_every_meters_agreements(
     mariadb_client: MariaDBClient,
@@ -147,6 +196,7 @@ def test_refresh_persists_every_meters_agreements(
         responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
     )
     _mock_electricity_rate_endpoints()
+    _mock_gas_rate_endpoints()
     electricity_meter = _make_electricity_meter()
     gas_meter = _make_gas_meter()
     source = _make_source(mariadb_client, [electricity_meter, gas_meter])
@@ -235,12 +285,13 @@ def test_refresh_persists_the_account_s_own_product_electricity_rates(
 
 
 @responses.activate
-def test_refresh_does_not_fetch_rates_for_gas_meters(
+def test_refresh_persists_gas_rates_for_the_account_s_own_product_in_the_same_shape_as_electricity(
     mariadb_client: MariaDBClient,
 ) -> None:
     responses.add(
         responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
     )
+    _mock_gas_rate_endpoints()
     gas_meter = _make_gas_meter()
     source = _make_source(mariadb_client, [gas_meter])
 
@@ -249,7 +300,11 @@ def test_refresh_does_not_fetch_rates_for_gas_meters(
     with mariadb_client.session_read_scope() as session:
         stored = session.query(sql_models.product_rate).all()
 
-    assert stored == []
+    assert len(stored) == 1
+    assert stored[0].product_code == "VAR-22-11-01"
+    assert stored[0].region == "H"
+    assert stored[0].unit_rate == Decimal("6.89")
+    assert stored[0].standing_charge == Decimal("29.11")
 
 
 @responses.activate

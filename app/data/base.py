@@ -68,6 +68,17 @@ class MonitoringClient:
             product_code, tariff_code, period_from, period_to
         )
 
+    def fetch_gas_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime],
+        period_to: Optional[datetime],
+    ) -> List[Rate]:
+        return self.octopus.get_gas_rates(
+            product_code, tariff_code, period_from, period_to
+        )
+
     def persist_rate(self, product_code: str, region: str, rates: List[Rate]) -> None:
         self.mariadb.write_product_rate(product_code, region, rates)
 

@@ -37,6 +37,14 @@ class PricingSource(Protocol):
         period_to: Optional[datetime],
     ) -> List[Rate]: ...
 
+    def fetch_gas_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime],
+        period_to: Optional[datetime],
+    ) -> List[Rate]: ...
+
     def persist_rate(
         self, product_code: str, region: str, rates: List[Rate]
     ) -> None: ...
@@ -75,10 +83,13 @@ class PricingRetriever:
 
     def _sync_own_product_rates(self) -> None:
         for meter in self._client.meters:
-            if meter.energy != Energy.electricity:
-                continue
+            fetch_rates = (
+                self._client.fetch_electricity_rates
+                if meter.energy == Energy.electricity
+                else self._client.fetch_gas_rates
+            )
             for agreement in meter.agreements:
-                rates = self._client.fetch_electricity_rates(
+                rates = fetch_rates(
                     agreement.product_code,
                     agreement.tariff_code,
                     agreement.valid_from,

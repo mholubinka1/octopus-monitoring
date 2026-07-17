@@ -37,26 +37,49 @@ class RateClient:
         period_from: Optional[datetime] = None,
         period_to: Optional[datetime] = None,
     ) -> List[Rate]:
+        return self._get_rates(
+            "electricity-tariffs", product_code, tariff_code, period_from, period_to
+        )
+
+    def get_gas_rates(
+        self,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime] = None,
+        period_to: Optional[datetime] = None,
+    ) -> List[Rate]:
+        return self._get_rates(
+            "gas-tariffs", product_code, tariff_code, period_from, period_to
+        )
+
+    def _get_rates(
+        self,
+        tariff_path: str,
+        product_code: str,
+        tariff_code: str,
+        period_from: Optional[datetime],
+        period_to: Optional[datetime],
+    ) -> List[Rate]:
         unit_rates = self._get_all_readings(
-            self._electricity_endpoint(
-                product_code, tariff_code, "standard-unit-rates"
+            self._endpoint(
+                tariff_path, product_code, tariff_code, "standard-unit-rates"
             ),
             period_from,
             period_to,
         )
         standing_charges = self._get_all_readings(
-            self._electricity_endpoint(product_code, tariff_code, "standing-charges"),
+            self._endpoint(tariff_path, product_code, tariff_code, "standing-charges"),
             period_from,
             period_to,
         )
         return self._pair(unit_rates, standing_charges)
 
-    def _electricity_endpoint(
-        self, product_code: str, tariff_code: str, resource: str
+    def _endpoint(
+        self, tariff_path: str, product_code: str, tariff_code: str, resource: str
     ) -> str:
         return (
             self._transport.base_url
-            + f"products/{product_code}/electricity-tariffs/{tariff_code}/{resource}/"
+            + f"products/{product_code}/{tariff_path}/{tariff_code}/{resource}/"
         )
 
     def _get_all_readings(
