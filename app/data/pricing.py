@@ -1,8 +1,14 @@
+import logging.config
 from datetime import datetime
+from logging import Logger, getLogger
 from typing import List, Optional, Protocol
 
+from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
 from data.octopus.model import Agreement, Meter, Product, Rate
+
+logging.config.dictConfig(config)
+logger: Logger = getLogger(APP_LOGGER_NAME)
 
 EXPORT_DIRECTION = "EXPORT"
 
@@ -35,6 +41,10 @@ class PricingSource(Protocol):
         self, product_code: str, region: str, rates: List[Rate]
     ) -> None: ...
 
+    def fetch_electricity_tariff_code(
+        self, product_code: str, region: str
+    ) -> Optional[str]: ...
+
 
 class PricingRetriever:
     _client: PricingSource
@@ -47,6 +57,7 @@ class PricingRetriever:
         self._sync_agreements()
         self._sync_product_catalogue()
         self._sync_own_product_rates()
+        self._sync_comparison_rates()
 
     def _sync_agreements(self) -> None:
         for meter in self._client.meters:
@@ -76,3 +87,23 @@ class PricingRetriever:
                 self._client.persist_rate(
                     agreement.product_code, self._client.region_code, rates
                 )
+
+    def _sync_comparison_rates(self) -> None:
+        for product in self._client.fetch_products():
+            if product.direction == EXPORT_DIRECTION:
+                continue
+            tariff_code = self._client.fetch_electricity_tariff_code(
+                product.product_code, self._client.region_code
+            )
+            if tariff_code is None:
+                logger.info(
+                    f"No electricity rate published for {product.product_code} "
+                    f"in region {self._client.region_code} — skipping."
+                )
+                continue
+            rates = self._client.fetch_electricity_rates(
+                product.product_code, tariff_code, None, None
+            )
+            self._client.persist_rate(
+                product.product_code, self._client.region_code, rates
+            )

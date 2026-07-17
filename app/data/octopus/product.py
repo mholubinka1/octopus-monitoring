@@ -64,3 +64,18 @@ class ProductClient:
             or region in parsed.dual_register_electricity_tariffs
             or region in parsed.single_register_gas_tariffs
         )
+
+    def get_electricity_tariff_code(
+        self, product_code: str, region: str
+    ) -> Optional[str]:
+        api_endpoint = self._transport.base_url + f"products/{product_code}/"
+        parsed = self._transport.get(
+            api_endpoint,
+            ProductDetailResponse,
+            description=f"fetch product detail for {product_code}",
+        )
+        billing_methods = parsed.single_register_electricity_tariffs.get(region)
+        if not billing_methods:
+            return None
+        tariff = next(iter(billing_methods.values()), None)
+        return tariff.get("code") if tariff else None

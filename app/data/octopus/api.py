@@ -42,6 +42,11 @@ class OctopusEnergyAPIClient:
     def get_product_region_availability(self, product_code: str, region: str) -> bool:
         return self._product.get_product_region_availability(product_code, region)
 
+    def get_electricity_tariff_code(
+        self, product_code: str, region: str
+    ) -> Optional[str]:
+        return self._product.get_electricity_tariff_code(product_code, region)
+
     def get_electricity_rates(
         self,
         product_code: str,

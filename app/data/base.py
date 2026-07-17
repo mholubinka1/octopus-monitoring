@@ -70,3 +70,8 @@ class MonitoringClient:
 
     def persist_rate(self, product_code: str, region: str, rates: List[Rate]) -> None:
         self.mariadb.write_product_rate(product_code, region, rates)
+
+    def fetch_electricity_tariff_code(
+        self, product_code: str, region: str
+    ) -> Optional[str]:
+        return self.octopus.get_electricity_tariff_code(product_code, region)

@@ -128,3 +128,71 @@ def test_a_product_not_available_in_the_account_s_region_is_reported_as_unavaila
     )
 
     assert octopus.get_product_region_availability("VAR-22-11-01", "A") is False
+
+
+@responses.activate
+def test_the_electricity_tariff_code_for_a_region_is_returned() -> None:
+    responses.add(
+        responses.GET,
+        PRODUCT_DETAIL_ENDPOINT,
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    assert (
+        octopus.get_electricity_tariff_code("VAR-22-11-01", "H")
+        == "E-1R-VAR-22-11-01-H"
+    )
+
+
+@responses.activate
+def test_no_electricity_tariff_code_is_returned_for_a_region_with_no_published_rate() -> (
+    None
+):
+    responses.add(
+        responses.GET,
+        PRODUCT_DETAIL_ENDPOINT,
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    assert octopus.get_electricity_tariff_code("VAR-22-11-01", "A") is None
+
+
+@responses.activate
+def test_no_electricity_tariff_code_is_returned_for_a_dual_register_only_product() -> (
+    None
+):
+    responses.add(
+        responses.GET,
+        PRODUCT_DETAIL_ENDPOINT,
+        json={
+            "single_register_electricity_tariffs": {},
+            "dual_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-2R-ECO7-22-11-01-H"}}
+            },
+        },
+        status=200,
+    )
+
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+
+    assert octopus.get_electricity_tariff_code("VAR-22-11-01", "H") is None
