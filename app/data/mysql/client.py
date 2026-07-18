@@ -73,7 +73,17 @@ class MariaDBClient:
 
     def _sync_schema(self) -> None:
         engine = self._session_builder.engine
+        existing_tables = set(inspect(engine).get_table_names())
+
         SQLBase.metadata.create_all(engine, checkfirst=True)
+
+        created_tables = {
+            table.name for table in SQLBase.metadata.tables.values()
+        } - existing_tables
+        if created_tables:
+            logger.info(
+                f"Schema sync: created missing tables: {sorted(created_tables)}"
+            )
 
         inspector = inspect(engine)
         with engine.begin() as connection:
@@ -90,6 +100,11 @@ class MariaDBClient:
                 ]
                 if not missing_columns:
                     continue
+
+                logger.info(
+                    f"Schema sync: adding missing columns to {table.name}: "
+                    f"{[column.name for column in missing_columns]}"
+                )
 
                 qualified_name = f"{schema}.{table.name}" if schema else table.name
                 for column in missing_columns:

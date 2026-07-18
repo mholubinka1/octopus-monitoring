@@ -3,9 +3,11 @@ from common.config import MariaDBSettings
 from data.mysql.client import MariaDBClient
 from data.mysql.sql_models import SQLBase
 from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect
+from sqlalchemy.dialects import mysql
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.schema import CreateTable
 
 _StrippedBase = declarative_base()
 
@@ -40,6 +42,13 @@ def _settings() -> MariaDBSettings:
     )
 
 
+def _sync_against(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
+    monkeypatch.setattr(
+        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
+    )
+    return MariaDBClient(_settings())
+
+
 def test_a_table_missing_from_the_database_is_created_on_startup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -48,11 +57,8 @@ def test_a_table_missing_from_the_database_is_created_on_startup(
         table for table in SQLBase.metadata.tables.values() if table.name != "job_run"
     ]
     SQLBase.metadata.create_all(engine, tables=tables_except_job_run)
-    monkeypatch.setattr(
-        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
-    )
 
-    MariaDBClient(_settings())
+    _sync_against(engine, monkeypatch)
 
     columns = {column["name"] for column in inspect(engine).get_columns("job_run")}
     assert columns == {"id", "job_name", "status", "ran_at", "error_message"}
@@ -63,11 +69,8 @@ def test_a_database_with_every_table_already_present_is_left_untouched(
 ) -> None:
     engine = _sqlite_engine()
     SQLBase.metadata.create_all(engine)
-    monkeypatch.setattr(
-        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
-    )
 
-    MariaDBClient(_settings())
+    _sync_against(engine, monkeypatch)
 
     table_names = set(inspect(engine).get_table_names())
     assert table_names == {table.name for table in SQLBase.metadata.tables.values()}
@@ -78,11 +81,8 @@ def test_a_column_missing_from_an_existing_table_is_added_on_startup(
 ) -> None:
     engine = _sqlite_engine()
     _StrippedBase.metadata.create_all(engine)
-    monkeypatch.setattr(
-        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
-    )
 
-    MariaDBClient(_settings())
+    _sync_against(engine, monkeypatch)
 
     columns = {column["name"] for column in inspect(engine).get_columns("consumption")}
     assert columns == {
@@ -94,3 +94,8 @@ def test_a_column_missing_from_an_existing_table_is_added_on_startup(
         "unit",
         "est_kwh",
     }
+
+
+def test_every_declared_table_compiles_as_valid_mariadb_ddl() -> None:
+    for table in SQLBase.metadata.tables.values():
+        CreateTable(table).compile(dialect=mysql.dialect())
