@@ -1,11 +1,16 @@
+from datetime import datetime, timezone
+from decimal import Decimal
+
 import pytest
 from common.config import MariaDBSettings
+from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
 from data.mysql.sql_models import SQLBase
 from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect
 from sqlalchemy.dialects import mysql
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import CreateTable
 
@@ -99,3 +104,28 @@ def test_a_column_missing_from_an_existing_table_is_added_on_startup(
 def test_every_declared_table_compiles_as_valid_mariadb_ddl() -> None:
     for table in SQLBase.metadata.tables.values():
         CreateTable(table).compile(dialect=mysql.dialect())
+
+
+def test_consumption_values_round_trip_as_decimal_without_precision_loss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _sqlite_engine()
+    _sync_against(engine, monkeypatch)
+
+    session = sessionmaker(bind=engine)()
+    session.add(
+        sql_models.consumption(
+            id="E20260101000000",
+            energy="E",
+            period_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            period_to=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
+            raw_value=Decimal("0.12345"),
+            unit="kWh",
+            est_kwh=Decimal("0.12345"),
+        )
+    )
+    session.commit()
+
+    stored = session.query(sql_models.consumption).one()
+    assert stored.raw_value == Decimal("0.12345")
+    assert stored.est_kwh == Decimal("0.12345")

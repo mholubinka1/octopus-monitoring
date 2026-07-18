@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, Integer, Numeric, String
+from sqlalchemy import Column, DateTime, Integer, Numeric, String
 from sqlalchemy.ext.declarative import declarative_base
 
 SQLBase = declarative_base()
@@ -12,9 +12,9 @@ class consumption(SQLBase):
     energy = Column(String(1))
     period_from = Column(DateTime, nullable=False)
     period_to = Column(DateTime, nullable=False)
-    raw_value = Column(Float, nullable=False)
+    raw_value = Column(Numeric(8, 5), nullable=False)
     unit = Column(String(5))
-    est_kwh = Column(Float, nullable=False)
+    est_kwh = Column(Numeric(8, 5), nullable=False)
 
 
 class agreement(SQLBase):

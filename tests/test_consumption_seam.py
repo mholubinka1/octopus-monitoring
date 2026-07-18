@@ -62,7 +62,7 @@ def test_consumption_fetched_from_octopus_is_persisted_and_queryable(
 
     assert len(stored) == 1
     assert stored[0].id == "E20260101000000"
-    assert Decimal(str(stored[0].est_kwh)) == Decimal("1.234")
+    assert stored[0].est_kwh == Decimal("1.234")
 
 
 @responses.activate
