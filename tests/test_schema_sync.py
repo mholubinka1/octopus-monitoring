@@ -106,6 +106,14 @@ def test_every_declared_table_compiles_as_valid_mariadb_ddl() -> None:
         CreateTable(table).compile(dialect=mysql.dialect())
 
 
+def test_consumption_quantities_reject_negative_values_on_mariadb() -> None:
+    table = SQLBase.metadata.tables["octopus.consumption"]
+    ddl = str(CreateTable(table).compile(dialect=mysql.dialect()))
+
+    assert "raw_value DECIMAL(8, 5) UNSIGNED NOT NULL" in ddl
+    assert "est_kwh DECIMAL(8, 5) UNSIGNED NOT NULL" in ddl
+
+
 def test_consumption_values_round_trip_as_decimal_without_precision_loss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
