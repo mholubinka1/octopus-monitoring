@@ -6,7 +6,7 @@ from common.config import MariaDBSettings
 from data.mysql import sql_models
 from data.mysql.client import MariaDBClient
 from data.mysql.sql_models import SQLBase
-from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect
+from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect, text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -137,3 +137,19 @@ def test_consumption_values_round_trip_as_decimal_without_precision_loss(
     stored = session.query(sql_models.consumption).one()
     assert stored.raw_value == Decimal("0.12345")
     assert stored.est_kwh == Decimal("0.12345")
+
+
+def test_a_column_no_longer_declared_in_the_model_is_never_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _sqlite_engine()
+    SQLBase.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE job_run ADD COLUMN retired_field VARCHAR(10)")
+        )
+
+    _sync_against(engine, monkeypatch)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("job_run")}
+    assert "retired_field" in columns
