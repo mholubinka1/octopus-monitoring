@@ -12,7 +12,10 @@ see `.agent-docs/specs/` for the roadmap.
 - **`app/`** — polls the Octopus API on a configurable interval and writes consumption
   readings to MariaDB (`data.consumption.ConsumptionRetriever` /
   `data.mysql.client.MariaDBClient`).
-- **MariaDB** — the persistence layer (see `mariadb/init.sql` for the schema).
+- **MariaDB** — the persistence layer. Schema lives solely in `app/data/mysql/sql_models.py`;
+  `data.mysql.client.MariaDBClient` syncs it into the live database automatically on every
+  app startup (creating missing tables/columns only — see
+  `.agent-docs/adr/0005-additive-only-schema-sync.md`).
 - **Grafana** (not included in this repo) — point its MySQL data source at the MariaDB
   instance to build dashboards.
 
