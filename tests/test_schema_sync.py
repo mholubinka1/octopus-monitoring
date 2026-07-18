@@ -77,8 +77,13 @@ def test_a_database_with_every_table_already_present_is_left_untouched(
 
     _sync_against(engine, monkeypatch)
 
-    table_names = set(inspect(engine).get_table_names())
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
     assert table_names == {table.name for table in SQLBase.metadata.tables.values()}
+
+    for table in SQLBase.metadata.tables.values():
+        columns = {column["name"] for column in inspector.get_columns(table.name)}
+        assert columns == {column.name for column in table.columns}
 
 
 def test_a_column_missing_from_an_existing_table_is_added_on_startup(
