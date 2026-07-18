@@ -11,10 +11,11 @@ from data.model import Consumption, as_energy_char
 from data.mysql import sql_models
 from data.mysql.sql_models import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.schema import CreateColumn
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -71,7 +72,31 @@ class MariaDBClient:
         self._sync_schema()
 
     def _sync_schema(self) -> None:
-        SQLBase.metadata.create_all(self._session_builder.engine, checkfirst=True)
+        engine = self._session_builder.engine
+        SQLBase.metadata.create_all(engine, checkfirst=True)
+
+        inspector = inspect(engine)
+        with engine.begin() as connection:
+            for table in SQLBase.metadata.tables.values():
+                schema = connection.schema_for_object(table)
+                existing_columns = {
+                    column["name"]
+                    for column in inspector.get_columns(table.name, schema=schema)
+                }
+                missing_columns = [
+                    column
+                    for column in table.columns
+                    if column.name not in existing_columns
+                ]
+                if not missing_columns:
+                    continue
+
+                qualified_name = f"{schema}.{table.name}" if schema else table.name
+                for column in missing_columns:
+                    column_ddl = CreateColumn(column).compile(dialect=engine.dialect)
+                    connection.execute(
+                        text(f"ALTER TABLE {qualified_name} ADD COLUMN {column_ddl}")
+                    )
 
     @contextmanager
     def session_read_scope(self) -> Generator[Session, None, None]:

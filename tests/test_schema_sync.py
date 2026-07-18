@@ -2,9 +2,24 @@ import pytest
 from common.config import MariaDBSettings
 from data.mysql.client import MariaDBClient
 from data.mysql.sql_models import SQLBase
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect
 from sqlalchemy.engine import Engine
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
+
+_StrippedBase = declarative_base()
+
+
+class _StrippedConsumption(_StrippedBase):
+    __tablename__ = "consumption"
+    __table_args__ = {"schema": "octopus"}
+
+    id = Column(String, primary_key=True)
+    energy = Column(String)
+    period_from = Column(DateTime, nullable=False)
+    period_to = Column(DateTime, nullable=False)
+    raw_value = Column(Float, nullable=False)
+    est_kwh = Column(Float, nullable=False)
 
 
 def _sqlite_engine() -> Engine:
@@ -56,3 +71,26 @@ def test_a_database_with_every_table_already_present_is_left_untouched(
 
     table_names = set(inspect(engine).get_table_names())
     assert table_names == {table.name for table in SQLBase.metadata.tables.values()}
+
+
+def test_a_column_missing_from_an_existing_table_is_added_on_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _sqlite_engine()
+    _StrippedBase.metadata.create_all(engine)
+    monkeypatch.setattr(
+        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
+    )
+
+    MariaDBClient(_settings())
+
+    columns = {column["name"] for column in inspect(engine).get_columns("consumption")}
+    assert columns == {
+        "id",
+        "energy",
+        "period_from",
+        "period_to",
+        "raw_value",
+        "unit",
+        "est_kwh",
+    }
