@@ -1,3 +1,5 @@
+> Work complete — PR ready to merge.
+
 # Issues: chore-additive-schema-sync
 
 ## Missing-table schema sync on startup (#389)
@@ -12,10 +14,10 @@ Expose the SQLAlchemy engine from `SessionBuilder` so `MariaDBClient` can intros
 
 ### Acceptance criteria
 
-- [ ] `SessionBuilder.engine` is accessible to `MariaDBClient`.
-- [ ] Constructing `MariaDBClient` against a database missing a table that `sql_models.py` declares results in that table existing afterward, with the correct columns.
-- [ ] Constructing `MariaDBClient` against a database that already has all tables does not raise and is a no-op.
-- [ ] A test exercises the missing-table case via the same seam `test_mariadb_upsert.py` uses (monkeypatched in-memory SQLite engine), asserting on the resulting schema via `sqlalchemy.inspect()`.
+- [x] `SessionBuilder.engine` is accessible to `MariaDBClient`.
+- [x] Constructing `MariaDBClient` against a database missing a table that `sql_models.py` declares results in that table existing afterward, with the correct columns.
+- [x] Constructing `MariaDBClient` against a database that already has all tables does not raise and is a no-op.
+- [x] A test exercises the missing-table case via the same seam `test_mariadb_upsert.py` uses (monkeypatched in-memory SQLite engine), asserting on the resulting schema via `sqlalchemy.inspect()`.
 
 ---
 
@@ -31,10 +33,10 @@ For every table already present (per #1), diff its live columns (via `sqlalchemy
 
 ### Acceptance criteria
 
-- [ ] Constructing `MariaDBClient` against a table that exists but is missing a column results in that column existing afterward.
-- [ ] The sync never issues a `DROP` or column-alteration statement — only `CREATE TABLE` (via #1) and `ADD COLUMN`.
-- [ ] A test mirrors the throwaway-declarative-base pattern in `test_mariadb_upsert.py`: build a stripped-down version of one real table (fewer columns) as the "before" state, construct `MariaDBClient`, and assert the omitted column now exists.
-- [ ] A test confirms the full existing schema (all tables, all columns already current) is a no-op — no exception raised.
+- [x] Constructing `MariaDBClient` against a table that exists but is missing a column results in that column existing afterward.
+- [x] The sync never issues a `DROP` or column-alteration statement — only `CREATE TABLE` (via #1) and `ADD COLUMN`.
+- [x] A test mirrors the throwaway-declarative-base pattern in `test_mariadb_upsert.py`: build a stripped-down version of one real table (fewer columns) as the "before" state, construct `MariaDBClient`, and assert the omitted column now exists.
+- [x] A test confirms the full existing schema (all tables, all columns already current) is a no-op — no exception raised.
 
 ---
 
@@ -50,8 +52,8 @@ Remove every `CREATE TABLE` and `DROP TABLE` statement from `mariadb/init.sql`, 
 
 ### Acceptance criteria
 
-- [ ] `mariadb/init.sql` contains only `CREATE DATABASE IF NOT EXISTS octopus;` (no table DDL).
-- [ ] No test or code path still depends on `init.sql` for table creation.
-- [ ] `.agent-docs/context.md`'s **MariaDB `octopus` database** and **Schema Sync** entries accurately describe the collapsed responsibility (already updated in this branch's working tree — verify still accurate).
+- [x] `mariadb/init.sql` contains only `CREATE DATABASE IF NOT EXISTS octopus;` (no table DDL).
+- [x] No test or code path still depends on `init.sql` for table creation.
+- [x] `.agent-docs/context.md`'s **MariaDB `octopus` database** and **Schema Sync** entries accurately describe the collapsed responsibility (already updated in this branch's working tree — verify still accurate).
 
 ---
