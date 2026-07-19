@@ -9,10 +9,13 @@ from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
 from data.mysql import sql_models
+from data.mysql.sql_models import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.schema import CreateColumn
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -55,16 +58,63 @@ def _rate_scoped_id(product_code: str, region: str, valid_from: datetime) -> str
 
 class SessionBuilder:
     session: sessionmaker
+    engine: Engine
 
     def __init__(self, settings: MariaDBSettings):
         uri = f"mysql+pymysql://{settings.username}:{settings.password}@{settings.host}:{settings.port}/{settings.database}"
-        engine = create_engine(uri)
-        self.session = sessionmaker(bind=engine)
+        self.engine = create_engine(uri)
+        self.session = sessionmaker(bind=self.engine)
 
 
 class MariaDBClient:
     def __init__(self, settings: MariaDBSettings) -> None:
         self._session_builder = SessionBuilder(settings)
+        self._sync_schema()
+
+    def _sync_schema(self) -> None:
+        engine = self._session_builder.engine
+        existing_tables = set(inspect(engine).get_table_names())
+
+        SQLBase.metadata.create_all(engine, checkfirst=True)
+
+        created_tables = {
+            table.name for table in SQLBase.metadata.tables.values()
+        } - existing_tables
+        if created_tables:
+            logger.info(
+                f"Schema sync: created missing tables: {sorted(created_tables)}"
+            )
+
+        inspector = inspect(engine)
+        # MariaDB/MySQL DDL auto-commits per statement, so this transaction
+        # doesn't make the ADD COLUMN loop atomic — it's just a connection
+        # scope. Idempotent regardless: a re-run picks up anything not yet added.
+        with engine.begin() as connection:
+            for table in SQLBase.metadata.tables.values():
+                schema = connection.schema_for_object(table)
+                existing_columns = {
+                    column["name"]
+                    for column in inspector.get_columns(table.name, schema=schema)
+                }
+                missing_columns = [
+                    column
+                    for column in table.columns
+                    if column.name not in existing_columns
+                ]
+                if not missing_columns:
+                    continue
+
+                logger.info(
+                    f"Schema sync: adding missing columns to {table.name}: "
+                    f"{[column.name for column in missing_columns]}"
+                )
+
+                qualified_name = f"{schema}.{table.name}" if schema else table.name
+                for column in missing_columns:
+                    column_ddl = CreateColumn(column).compile(dialect=engine.dialect)
+                    connection.execute(
+                        text(f"ALTER TABLE {qualified_name} ADD COLUMN {column_ddl}")
+                    )
 
     @contextmanager
     def session_read_scope(self) -> Generator[Session, None, None]:

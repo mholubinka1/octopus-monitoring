@@ -88,9 +88,9 @@ def test_electricity_cost_is_computable_via_a_simple_join(
                 energy="E",
                 period_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
                 period_to=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
-                raw_value=0.5,
+                raw_value=Decimal("0.5"),
                 unit="kWh",
-                est_kwh=0.5,
+                est_kwh=Decimal("0.5"),
             )
         )
         s.add(
@@ -99,9 +99,9 @@ def test_electricity_cost_is_computable_via_a_simple_join(
                 energy="E",
                 period_from=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
                 period_to=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
-                raw_value=0.3,
+                raw_value=Decimal("0.3"),
                 unit="kWh",
-                est_kwh=0.3,
+                est_kwh=Decimal("0.3"),
             )
         )
 
@@ -142,9 +142,9 @@ def test_gas_cost_is_computable_via_a_simple_join(
                 energy="G",
                 period_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
                 period_to=datetime(2026, 1, 2, 0, 0, tzinfo=timezone.utc),
-                raw_value=10.0,
+                raw_value=Decimal("10.0"),
                 unit="kWh",
-                est_kwh=10.0,
+                est_kwh=Decimal("10.0"),
             )
         )
 
