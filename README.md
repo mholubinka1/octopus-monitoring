@@ -27,6 +27,9 @@ Create `config.yml` from `config.yml.template`, providing:
 
 - Your Octopus API key and account number, [available from your Octopus dashboard](https://octopus.energy/dashboard/new/accounts/personal-details/api-access).
 - MariaDB connection details (`host`, `port`, `database`, `username`, `password`).
+  **`database` must be `octopus`** — `docker-compose.yml` hardcodes that name for the
+  database MariaDB actually creates, so any other value here means the app can never
+  connect to a database that exists.
 - Data refresh settings: `refresh_interval_hours` (how often consumption is polled) and
   `historical_limit_days` (how far back to backfill on startup).
 

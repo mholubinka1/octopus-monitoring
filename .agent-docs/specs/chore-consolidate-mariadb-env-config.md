@@ -36,6 +36,12 @@ engineered away.
    why `.env` still exists at all alongside `config.yml`, and why its
    username/password must match `config.yml`'s, so that this isn't mistaken for
    leftover duplication that should be "cleaned up" again later.
+4. As someone deploying this app for the first time (this is, at time of writing,
+   not yet deployed anywhere), I want detailed step-by-step instructions in the
+   README for standing the two containers up from nothing, and separately for what
+   changes on subsequent deploys (image updates, config edits, restarts), so that I
+   don't have to reverse-engineer `docker-compose.yml`'s bind mounts and
+   healthchecks to figure out the deployment sequence myself.
 
 ## Implementation Decisions
 
@@ -61,6 +67,17 @@ engineered away.
   `MARIADB_USER`/`MARIADB_PASSWORD` must match `config.yml`'s
   `mariadb.username`/`password`, and that `.env` is consumed only once — at the
   MariaDB container's first boot, to create that user — not read again afterward.
+  Also note `config.yml`'s `mariadb.database` must be `octopus` — the name
+  `docker-compose.yml` hardcodes for the database MariaDB actually creates.
+- **README `## Running` section**: replace the brief "run `docker compose up`" note
+  with a detailed, numbered first-time deployment walkthrough (bind-mount paths,
+  `config.yml`/`.env` placement, first-boot behaviour, verification via logs/`ps`)
+  and a separate subsequent-deployments section (image updates and watchtower,
+  config-only restarts, the MariaDB-password-rotation caveat, new-table/column
+  schema-sync behaviour). This was added mid-session at the user's explicit request
+  once they saw the credential-consolidation work underway, ahead of the app's
+  first real deployment — not originally scoped in Phase 1, but confirmed in scope
+  before implementation.
 - **New ADR** (`0006-minimal-env-file-over-config-yml-only.md`) recording why a
   two-line `.env` remains alongside `config.yml` rather than eliminating it: Docker
   Compose only substitutes variables from a `.env`-style file, and MariaDB's own
