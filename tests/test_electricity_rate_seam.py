@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import responses
@@ -170,3 +170,32 @@ def test_paginated_unit_rates_are_followed_to_completion() -> None:
     rates = _octopus().get_electricity_rates(PRODUCT_CODE, TARIFF_CODE)
 
     assert [r.unit_rate for r in rates] == [Decimal("24.53"), Decimal("26.10")]
+
+
+@responses.activate
+def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None:
+    responses.add(
+        responses.GET,
+        UNIT_RATES_ENDPOINT,
+        json={"results": [], "next": None},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        STANDING_CHARGES_ENDPOINT,
+        json={"results": [], "next": None},
+        status=200,
+    )
+    bst = timezone(timedelta(hours=1))
+    period_from = datetime(2024, 1, 6, 0, 0, 0, tzinfo=bst)
+    period_to = datetime(2024, 5, 24, 0, 0, 0, tzinfo=bst)
+
+    _octopus().get_electricity_rates(
+        PRODUCT_CODE, TARIFF_CODE, period_from=period_from, period_to=period_to
+    )
+
+    request_url = responses.calls[0].request.url
+    assert request_url is not None
+    assert "period_from=2024-01-05T23%3A00%3A00Z" in request_url
+    assert "period_to=2024-05-23T23%3A00%3A00Z" in request_url
+    assert "+" not in request_url

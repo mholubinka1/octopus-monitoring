@@ -1,8 +1,8 @@
 import logging.config
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from logging import Logger, getLogger
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
@@ -99,36 +99,40 @@ class RateClient:
         description: str,
     ) -> List[RateReading]:
         readings: List[RateReading] = []
-        endpoint: Optional[str] = self._build_endpoint(
-            api_endpoint, period_from, period_to
-        )
+        params: Optional[Dict[str, Any]] = self._build_params(period_from, period_to)
+        endpoint: Optional[str] = api_endpoint
         while endpoint:
             (endpoint, page) = self._get_readings_directly_from_endpoint(
-                endpoint, description
+                endpoint, params, description
             )
             readings.extend(page)
+            params = None
         return readings
 
-    def _build_endpoint(
+    @staticmethod
+    def _to_utc_z(value: datetime) -> str:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _build_params(
         self,
-        api_endpoint: str,
         period_from: Optional[datetime],
         period_to: Optional[datetime],
-    ) -> str:
-        api_endpoint += f"?page_size={DEFAULT_PAGE_SIZE}"
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"page_size": DEFAULT_PAGE_SIZE}
         if period_from:
-            api_endpoint += (
-                f"&period_from={period_from.isoformat().replace('+00:00', 'Z')}"
-            )
+            params["period_from"] = self._to_utc_z(period_from)
         if period_to:
-            api_endpoint += f"&period_to={period_to.isoformat().replace('+00:00', 'Z')}"
-        return api_endpoint
+            params["period_to"] = self._to_utc_z(period_to)
+        return params
 
     def _get_readings_directly_from_endpoint(
-        self, api_endpoint: str, description: str
+        self,
+        api_endpoint: str,
+        params: Optional[Dict[str, Any]],
+        description: str,
     ) -> Tuple[Optional[str], List[RateReading]]:
         parsed = self._transport.get(
-            api_endpoint, RateResponse, description=description
+            api_endpoint, RateResponse, params=params, description=description
         )
         return (parsed.next, parsed.results)
 
