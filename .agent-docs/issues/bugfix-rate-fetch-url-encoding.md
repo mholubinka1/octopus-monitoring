@@ -1,5 +1,7 @@
 # Issues: bugfix-rate-fetch-url-encoding
 
+> Work complete — PR ready to merge.
+
 ## Fix URL-encoding bug in rate-fetch requests (#395)
 
 **Blocked by**: None
