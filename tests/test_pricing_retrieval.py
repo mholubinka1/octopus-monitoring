@@ -1,7 +1,9 @@
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
+import pytest
 import responses
 from common.config import OctopusAPISettings
 from data.mysql import sql_models
@@ -470,6 +472,111 @@ def test_refresh_skips_a_dual_register_only_product_without_crashing(
         stored = session.query(sql_models.product_rate).all()
 
     assert stored == []
+
+
+@responses.activate
+def test_a_failing_agreement_s_rate_fetch_is_skipped_without_blocking_others(
+    mariadb_client: MariaDBClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    responses.add(
+        responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
+    )
+    responses.add(
+        responses.GET,
+        "https://api.octopus.energy/v1/products/VAR-22-11-01/electricity-tariffs/"
+        "E-1R-VAR-22-11-01-A/standard-unit-rates/",
+        json={"detail": "Bad request"},
+        status=400,
+    )
+    _mock_gas_rate_endpoints()
+    electricity_meter = _make_electricity_meter()
+    gas_meter = _make_gas_meter()
+    source = _make_source(mariadb_client, [electricity_meter, gas_meter])
+
+    with caplog.at_level(logging.WARNING):
+        PricingRetriever(source).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product_rate).all()
+
+    assert len(stored) == 1
+    assert stored[0].unit_rate == Decimal("6.89")
+    assert any(
+        "VAR-22-11-01/E-1R-VAR-22-11-01-A" in record.message
+        for record in caplog.records
+    )
+
+
+@responses.activate
+def test_a_failing_comparison_product_s_rate_fetch_is_skipped_without_blocking_others(
+    mariadb_client: MariaDBClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "code": "VAR-22-11-01",
+                    "display_name": "Flexible Octopus",
+                    "direction": "IMPORT",
+                },
+                {
+                    "code": "AGILE-24-10-01",
+                    "display_name": "Agile Octopus",
+                    "direction": "IMPORT",
+                },
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "VAR-22-11-01/",
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "AGILE-24-10-01/",
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-AGILE-24-10-01-H"}}
+            }
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        "https://api.octopus.energy/v1/products/VAR-22-11-01/electricity-tariffs/"
+        "E-1R-VAR-22-11-01-H/standard-unit-rates/",
+        json={"detail": "Bad request"},
+        status=400,
+    )
+    _mock_electricity_rate_endpoints(
+        product_code="AGILE-24-10-01", tariff_code="E-1R-AGILE-24-10-01-H"
+    )
+    source = _make_source(mariadb_client, [])
+
+    with caplog.at_level(logging.WARNING):
+        PricingRetriever(source).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(sql_models.product_rate).all()
+
+    assert len(stored) == 1
+    assert stored[0].product_code == "AGILE-24-10-01"
+    assert any(
+        "VAR-22-11-01/E-1R-VAR-22-11-01-H" in record.message
+        for record in caplog.records
+    )
 
 
 @responses.activate

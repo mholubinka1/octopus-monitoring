@@ -1,8 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from urllib.parse import parse_qs, urlparse
 
+import pytest
 import responses
 from common.config import OctopusAPISettings
+from common.exceptions import ArgumentError
 from data.octopus.api import OctopusEnergyAPIClient
 
 PRODUCT_CODE = "AGILE-24-10-01"
@@ -170,3 +173,66 @@ def test_paginated_unit_rates_are_followed_to_completion() -> None:
     rates = _octopus().get_electricity_rates(PRODUCT_CODE, TARIFF_CODE)
 
     assert [r.unit_rate for r in rates] == [Decimal("24.53"), Decimal("26.10")]
+
+
+@responses.activate
+def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None:
+    responses.add(
+        responses.GET,
+        UNIT_RATES_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 24.53,
+                    "valid_from": "2024-01-06T00:00:00Z",
+                    "valid_to": "2024-01-06T00:30:00Z",
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        STANDING_CHARGES_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 48.20,
+                    "valid_from": "2024-01-06T00:00:00Z",
+                    "valid_to": None,
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    bst = timezone(timedelta(hours=1))
+    period_from = datetime(2024, 1, 6, 0, 0, 0, tzinfo=bst)
+    period_to = datetime(2024, 5, 24, 0, 0, 0, tzinfo=bst)
+
+    rates = _octopus().get_electricity_rates(
+        PRODUCT_CODE, TARIFF_CODE, period_from=period_from, period_to=period_to
+    )
+
+    unit_rates_calls = [
+        call
+        for call in responses.calls
+        if call.request.url and call.request.url.startswith(UNIT_RATES_ENDPOINT)
+    ]
+    assert len(unit_rates_calls) == 1
+    query = parse_qs(urlparse(unit_rates_calls[0].request.url).query)
+    assert query["period_from"] == ["2024-01-05T23:00:00Z"]
+    assert query["period_to"] == ["2024-05-23T23:00:00Z"]
+    assert len(rates) == 1
+    assert rates[0].unit_rate == Decimal("24.53")
+    assert rates[0].standing_charge == Decimal("48.20")
+
+
+def test_a_naive_period_is_rejected_rather_than_silently_using_local_time() -> None:
+    naive_period_from = datetime(2024, 1, 6, 0, 0, 0)
+
+    with pytest.raises(ArgumentError, match="timezone-aware"):
+        _octopus().get_electricity_rates(
+            PRODUCT_CODE, TARIFF_CODE, period_from=naive_period_from
+        )
