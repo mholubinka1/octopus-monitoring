@@ -68,10 +68,12 @@ engineered away.
   duplication, not remove it, while adding new code surface.
 - **README**: add a line to the Configuration section stating that `.env`'s
   `MARIADB_USER`/`MARIADB_PASSWORD` must match `config.yml`'s
-  `mariadb.username`/`password`, and that `.env` is consumed only once — at the
-  MariaDB container's first boot, to create that user — not read again afterward.
-  Also note `config.yml`'s `mariadb.database` must be `octopus` — the name
-  `docker-compose.yml` hardcodes for the database MariaDB actually creates.
+  `mariadb.username`/`password`, and that while Compose passes these values into
+  the container on every start, MariaDB's entrypoint only acts on them once — at
+  first boot, to create that user — so changing `.env` afterward will not rotate
+  an already-created user's password. Also note `config.yml`'s `mariadb.database`
+  must be `octopus` — the name `docker-compose.yml` hardcodes for the database
+  MariaDB actually creates.
 - **README `## Running` section**: replace the brief "run `docker compose up`" note
   with a detailed, numbered first-time deployment walkthrough (bind-mount paths,
   `config.yml`/`.env` placement, first-boot behaviour, verification via logs/`ps`)

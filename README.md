@@ -38,9 +38,11 @@ Create `config.yml` from `config.yml.template`, providing:
 Create `.env` from `.env.template`, providing `MARIADB_USER`/`MARIADB_PASSWORD` — the
 credentials for the app's own MariaDB user. **These must match `config.yml`'s
 `mariadb.username`/`password` exactly** — the two files aren't automatically kept in
-sync. `.env` is read only once, when the `mariadb` container initializes an empty data
-directory (its very first boot); editing it afterwards has no effect on an
-already-initialized volume. See
+sync. Docker Compose passes these values into the `mariadb` container on every start,
+but MariaDB's own entrypoint only *acts* on them once — when it initializes an empty
+data directory, to create that user. On a container restart against an
+already-initialized data volume, MariaDB ignores them for user creation; editing `.env`
+afterwards will not rotate the existing MariaDB user's password. See
 [ADR-0006](.agent-docs/adr/0006-minimal-env-file-over-config-yml-only.md) for why this
 one small overlap remains rather than being engineered away. `MARIADB_DATABASE` and
 `MARIADB_RANDOM_ROOT_PASSWORD` are not in `.env` — they're hardcoded directly in

@@ -18,8 +18,10 @@ host-specific/edit-for-your-deployment elsewhere in that file. Drop
 unused by `docker-compose.yml` today (it only ever referenced the distinct
 `MARIADB_RANDOM_ROOT_PASSWORD`, now hardcoded). Add lines to the README's Configuration section explaining that `.env`'s
 `MARIADB_USER`/`MARIADB_PASSWORD` must match `config.yml`'s
-`mariadb.username`/`password`, that `.env` is read only once, at the MariaDB
-container's first boot, and that `config.yml`'s `mariadb.database` must be
+`mariadb.username`/`password`, and that while Compose passes these values into the
+container on every start, MariaDB's entrypoint only acts on them once — at first
+boot, to create that user — so changing `.env` afterward won't rotate an
+already-created user's password. Also note `config.yml`'s `mariadb.database` must be
 `octopus` to match the hardcoded value. Also replace the README's brief `## Running`
 note with a detailed first-time deployment walkthrough and a separate
 subsequent-deployments section (added mid-session at the user's explicit request,

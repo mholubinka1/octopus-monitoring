@@ -26,7 +26,9 @@ moved to hardcoded literals in `docker-compose.yml`.
 - `.env`'s `MARIADB_USER`/`MARIADB_PASSWORD` must still be kept in sync by hand
   with `config.yml`'s `mariadb.username`/`password` — this ADR is why that
   duplication is deliberate and minimal, not an oversight to "clean up" again.
-- `.env` is read only once, at the MariaDB container's first boot (when its data
-  directory is first initialized) — changing it after a volume already has data
-  has no effect, matching the same "first-boot only" caveat `mariadb/init.sql`
-  already has under ADR-0005.
+- Docker Compose passes `.env`'s values into the container on every start, but
+  MariaDB's entrypoint only acts on them once, at first boot (when its data
+  directory is first initialized), to create the app user. On a restart against an
+  already-initialized volume, changing `.env` will not rotate that user's existing
+  password — matching the same "first-boot only" caveat `mariadb/init.sql` already
+  has under ADR-0005.
