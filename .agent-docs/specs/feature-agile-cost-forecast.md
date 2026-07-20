@@ -6,7 +6,7 @@ Knowing what you've spent so far this billing period doesn't tell you what the b
 
 ## Solution
 
-Consume `agile_predict`'s public 14-day-ahead price forecast API (see [ADR-0002](../adr/0002-agile-predict-forecast-dependency.md)) to project month-end electricity cost from month-to-date actual cost plus forecast prices for the remainder of the billing period, and track cumulative Agile-vs-Variable savings over time so the 90-day retention/pruning policy ([ADR-0003](../adr/0003-90-day-data-retention.md)) doesn't erase that history.
+Consume `agile_predict`'s public 14-day-ahead price forecast API (see [ADR-0002](../adr/0002-agile-predict-forecast-dependency.md)) to project month-end electricity cost from month-to-date actual cost plus forecast prices for the remainder of the billing period, and track cumulative Agile-vs-Variable savings over time so the 400-day retention/pruning policy ([ADR-0003](../adr/0003-90-day-data-retention.md)) doesn't erase that history.
 
 ## User Stories
 
@@ -17,7 +17,7 @@ Consume `agile_predict`'s public 14-day-ahead price forecast API (see [ADR-0002]
 ## Implementation Decisions
 
 - New table `agile_forecast(id, region, period_from, period_to, forecast_unit_rate, fetched_at)`.
-- New table `daily_saving(date PK, actual_cost, variable_cost, saving)` — deliberately exempt from the 90-day pruning job (ADR-0003) as a derived daily summary, not raw interval data.
+- New table `daily_saving(date PK, actual_cost, variable_cost, saving)` — deliberately exempt from the 400-day pruning job (ADR-0003) as a derived daily summary, not raw interval data.
 - New module `app/data/forecast.py`:
   - `AgilePredictClient` — HTTP client for `GET https://prices.fly.dev/v2/<region>/`, parsed into `agile_forecast` rows.
   - `project_month_end_cost(actual_cost_to_date, forecast_rates, avg_daily_usage, billing_period_end) -> Decimal` — pure function combining month-to-date actual cost with forecast-rate-priced remaining days, using a trailing average daily usage as the consumption assumption for future days (a documented simplification — no per-half-hour usage forecast).

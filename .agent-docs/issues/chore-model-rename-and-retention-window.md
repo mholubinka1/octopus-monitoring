@@ -13,13 +13,15 @@ rename, no content changes) and update every importer (`app/data/mysql/client.py
 plus all test files currently importing `from data.mysql import sql_models`)
 to `from data.mysql import model`. Delete `app/_deprecated/` entirely
 (`calc.py`, `extract.py`, `influx.py`) — legacy InfluxDB code already
-documented in `.agent-docs/context.md` as unreferenced by `main.py`.
+documented in `.agent-docs/context.md` as unreferenced by `main.py`. Also
+delete `app/data/mysql/utils.py`, already empty and unreferenced.
 
 ### Acceptance criteria
 
 - [ ] `app/data/mysql/sql_models.py` no longer exists; `app/data/mysql/model.py`
       exists with identical content.
 - [ ] `app/_deprecated/` no longer exists.
+- [ ] `app/data/mysql/utils.py` no longer exists.
 - [ ] No remaining reference to `sql_models` anywhere in `app/` or `tests/`.
 - [ ] Full test suite passes unchanged (79 tests, pre-existing — this is a
       pure rename/deletion, no new test scenarios needed).

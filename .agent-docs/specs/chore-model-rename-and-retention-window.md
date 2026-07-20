@@ -57,6 +57,9 @@ Two unrelated pieces of housekeeping surfaced together this session:
 - **`app/_deprecated/` deleted entirely** (`calc.py`, `extract.py`,
   `influx.py`) — already unreferenced by `main.py` per
   `.agent-docs/context.md`'s existing "InfluxDB (legacy)" glossary entry.
+- **`app/data/mysql/utils.py` also deleted** — already empty/unreferenced
+  (confirmed by grep), bundled into the same cleanup pass even though it
+  lives outside `app/_deprecated/`.
 - **`app/common/config.py`**: `RefreshSettings.historical_limit: int =
   Field(alias="historical_limit_days")` becomes `RefreshSettings.retention:
   int = Field(alias="retention_days")`.

@@ -20,7 +20,7 @@ agile_forecast           (new) id, region, period_from, period_to, forecast_unit
 tariff_comparison_result (new) id, billing_period_start, billing_period_end, actual_product_code,
                                 actual_cost, cheapest_product_code, cheapest_cost,
                                 projected_month_end_cost, computed_at
-daily_saving             (new) date PK, actual_cost, variable_cost, saving   -- exempt from 90-day pruning (ADR-0003)
+daily_saving             (new) date PK, actual_cost, variable_cost, saving   -- exempt from 400-day pruning (ADR-0003)
 job_run                  (new) id, job_name, status, ran_at, error_message
 
 ```
@@ -317,7 +317,7 @@ ORDER BY FIELD(DAYNAME(period_from), 'Monday','Tuesday','Wednesday','Thursday','
 
 ### Cumulative Agile-vs-Variable Savings (time series)
 
-Reads from `daily_saving`, not raw `consumption`/`product_rate` — those are pruned at 90 days (ADR-0003), but `daily_saving` is a derived summary and exempt.
+Reads from `daily_saving`, not raw `consumption`/`product_rate` — those are pruned at 400 days (ADR-0003), but `daily_saving` is a derived summary and exempt.
 
 ```sql
 SELECT
