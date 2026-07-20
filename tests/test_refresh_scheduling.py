@@ -6,7 +6,12 @@ from data.consumption import ConsumptionRetriever
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
-from main import register_jobs, register_pricing_job, run_pending_safely
+from main import (
+    register_jobs,
+    register_pricing_job,
+    run_initial_pricing_sync,
+    run_pending_safely,
+)
 from schedule import Scheduler
 
 REFRESH_CONFIG = RefreshSettings(refresh_interval=4, historical_limit=45)
@@ -89,3 +94,10 @@ def test_run_pending_safely_does_not_propagate_a_scheduled_job_failure() -> None
     scheduler.run_pending.side_effect = RuntimeError("boom")
 
     run_pending_safely(scheduler)
+
+
+def test_run_initial_pricing_sync_does_not_propagate_a_startup_failure() -> None:
+    pricing = Mock(spec=PricingRetriever)
+    pricing.refresh.side_effect = RuntimeError("Octopus API unavailable")
+
+    run_initial_pricing_sync(pricing)

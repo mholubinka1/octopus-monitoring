@@ -34,6 +34,13 @@ def startup(
     consumption.retrieve(period_from=limit_dt)
 
 
+def run_initial_pricing_sync(pricing: PricingRetriever) -> None:
+    try:
+        pricing.refresh()
+    except Exception:
+        logger.exception("Pricing sync failed at startup; continuing.")
+
+
 def _schedule_refresh_job(
     scheduler: Scheduler,
     refresh_config: RefreshSettings,
@@ -102,7 +109,7 @@ def main() -> None:
     pricing = PricingRetriever(client)
 
     startup(consumption, refresh_config)
-    pricing.refresh()
+    run_initial_pricing_sync(pricing)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
     register_pricing_job(default_scheduler, refresh_config, pricing, client.mariadb)
 
