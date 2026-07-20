@@ -19,10 +19,10 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     environment:
-      MARIADB_RANDOM_ROOT_PASSWORD: ${MARIADB_RANDOM_ROOT_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: 1
       MARIADB_USER: ${MARIADB_USER}
       MARIADB_PASSWORD: ${MARIADB_PASSWORD}
-      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_DATABASE: octopus
     ports:
       - "3306:3306"
     volumes:
