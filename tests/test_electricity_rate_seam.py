@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import responses
@@ -214,11 +215,15 @@ def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None
         PRODUCT_CODE, TARIFF_CODE, period_from=period_from, period_to=period_to
     )
 
-    request_url = responses.calls[0].request.url
-    assert request_url is not None
-    assert "period_from=2024-01-05T23%3A00%3A00Z" in request_url
-    assert "period_to=2024-05-23T23%3A00%3A00Z" in request_url
-    assert "+" not in request_url
+    unit_rates_calls = [
+        call
+        for call in responses.calls
+        if call.request.url and call.request.url.startswith(UNIT_RATES_ENDPOINT)
+    ]
+    assert len(unit_rates_calls) == 1
+    query = parse_qs(urlparse(unit_rates_calls[0].request.url).query)
+    assert query["period_from"] == ["2024-01-05T23:00:00Z"]
+    assert query["period_to"] == ["2024-05-23T23:00:00Z"]
     assert len(rates) == 1
     assert rates[0].unit_rate == Decimal("24.53")
     assert rates[0].standing_charge == Decimal("48.20")
