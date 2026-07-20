@@ -1,5 +1,7 @@
 # Issues: chore-model-rename-and-retention-window
 
+> Work complete — PR ready to merge.
+
 ## Rename sql_models.py to model.py, remove dead `_deprecated` code (#398)
 
 **Blocked by**: None
@@ -18,12 +20,12 @@ delete `app/data/mysql/utils.py`, already empty and unreferenced.
 
 ### Acceptance criteria
 
-- [ ] `app/data/mysql/sql_models.py` no longer exists; `app/data/mysql/model.py`
+- [x] `app/data/mysql/sql_models.py` no longer exists; `app/data/mysql/model.py`
       exists with identical content.
-- [ ] `app/_deprecated/` no longer exists.
-- [ ] `app/data/mysql/utils.py` no longer exists.
-- [ ] No remaining reference to `sql_models` anywhere in `app/` or `tests/`.
-- [ ] Full test suite passes unchanged (79 tests, pre-existing — this is a
+- [x] `app/_deprecated/` no longer exists.
+- [x] `app/data/mysql/utils.py` no longer exists.
+- [x] No remaining reference to `sql_models` anywhere in `app/` or `tests/`.
+- [x] Full test suite passes unchanged (79 tests, pre-existing — this is a
       pure rename/deletion, no new test scenarios needed).
 
 ---
@@ -51,17 +53,17 @@ in-memory only, so it actually re-runs on every process restart, from
 
 ### Acceptance criteria
 
-- [ ] `config.yml.template` has `retention_days: 400` (not
+- [x] `config.yml.template` has `retention_days: 400` (not
       `historical_limit_days: 45`).
-- [ ] `RefreshSettings.retention` (aliased from `retention_days`) replaces
+- [x] `RefreshSettings.retention` (aliased from `retention_days`) replaces
       `RefreshSettings.historical_limit`; `main.py` references the new name.
-- [ ] `tests/test_config_settings.py` and `tests/test_refresh_scheduling.py`
+- [x] `tests/test_config_settings.py` and `tests/test_refresh_scheduling.py`
       updated to the renamed field; full suite passes.
-- [ ] ADR-0003 states 400 days and explicitly notes the pruning job is not
+- [x] ADR-0003 states 400 days and explicitly notes the pruning job is not
       yet built.
-- [ ] `.agent-docs/context.md`'s "Startup Backfill" entry accurately
+- [x] `.agent-docs/context.md`'s "Startup Backfill" entry accurately
       describes every-restart re-run behavior (not "one-time") and
       references `retention_days`/400.
-- [ ] README's Configuration section reflects the renamed field.
+- [x] README's Configuration section reflects the renamed field.
 
 ---
