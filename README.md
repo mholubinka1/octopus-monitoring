@@ -12,7 +12,7 @@ see `.agent-docs/specs/` for the roadmap.
 - **`app/`** — polls the Octopus API on a configurable interval and writes consumption
   readings to MariaDB (`data.consumption.ConsumptionRetriever` /
   `data.mysql.client.MariaDBClient`).
-- **MariaDB** — the persistence layer. Schema lives solely in `app/data/mysql/sql_models.py`;
+- **MariaDB** — the persistence layer. Schema lives solely in `app/data/mysql/model.py`;
   `data.mysql.client.MariaDBClient` syncs it into the live database automatically on every
   app startup (creating missing tables/columns only — see
   `.agent-docs/adr/0005-additive-only-schema-sync.md`).
@@ -31,7 +31,10 @@ Create `config.yml` from `config.yml.template`, providing:
   database MariaDB actually creates, so any other value here means the app can never
   connect to a database that exists.
 - Data refresh settings: `refresh_interval_hours` (how often consumption is polled) and
-  `historical_limit_days` (how far back to backfill on startup).
+  `retention_days` (how far back to backfill on every startup — also the intended data
+  retention window, see [ADR-0003](.agent-docs/adr/0003-90-day-data-retention.md); no
+  persisted watermark means this backfill re-runs in full on every restart, not just
+  the first one).
 
 ### Docker Compose
 

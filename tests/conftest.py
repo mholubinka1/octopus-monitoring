@@ -1,7 +1,7 @@
 import pytest
 from common.config import MariaDBSettings
 from data.mysql.client import MariaDBClient
-from data.mysql.sql_models import SQLBase
+from data.mysql.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 

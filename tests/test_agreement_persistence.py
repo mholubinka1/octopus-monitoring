@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.octopus.model import Agreement, Electricity
 
@@ -29,7 +29,7 @@ def test_an_agreement_is_persisted_and_queryable(
     mariadb_client.write_agreement(meter, meter.agreements)
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.agreement).all()
+        stored = session.query(model.agreement).all()
 
     assert len(stored) == 1
     assert stored[0].energy == "E"
@@ -67,7 +67,7 @@ def test_resyncing_an_agreement_updates_it_in_place_not_a_duplicate(
     )
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.agreement).all()
+        stored = session.query(model.agreement).all()
 
     assert len(stored) == 1
     assert stored[0].valid_to is not None

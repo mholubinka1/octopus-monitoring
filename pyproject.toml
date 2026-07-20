@@ -68,7 +68,7 @@ disable = [
     # TODOs are tracked via GitHub issues, not blocked by lint.
     "fixme",
     # Enum members and SQLAlchemy ORM classes intentionally use lowercase names
-    # (e.g. Energy.electricity, sql_models.consumption) matching table names — an
+    # (e.g. Energy.electricity, model.consumption) matching table names — an
     # established, deliberate deviation from PEP8 UPPER_CASE/PascalCase defaults.
     "invalid-name",
     # False-positive on match/case blocks whose default arm raises rather than falls

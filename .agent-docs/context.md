@@ -61,22 +61,22 @@ _Avoid_: customer, user
 ### Data Storage
 
 **MariaDB `octopus` database**:
-The sole active persistence store for this app. The database itself is created by `mariadb/init.sql`; every table inside it is defined solely by `app/data/mysql/sql_models.py` (see **Schema Sync**) and includes `consumption`, `agreement`, `product`, `product_rate`, and `job_run`.
+The sole active persistence store for this app. The database itself is created by `mariadb/init.sql`; every table inside it is defined solely by `app/data/mysql/model.py` (see **Schema Sync**) and includes `consumption`, `agreement`, `product`, `product_rate`, and `job_run`.
 _Avoid_: the database, mysql db
 
 **Schema Sync**:
-The additive-only schema reconciliation `MariaDBClient` runs automatically on every app startup — creates any table missing from the live database and adds any column missing from an existing table, both diffed against `sql_models.py`. Never drops or alters an existing column; that stays a deliberate manual action. See [ADR-0005](adr/0005-additive-only-schema-sync.md).
+The additive-only schema reconciliation `MariaDBClient` runs automatically on every app startup — creates any table missing from the live database and adds any column missing from an existing table, both diffed against `model.py`. Never drops or alters an existing column; that stays a deliberate manual action. See [ADR-0005](adr/0005-additive-only-schema-sync.md).
 _Avoid_: migration, schema migration (this project deliberately has no versioned migration tool)
 
 **InfluxDB (legacy)**:
-The time-series store described in the README and implemented under `app/_deprecated/`, no longer wired into `main.py`. MariaDB is the active sink.
+A former time-series store, described historically in the README; its implementation (`app/_deprecated/`) has been removed entirely — MariaDB is, and has been, the only active sink.
 _Avoid_: the time-series DB (when referring to the current system)
 
 ### Scheduling and Retrieval
 
 **Startup Backfill**:
-The one-time historical consumption retrieval run on process start, bounded by `historical_limit_days` (default 45).
-_Avoid_: initial sync, bootstrap
+The historical consumption retrieval run on every process start, bounded by `retention_days` (default 400) — not one-time: `ConsumptionRetriever`'s last-retrieved watermark is in-memory only, so this re-runs in full on every restart, not just the first ever run.
+_Avoid_: initial sync, bootstrap, one-time sync
 
 **Refresh Loop**:
 The recurring poll of the Octopus API, driven by the `schedule` library on the configured `refresh_interval_hours`.
@@ -121,7 +121,7 @@ A logged execution record (job name, status, timestamp) for each scheduled job �
 _Avoid_: job log, task run
 
 **Retention Window**:
-The 90-day period after which raw consumption, cost, and product-rate rows are pruned by a daily job. Derived/aggregated results (e.g. `tariff_comparison_result`) are not subject to pruning. See `.agent-docs/adr/0003-90-day-data-retention.md`.
+The intended 400-day period after which raw consumption, cost, and product-rate rows are meant to be pruned by a daily job — that pruning job is not yet implemented, so nothing is actually deleted today. `retention_days` (default 400) currently only bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `tariff_comparison_result`) are not subject to pruning once it exists. See `.agent-docs/adr/0003-90-day-data-retention.md`.
 _Avoid_: data expiry, TTL
 
 **Cheap Window**:

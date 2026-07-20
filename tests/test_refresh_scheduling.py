@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 from common.config import RefreshSettings
 from data.consumption import ConsumptionRetriever
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from main import (
@@ -14,7 +14,7 @@ from main import (
 )
 from schedule import Scheduler
 
-REFRESH_CONFIG = RefreshSettings(refresh_interval=4, historical_limit=45)
+REFRESH_CONFIG = RefreshSettings(refresh_interval=4, retention=45)
 
 
 def test_registered_job_runs_on_the_configured_refresh_interval(
@@ -40,7 +40,7 @@ def test_successful_refresh_is_recorded_as_a_successful_job_run(
     job.run()
 
     with mariadb_client.session_read_scope() as session:
-        runs = session.query(sql_models.job_run).all()
+        runs = session.query(model.job_run).all()
 
     assert len(runs) == 1
     assert runs[0].job_name == "consumption_refresh"
@@ -61,7 +61,7 @@ def test_failed_refresh_is_recorded_as_a_failed_job_run_and_still_raises(
         job.run()
 
     with mariadb_client.session_read_scope() as session:
-        runs = session.query(sql_models.job_run).all()
+        runs = session.query(model.job_run).all()
 
     assert len(runs) == 1
     assert runs[0].status == "failure"
@@ -82,7 +82,7 @@ def test_pricing_job_runs_on_the_configured_interval_and_records_its_outcome(
     job.run()
 
     with mariadb_client.session_read_scope() as session:
-        runs = session.query(sql_models.job_run).all()
+        runs = session.query(model.job_run).all()
 
     assert len(runs) == 1
     assert runs[0].job_name == "pricing_refresh"

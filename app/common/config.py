@@ -27,7 +27,7 @@ class RefreshSettings(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     refresh_interval: int = Field(alias="refresh_interval_hours")
-    historical_limit: int = Field(alias="historical_limit_days")
+    retention: int = Field(alias="retention_days")
 
 
 class ApplicationSettings(BaseModel):
