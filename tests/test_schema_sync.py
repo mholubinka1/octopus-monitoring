@@ -3,9 +3,9 @@ from decimal import Decimal
 
 import pytest
 from common.config import MariaDBSettings
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
-from data.mysql.sql_models import SQLBase
+from data.mysql.model import SQLBase
 from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect, text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.engine import Engine
@@ -127,7 +127,7 @@ def test_consumption_values_round_trip_as_decimal_without_precision_loss(
 
     session = sessionmaker(bind=engine)()
     session.add(
-        sql_models.consumption(
+        model.consumption(
             id="E20260101000000",
             energy="E",
             period_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -139,7 +139,7 @@ def test_consumption_values_round_trip_as_decimal_without_precision_loss(
     )
     session.commit()
 
-    stored = session.query(sql_models.consumption).one()
+    stored = session.query(model.consumption).one()
     assert stored.raw_value == Decimal("0.12345")
     assert stored.est_kwh == Decimal("0.12345")
 

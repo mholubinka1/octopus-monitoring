@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 
 
@@ -10,7 +10,7 @@ def test_an_agreement_row_round_trips_through_the_schema(
 ) -> None:
     with mariadb_client.session_write_scope() as session:
         session.add(
-            sql_models.agreement(
+            model.agreement(
                 id="E-VAR-22-11-01",
                 energy="E",
                 product_code="VAR-22-11-01",
@@ -21,7 +21,7 @@ def test_an_agreement_row_round_trips_through_the_schema(
         )
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.agreement).all()
+        stored = session.query(model.agreement).all()
 
     assert len(stored) == 1
     assert stored[0].id == "E-VAR-22-11-01"
@@ -37,7 +37,7 @@ def test_a_product_row_round_trips_through_the_schema(
 ) -> None:
     with mariadb_client.session_write_scope() as session:
         session.add(
-            sql_models.product(
+            model.product(
                 product_code="VAR-22-11-01",
                 display_name="Flexible Octopus",
                 direction="IMPORT",
@@ -45,7 +45,7 @@ def test_a_product_row_round_trips_through_the_schema(
         )
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product).all()
+        stored = session.query(model.product).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "VAR-22-11-01"
@@ -58,7 +58,7 @@ def test_a_product_rate_row_round_trips_through_the_schema(
 ) -> None:
     with mariadb_client.session_write_scope() as session:
         session.add(
-            sql_models.product_rate(
+            model.product_rate(
                 id="AGILE-24-10-01_H_2026010100",
                 product_code="AGILE-24-10-01",
                 region="H",
@@ -70,7 +70,7 @@ def test_a_product_rate_row_round_trips_through_the_schema(
         )
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "AGILE-24-10-01"

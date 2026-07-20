@@ -4,7 +4,7 @@ from typing import List, Optional
 
 import responses
 from common.config import OctopusAPISettings
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.octopus.api import OctopusEnergyAPIClient
 from data.octopus.model import Agreement, Electricity, Gas, Meter, Product, Rate
@@ -204,7 +204,7 @@ def test_refresh_persists_every_meters_agreements(
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.agreement).all()
+        stored = session.query(model.agreement).all()
 
     assert len(stored) == 2
     assert {row.energy for row in stored} == {"E", "G"}
@@ -258,7 +258,7 @@ def test_refresh_persists_products_available_in_the_account_s_region(
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product).all()
+        stored = session.query(model.product).all()
 
     assert [row.product_code for row in stored] == ["VAR-22-11-01"]
 
@@ -277,7 +277,7 @@ def test_refresh_persists_the_account_s_own_product_electricity_rates(
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "VAR-22-11-01"
@@ -298,7 +298,7 @@ def test_refresh_persists_gas_rates_for_the_account_s_own_product_in_the_same_sh
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "VAR-22-11-01"
@@ -349,7 +349,7 @@ def test_refresh_does_not_persist_export_products(
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product).all()
+        stored = session.query(model.product).all()
 
     assert [row.product_code for row in stored] == ["VAR-22-11-01"]
 
@@ -391,7 +391,7 @@ def test_refresh_persists_rates_for_every_catalogued_electricity_product(
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "AGILE-24-10-01"
@@ -427,7 +427,7 @@ def test_refresh_skips_a_product_with_no_published_rate_for_the_region_without_c
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert stored == []
 
@@ -467,7 +467,7 @@ def test_refresh_skips_a_dual_register_only_product_without_crashing(
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert stored == []
 
@@ -522,7 +522,7 @@ def test_refresh_does_not_refetch_the_account_s_own_product_during_the_compariso
     PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].unit_rate == Decimal("24.53")

@@ -1,6 +1,6 @@
 import responses
 from common.config import OctopusAPISettings
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.octopus.api import OctopusEnergyAPIClient
 
@@ -37,7 +37,7 @@ def test_products_fetched_from_octopus_are_persisted_and_queryable(
         mariadb_client.write_product(product)
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product).all()
+        stored = session.query(model.product).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "VAR-22-11-01"

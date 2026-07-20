@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.octopus.model import Rate
 
@@ -33,7 +33,7 @@ def test_a_product_rate_is_persisted_and_queryable(
     mariadb_client.write_product_rate(PRODUCT_CODE, REGION, [rate])
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == PRODUCT_CODE
@@ -56,7 +56,7 @@ def test_resyncing_a_product_rate_updates_it_in_place_not_a_duplicate(
     )
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].unit_rate == Decimal("26.10")
@@ -83,6 +83,6 @@ def test_half_hourly_rates_for_the_same_product_are_stored_as_distinct_rows(
     mariadb_client.write_product_rate(PRODUCT_CODE, REGION, rates)
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 2

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from data.mysql import sql_models
+from data.mysql import model
 from data.mysql.client import MariaDBClient
 from sqlalchemy import and_, or_
 
@@ -12,9 +12,9 @@ def _compute_total_cost(mariadb_client: MariaDBClient, energy: str) -> Decimal:
     product_rate (what that product/tariff cost) — proving cost is
     derivable via a simple join, with no pricing logic duplicated in
     application code."""
-    c = sql_models.consumption
-    a = sql_models.agreement
-    pr = sql_models.product_rate
+    c = model.consumption
+    a = model.agreement
+    pr = model.product_rate
 
     with mariadb_client.session_read_scope() as session:
         rows = (
@@ -51,7 +51,7 @@ def test_electricity_cost_is_computable_via_a_simple_join(
 ) -> None:
     with mariadb_client.session_write_scope() as s:
         s.add(
-            sql_models.agreement(
+            model.agreement(
                 id="E20220101000000",
                 energy="E",
                 product_code="AGILE-24-10-01",
@@ -61,7 +61,7 @@ def test_electricity_cost_is_computable_via_a_simple_join(
             )
         )
         s.add(
-            sql_models.product_rate(
+            model.product_rate(
                 id="AGILE-24-10-01_H_202601010000",
                 product_code="AGILE-24-10-01",
                 region="H",
@@ -72,7 +72,7 @@ def test_electricity_cost_is_computable_via_a_simple_join(
             )
         )
         s.add(
-            sql_models.product_rate(
+            model.product_rate(
                 id="AGILE-24-10-01_H_202601010030",
                 product_code="AGILE-24-10-01",
                 region="H",
@@ -83,7 +83,7 @@ def test_electricity_cost_is_computable_via_a_simple_join(
             )
         )
         s.add(
-            sql_models.consumption(
+            model.consumption(
                 id="E20260101000000",
                 energy="E",
                 period_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
@@ -94,7 +94,7 @@ def test_electricity_cost_is_computable_via_a_simple_join(
             )
         )
         s.add(
-            sql_models.consumption(
+            model.consumption(
                 id="E20260101003000",
                 energy="E",
                 period_from=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
@@ -116,7 +116,7 @@ def test_gas_cost_is_computable_via_a_simple_join(
 ) -> None:
     with mariadb_client.session_write_scope() as s:
         s.add(
-            sql_models.agreement(
+            model.agreement(
                 id="G20220101000000",
                 energy="G",
                 product_code="VAR-22-11-01",
@@ -126,7 +126,7 @@ def test_gas_cost_is_computable_via_a_simple_join(
             )
         )
         s.add(
-            sql_models.product_rate(
+            model.product_rate(
                 id="VAR-22-11-01_H_202601010000",
                 product_code="VAR-22-11-01",
                 region="H",
@@ -137,7 +137,7 @@ def test_gas_cost_is_computable_via_a_simple_join(
             )
         )
         s.add(
-            sql_models.consumption(
+            model.consumption(
                 id="G20260101000000",
                 energy="G",
                 period_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),

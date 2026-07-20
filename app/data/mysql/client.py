@@ -8,8 +8,8 @@ from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Consumption, as_energy_char
-from data.mysql import sql_models
-from data.mysql.sql_models import SQLBase
+from data.mysql import model
+from data.mysql.model import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -150,7 +150,7 @@ class MariaDBClient:
     def write_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
         energy_char = as_energy_char(meter.energy)
         records = [
-            sql_models.consumption(
+            model.consumption(
                 id=_energy_scoped_id(energy_char, point.start),
                 energy=energy_char,
                 period_from=point.start,
@@ -166,7 +166,7 @@ class MariaDBClient:
     def write_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
         energy_char = as_energy_char(meter.energy)
         records = [
-            sql_models.agreement(
+            model.agreement(
                 id=_energy_scoped_id(energy_char, agreement.valid_from),
                 energy=energy_char,
                 product_code=agreement.product_code,
@@ -179,7 +179,7 @@ class MariaDBClient:
         self._write_all(records, "Agreement data")
 
     def write_product(self, product: Product) -> None:
-        record = sql_models.product(
+        record = model.product(
             product_code=product.product_code,
             display_name=product.display_name,
             direction=product.direction.value,
@@ -190,7 +190,7 @@ class MariaDBClient:
         self, product_code: str, region: str, rates: List[Rate]
     ) -> None:
         records = [
-            sql_models.product_rate(
+            model.product_rate(
                 id=_rate_scoped_id(product_code, region, rate.valid_from),
                 product_code=product_code,
                 region=region,
@@ -208,7 +208,7 @@ class MariaDBClient:
     ) -> None:
         try:
             with self.session_write_scope() as s:
-                record = sql_models.job_run(
+                record = model.job_run(
                     job_name=job_name,
                     status=status,
                     ran_at=datetime.now(timezone.utc),
