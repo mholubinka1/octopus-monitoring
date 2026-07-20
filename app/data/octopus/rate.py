@@ -4,6 +4,7 @@ from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Any, Dict, List, Optional, Tuple
 
+from common.exceptions import ArgumentError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
 from data.octopus.model import Rate
@@ -111,10 +112,14 @@ class RateClient:
 
     @staticmethod
     def _to_utc_z(value: datetime) -> str:
-        # value is always tz-aware here (Agreement.valid_from/valid_to come from
-        # datetime.fromisoformat() of Octopus-supplied offset strings) — a naive
-        # datetime would silently pick up the system's local tz via astimezone(),
-        # reintroducing the exact offset bug this normalization exists to fix.
+        if value.tzinfo is None:
+            # A naive datetime would silently pick up the system's local tz via
+            # astimezone(), reintroducing the exact offset bug this
+            # normalization exists to fix — fail fast instead.
+            raise ArgumentError(
+                f"period_from/period_to must be timezone-aware, got naive "
+                f"datetime {value!r}."
+            )
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def _build_params(

@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
 import responses
 from common.config import OctopusAPISettings
+from common.exceptions import ArgumentError
 from data.octopus.api import OctopusEnergyAPIClient
 
 PRODUCT_CODE = "AGILE-24-10-01"
@@ -220,3 +222,12 @@ def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None
     assert len(rates) == 1
     assert rates[0].unit_rate == Decimal("24.53")
     assert rates[0].standing_charge == Decimal("48.20")
+
+
+def test_a_naive_period_is_rejected_rather_than_silently_using_local_time() -> None:
+    naive_period_from = datetime(2024, 1, 6, 0, 0, 0)
+
+    with pytest.raises(ArgumentError, match="timezone-aware"):
+        _octopus().get_electricity_rates(
+            PRODUCT_CODE, TARIFF_CODE, period_from=naive_period_from
+        )
