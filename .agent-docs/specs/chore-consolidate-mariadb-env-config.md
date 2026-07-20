@@ -46,9 +46,12 @@ engineered away.
 ## Implementation Decisions
 
 - **`.env.template`**: trim to exactly two lines, `MARIADB_USER=` and
-  `MARIADB_PASSWORD=`. Remove `MARIADB_DATABASE` and
-  `MARIADB_MYSQL_LOCALHOST_USER` fields (the latter is unused by
-  `docker-compose.yml` today — confirmed by grep — so it is dropped, not moved).
+  `MARIADB_PASSWORD=`. Remove `MARIADB_DATABASE`, `MARIADB_MYSQL_LOCALHOST_USER`,
+  and `MARIADB_ROOT_PASSWORD` fields. `MARIADB_MYSQL_LOCALHOST_USER` and
+  `MARIADB_ROOT_PASSWORD` are both unused by `docker-compose.yml` today — confirmed
+  by grep — so both are dropped outright, not moved (the compose file only ever
+  referenced `MARIADB_RANDOM_ROOT_PASSWORD`, a distinct variable, which is the one
+  now hardcoded to `1`).
 - **`docker-compose.yml`** (`mariadb` service `environment` block):
   - `MARIADB_RANDOM_ROOT_PASSWORD: 1` — hardcoded literal, no longer sourced from
     `.env`. Root credentials are never used post-bootstrap (the app connects as
