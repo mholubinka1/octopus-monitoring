@@ -99,11 +99,11 @@ class PricingRetriever:
                 self._client.persist_rate(
                     agreement.product_code, self._client.region_code, rates
                 )
-            except Exception as e:
+            except Exception:
                 logger.warning(
                     f"Failed to sync rates for own agreement "
-                    f"{agreement.product_code}/{agreement.tariff_code} — "
-                    f"skipping: {e}"
+                    f"{agreement.product_code}/{agreement.tariff_code} — skipping.",
+                    exc_info=True,
                 )
 
     def _sync_comparison_rates(self, products: List[Product]) -> None:
@@ -136,8 +136,9 @@ class PricingRetriever:
                 self._client.persist_rate(
                     product.product_code, self._client.region_code, rates
                 )
-            except Exception as e:
+            except Exception:
                 logger.warning(
                     f"Failed to sync comparison rates for "
-                    f"{product.product_code}/{tariff_code} — skipping: {e}"
+                    f"{product.product_code}/{tariff_code} — skipping.",
+                    exc_info=True,
                 )

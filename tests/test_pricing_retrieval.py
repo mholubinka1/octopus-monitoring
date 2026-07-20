@@ -1,7 +1,9 @@
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
+import pytest
 import responses
 from common.config import OctopusAPISettings
 from data.mysql import sql_models
@@ -475,6 +477,7 @@ def test_refresh_skips_a_dual_register_only_product_without_crashing(
 @responses.activate
 def test_a_failing_agreement_s_rate_fetch_is_skipped_without_blocking_others(
     mariadb_client: MariaDBClient,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     responses.add(
         responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
@@ -491,18 +494,24 @@ def test_a_failing_agreement_s_rate_fetch_is_skipped_without_blocking_others(
     gas_meter = _make_gas_meter()
     source = _make_source(mariadb_client, [electricity_meter, gas_meter])
 
-    PricingRetriever(source).refresh()
+    with caplog.at_level(logging.WARNING):
+        PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
         stored = session.query(sql_models.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].unit_rate == Decimal("6.89")
+    assert any(
+        "VAR-22-11-01/E-1R-VAR-22-11-01-A" in record.message
+        for record in caplog.records
+    )
 
 
 @responses.activate
 def test_a_failing_comparison_product_s_rate_fetch_is_skipped_without_blocking_others(
     mariadb_client: MariaDBClient,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     responses.add(
         responses.GET,
@@ -556,13 +565,18 @@ def test_a_failing_comparison_product_s_rate_fetch_is_skipped_without_blocking_o
     )
     source = _make_source(mariadb_client, [])
 
-    PricingRetriever(source).refresh()
+    with caplog.at_level(logging.WARNING):
+        PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
         stored = session.query(sql_models.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "AGILE-24-10-01"
+    assert any(
+        "VAR-22-11-01/E-1R-VAR-22-11-01-H" in record.message
+        for record in caplog.records
+    )
 
 
 @responses.activate

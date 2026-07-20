@@ -177,20 +177,38 @@ def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None
     responses.add(
         responses.GET,
         UNIT_RATES_ENDPOINT,
-        json={"results": [], "next": None},
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 24.53,
+                    "valid_from": "2024-01-06T00:00:00Z",
+                    "valid_to": "2024-01-06T00:30:00Z",
+                }
+            ],
+            "next": None,
+        },
         status=200,
     )
     responses.add(
         responses.GET,
         STANDING_CHARGES_ENDPOINT,
-        json={"results": [], "next": None},
+        json={
+            "results": [
+                {
+                    "value_inc_vat": 48.20,
+                    "valid_from": "2024-01-06T00:00:00Z",
+                    "valid_to": None,
+                }
+            ],
+            "next": None,
+        },
         status=200,
     )
     bst = timezone(timedelta(hours=1))
     period_from = datetime(2024, 1, 6, 0, 0, 0, tzinfo=bst)
     period_to = datetime(2024, 5, 24, 0, 0, 0, tzinfo=bst)
 
-    _octopus().get_electricity_rates(
+    rates = _octopus().get_electricity_rates(
         PRODUCT_CODE, TARIFF_CODE, period_from=period_from, period_to=period_to
     )
 
@@ -199,3 +217,6 @@ def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None
     assert "period_from=2024-01-05T23%3A00%3A00Z" in request_url
     assert "period_to=2024-05-23T23%3A00%3A00Z" in request_url
     assert "+" not in request_url
+    assert len(rates) == 1
+    assert rates[0].unit_rate == Decimal("24.53")
+    assert rates[0].standing_charge == Decimal("48.20")

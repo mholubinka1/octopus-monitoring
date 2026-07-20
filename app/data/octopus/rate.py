@@ -111,6 +111,10 @@ class RateClient:
 
     @staticmethod
     def _to_utc_z(value: datetime) -> str:
+        # value is always tz-aware here (Agreement.valid_from/valid_to come from
+        # datetime.fromisoformat() of Octopus-supplied offset strings) — a naive
+        # datetime would silently pick up the system's local tz via astimezone(),
+        # reintroducing the exact offset bug this normalization exists to fix.
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def _build_params(
