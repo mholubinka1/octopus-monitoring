@@ -89,15 +89,22 @@ class PricingRetriever:
                 if meter.energy == Energy.electricity
                 else self._client.fetch_gas_rates
             )
-            rates = fetch_rates(
-                agreement.product_code,
-                agreement.tariff_code,
-                agreement.valid_from,
-                agreement.valid_to,
-            )
-            self._client.persist_rate(
-                agreement.product_code, self._client.region_code, rates
-            )
+            try:
+                rates = fetch_rates(
+                    agreement.product_code,
+                    agreement.tariff_code,
+                    agreement.valid_from,
+                    agreement.valid_to,
+                )
+                self._client.persist_rate(
+                    agreement.product_code, self._client.region_code, rates
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sync rates for own agreement "
+                    f"{agreement.product_code}/{agreement.tariff_code} — "
+                    f"skipping: {e}"
+                )
 
     def _sync_comparison_rates(self, products: List[Product]) -> None:
         own_product_codes = {
@@ -122,9 +129,15 @@ class PricingRetriever:
                     f"in region {self._client.region_code} — skipping."
                 )
                 continue
-            rates = self._client.fetch_electricity_rates(
-                product.product_code, tariff_code, None, None
-            )
-            self._client.persist_rate(
-                product.product_code, self._client.region_code, rates
-            )
+            try:
+                rates = self._client.fetch_electricity_rates(
+                    product.product_code, tariff_code, None, None
+                )
+                self._client.persist_rate(
+                    product.product_code, self._client.region_code, rates
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to sync comparison rates for "
+                    f"{product.product_code}/{tariff_code} — skipping: {e}"
+                )
