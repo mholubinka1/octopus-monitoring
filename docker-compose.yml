@@ -19,15 +19,15 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     environment:
-      MARIADB_RANDOM_ROOT_PASSWORD: ${MARIADB_RANDOM_ROOT_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: 1
       MARIADB_USER: ${MARIADB_USER}
       MARIADB_PASSWORD: ${MARIADB_PASSWORD}
-      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_DATABASE: octopus
     ports:
       - "3306:3306"
     volumes:
       - /mnt/media/pi-media/monitoring/data/mysql/:/var/lib/mysql/
-      - /mnt/media/pi-media/monitoring/config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - /mnt/media/pi-media/monitoring/config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: "mariadb --user=$${MARIADB_USER} --password=$${MARIADB_PASSWORD} --execute \"SHOW DATABASES;\""
       start_interval: 10s
