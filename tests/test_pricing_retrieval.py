@@ -498,7 +498,7 @@ def test_a_failing_agreement_s_rate_fetch_is_skipped_without_blocking_others(
         PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].unit_rate == Decimal("6.89")
@@ -569,7 +569,7 @@ def test_a_failing_comparison_product_s_rate_fetch_is_skipped_without_blocking_o
         PricingRetriever(source).refresh()
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(sql_models.product_rate).all()
+        stored = session.query(model.product_rate).all()
 
     assert len(stored) == 1
     assert stored[0].product_code == "AGILE-24-10-01"
