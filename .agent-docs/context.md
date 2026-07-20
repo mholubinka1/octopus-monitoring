@@ -75,8 +75,8 @@ _Avoid_: the time-series DB (when referring to the current system)
 ### Scheduling and Retrieval
 
 **Startup Backfill**:
-The one-time historical consumption retrieval run on process start, bounded by `historical_limit_days` (default 45).
-_Avoid_: initial sync, bootstrap
+The historical consumption retrieval run on every process start, bounded by `retention_days` (default 400) — not one-time: `ConsumptionRetriever`'s last-retrieved watermark is in-memory only, so this re-runs in full on every restart, not just the first ever run.
+_Avoid_: initial sync, bootstrap, one-time sync
 
 **Refresh Loop**:
 The recurring poll of the Octopus API, driven by the `schedule` library on the configured `refresh_interval_hours`.

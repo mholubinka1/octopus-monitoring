@@ -31,7 +31,10 @@ Create `config.yml` from `config.yml.template`, providing:
   database MariaDB actually creates, so any other value here means the app can never
   connect to a database that exists.
 - Data refresh settings: `refresh_interval_hours` (how often consumption is polled) and
-  `historical_limit_days` (how far back to backfill on startup).
+  `retention_days` (how far back to backfill on every startup — also the intended data
+  retention window, see [ADR-0003](.agent-docs/adr/0003-90-day-data-retention.md); no
+  persisted watermark means this backfill re-runs in full on every restart, not just
+  the first one).
 
 ### Docker Compose
 

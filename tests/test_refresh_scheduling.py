@@ -14,7 +14,7 @@ from main import (
 )
 from schedule import Scheduler
 
-REFRESH_CONFIG = RefreshSettings(refresh_interval=4, historical_limit=45)
+REFRESH_CONFIG = RefreshSettings(refresh_interval=4, retention=45)
 
 
 def test_registered_job_runs_on_the_configured_refresh_interval(

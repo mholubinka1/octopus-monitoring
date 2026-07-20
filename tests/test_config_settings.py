@@ -17,7 +17,7 @@ VALID_CONFIG: Dict[str, Any] = {
     },
     "data_refresh": {
         "refresh_interval_hours": 4,
-        "historical_limit_days": 45,
+        "retention_days": 45,
     },
 }
 
@@ -31,7 +31,7 @@ def test_valid_config_yaml_produces_correctly_typed_settings() -> None:
     assert settings.mariadb.port == 3306
     assert settings.mariadb.database == "octopus"
     assert settings.refresh_settings.refresh_interval == 4
-    assert settings.refresh_settings.historical_limit == 45
+    assert settings.refresh_settings.retention == 45
 
 
 def test_missing_required_config_field_raises_a_validation_error_naming_the_field() -> (

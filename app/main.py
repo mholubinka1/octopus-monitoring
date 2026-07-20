@@ -28,7 +28,7 @@ def startup(
     refresh_config: RefreshSettings,
 ) -> None:
     current_time = dt.now(datetime.UTC)
-    limit = (current_time - timedelta(days=refresh_config.historical_limit)).date()
+    limit = (current_time - timedelta(days=refresh_config.retention)).date()
     limit_dt = dt(limit.year, limit.month, limit.day, tzinfo=datetime.UTC)
     logger.info(f"Startup. Retrieving consumption history from {limit_dt}.")
     consumption.retrieve(period_from=limit_dt)
