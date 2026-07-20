@@ -1,5 +1,7 @@
 # Issues: chore-consolidate-mariadb-env-config
 
+> Work complete — PR ready to merge.
+
 ## Trim .env to MariaDB app-user credentials only; document the config split (#393)
 
 **Blocked by**: None
