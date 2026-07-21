@@ -29,11 +29,11 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 ### Yesterday's Cost (stat)
 
-No dependency on billing period — pure join against data already fully populated by the existing pipeline.
+No dependency on billing period — pure join against data already fully populated by the existing pipeline. `unit_rate`/`standing_charge` are stored in pence/kWh and pence/day respectively (Octopus's own convention, never converted on ingest) — divide by 100 to get GBP.
 
 ```sql
 SELECT
-  ROUND(SUM(c.est_kwh * pr.unit_rate), 2) + MAX(pr.standing_charge) AS yesterday_cost_gbp
+  ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS yesterday_cost_gbp
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
@@ -123,7 +123,7 @@ ORDER BY period_from;
 ```sql
 SELECT
   c.period_from AS time,
-  ROUND(c.est_kwh * pr.unit_rate, 4) AS cost_gbp
+  ROUND(c.est_kwh * pr.unit_rate / 100, 4) AS cost_gbp
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
@@ -138,7 +138,7 @@ ORDER BY c.period_from;
 
 ```
 
-### £/kWh Efficiency vs Day's Avg Rate (time series)
+### p/kWh Efficiency vs Day's Avg Rate (time series)
 
 ```sql
 SELECT
@@ -248,7 +248,7 @@ SELECT
 FROM (
   SELECT
     DATE(c.period_from) AS d,
-    SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge) AS daily_cost
+    (SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100 AS daily_cost
   FROM consumption c
   JOIN agreement a
     ON a.energy = c.energy
@@ -285,8 +285,8 @@ ORDER BY FIELD(DAYNAME(period_from), 'Monday','Tuesday','Wednesday','Thursday','
 ```sql
 SELECT
   DATE(c.period_from) AS time,
-  ROUND(SUM(c.est_kwh * pr.unit_rate), 2) AS unit_rate_cost_gbp,
-  ROUND(MAX(pr.standing_charge), 2) AS standing_charge_cost_gbp
+  ROUND(SUM(c.est_kwh * pr.unit_rate) / 100, 2) AS unit_rate_cost_gbp,
+  ROUND(MAX(pr.standing_charge) / 100, 2) AS standing_charge_cost_gbp
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
@@ -325,7 +325,7 @@ ORDER BY time;
 ```sql
 SELECT
   DATE(c.period_from) AS time,
-  ROUND(SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge), 2) AS gas_cost_gbp
+  ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS gas_cost_gbp
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
