@@ -1,13 +1,13 @@
 import logging.config
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Any, Dict, List, Optional, Tuple
 
-from common.exceptions import ArgumentError
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
 from data.octopus.model import Rate
+from data.octopus.timestamps import to_utc_z
 from data.octopus.transport import OctopusTransport
 from pydantic import BaseModel
 
@@ -110,18 +110,6 @@ class RateClient:
             params = None
         return readings
 
-    @staticmethod
-    def _to_utc_z(value: datetime) -> str:
-        if value.tzinfo is None:
-            # A naive datetime would silently pick up the system's local tz via
-            # astimezone(), reintroducing the exact offset bug this
-            # normalization exists to fix — fail fast instead.
-            raise ArgumentError(
-                f"period_from/period_to must be timezone-aware, got naive "
-                f"datetime {value!r}."
-            )
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
     def _build_params(
         self,
         period_from: Optional[datetime],
@@ -129,9 +117,9 @@ class RateClient:
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {"page_size": DEFAULT_PAGE_SIZE}
         if period_from:
-            params["period_from"] = self._to_utc_z(period_from)
+            params["period_from"] = to_utc_z(period_from)
         if period_to:
-            params["period_to"] = self._to_utc_z(period_to)
+            params["period_to"] = to_utc_z(period_to)
         return params
 
     def _get_readings_directly_from_endpoint(
