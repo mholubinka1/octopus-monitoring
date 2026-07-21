@@ -121,8 +121,16 @@ A logged execution record (job name, status, timestamp) for each scheduled job �
 _Avoid_: job log, task run
 
 **Retention Window**:
-The intended 400-day period after which raw consumption and product-rate rows are meant to be pruned by a daily job — that pruning job is not yet implemented, so nothing is actually deleted today. `retention_days` (default 400) currently only bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `cost_forecast`) are not subject to pruning once it exists. See `.agent-docs/adr/0003-90-day-data-retention.md`.
+The intended 400-day period after which raw consumption and product-rate rows are meant to be pruned by a weekly job — that pruning job is not yet implemented, so nothing is actually deleted today. `retention_days` (default 400) currently only bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `cost_forecast`, `daily_consumption_summary`) are not subject to pruning once it exists. Planned to revert to 45 days once `daily_consumption_summary` ships (`chore/consumption-data-pruning`, not yet merged) — the 400-day window exists to carry raw history until that aggregate table takes over the long-range view. See `.agent-docs/adr/0003-90-day-data-retention.md`.
 _Avoid_: data expiry, TTL
+
+**Consumption Summary**:
+The `daily_consumption_summary` table (`energy`, `date`, `total_kwh`) — a pruning-exempt daily aggregate of raw `consumption`, populated by the weekly `update_consumption_summary` job (re-summarizes the trailing 14 days plus any never-yet-summarized older days, to absorb upstream Octopus corrections to estimated readings). Backs the Yearly Comparison panels so they remain correct regardless of whatever the raw retention window is. Not yet implemented — see `feature/yearly-consumption-comparison`.
+_Avoid_: daily total, consumption rollup
+
+**Yearly Comparison**:
+The pair of Grafana panels (monthly total consumption over the trailing 12 months, and a week-over-week year-on-year % change by ISO week number, both split by energy) reading from `daily_consumption_summary`. ISO week numbering (MariaDB `WEEK(date, 3)`) is used specifically to avoid the "week 0" ambiguity of calendar-week numbering; an orphan week 53 (a year with no matching week 53 a year prior) falls back to comparing against that prior year's week 52. Not yet implemented — see `feature/yearly-consumption-comparison`.
+_Avoid_: annual comparison, YoY chart
 
 **Cheap Window**:
 The cheapest contiguous block of a given duration (30min/1h/2h/3h/4h/6h) within today's or tomorrow's Agile half-hourly rates, computed live at query time rather than stored.
