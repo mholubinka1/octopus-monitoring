@@ -4,7 +4,7 @@ status: accepted
 
 # Prune raw consumption/cost/rate data after 400 days
 
-Half-hourly consumption, cost, and product-rate data accumulates indefinitely if never pruned. We decided a daily pruning job should delete raw rows older than 400 days, rather than keeping full history forever, because the app runs on Pi-class hardware where unbounded MariaDB growth is an operational risk. The window was widened from an originally-planned 90 days to 400 days to support dashboard elements needing a full year-plus of history. Computed/aggregated results (`tariff_comparison_result`, cumulative Agile-vs-Variable savings) are unaffected — pruning applies to raw interval data only, not derived summaries.
+Half-hourly consumption, cost, and product-rate data accumulates indefinitely if never pruned. We decided a daily pruning job should delete raw rows older than 400 days, rather than keeping full history forever, because the app runs on Pi-class hardware where unbounded MariaDB growth is an operational risk. The window was widened from an originally-planned 90 days to 400 days to support dashboard elements needing a full year-plus of history. Computed/aggregated results (e.g. `cost_forecast`) are unaffected — pruning applies to raw interval data only, not derived summaries. (The tariff-comparison feature and its `tariff_comparison_result`/Agile-vs-Variable-savings tables, originally cited here as an example of exempt derived data, were dropped entirely during `feature/agile-cost-forecast`'s reconciliation — see that spec's Further Notes.)
 
 **This pruning job is not yet implemented.** As of this revision, nothing in
 the codebase actually deletes old rows — data grows unbounded today. The
