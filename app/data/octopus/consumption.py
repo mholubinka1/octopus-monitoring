@@ -1,9 +1,10 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
 from data.octopus.model import Electricity, Gas, Meter
+from data.octopus.timestamps import to_utc_z
 from data.octopus.transport import OctopusTransport
 from pydantic import BaseModel
 
@@ -49,11 +50,9 @@ class ConsumptionClient:
             self._transport.base_url
             + f"electricity-meter-points/{meter.mpan}/meters/{meter.serial_number}/consumption/"
         )
-        api_endpoint = self.build_api_endpoint_from_params(
-            api_endpoint, period_from, period_to, page_size
-        )
+        params = self.build_params(period_from, period_to, page_size)
         return self.get_consumption_directly_from_endpoint(
-            Energy.electricity, api_endpoint
+            Energy.electricity, api_endpoint, params
         )
 
     def get_gas_consumption(
@@ -67,35 +66,35 @@ class ConsumptionClient:
             self._transport.base_url
             + f"gas-meter-points/{meter.mprn}/meters/{meter.serial_number}/consumption/"
         )
-        api_endpoint = self.build_api_endpoint_from_params(
-            api_endpoint, period_from, period_to, page_size
+        params = self.build_params(period_from, period_to, page_size)
+        return self.get_consumption_directly_from_endpoint(
+            Energy.gas, api_endpoint, params
         )
-        return self.get_consumption_directly_from_endpoint(Energy.gas, api_endpoint)
 
-    def build_api_endpoint_from_params(
+    def build_params(
         self,
-        api_endpoint: str,
         period_from: Optional[datetime],
         period_to: Optional[datetime],
         page_size: int,
-    ) -> str:
-        api_endpoint += f"?page_size={page_size}"
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"page_size": page_size, "order_by": "period"}
         if period_from:
-            api_endpoint += (
-                f"&period_from={period_from.isoformat().replace('+00:00', 'Z')}"
-            )
+            params["period_from"] = to_utc_z(period_from)
         if period_to:
-            api_endpoint += f"&period_to={period_to.isoformat().replace('+00:00', 'Z')}"
-        api_endpoint += "&order_by=period"
-        return api_endpoint
+            params["period_to"] = to_utc_z(period_to)
+        return params
 
     def get_consumption_directly_from_endpoint(
         self,
         energy: Energy,
         api_endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Optional[str], List[Consumption]]:
         parsed = self._transport.get(
-            api_endpoint, ConsumptionResponse, description="fetch consumption"
+            api_endpoint,
+            ConsumptionResponse,
+            params=params,
+            description="fetch consumption",
         )
         consumption = [
             Consumption(
