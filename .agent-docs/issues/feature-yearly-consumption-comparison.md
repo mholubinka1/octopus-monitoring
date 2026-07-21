@@ -70,24 +70,79 @@ consumption corrections.
 ### What to build
 
 Register `ConsumptionSummaryRetriever.refresh()` as a new scheduled job,
-`update_consumption_summary`, on a weekly cadence distinct from the existing
-`refresh_interval_hours`-driven consumption/pricing jobs — this needs its own
-scheduler entry. Wrap it in the existing `job_run` mechanism, reusing
-`_schedule_refresh_job`'s background-worker-thread-with-backoff mechanism
+`update_consumption_summary`, on a fixed weekly cadence — Monday at 03:00
+(`scheduler.every().monday.at("03:00")`) — distinct from the existing
+`refresh_interval_hours`-driven consumption/pricing jobs. Wrap it in the
+existing `job_run` mechanism, reusing `_schedule_refresh_job`'s
+background-worker-thread-with-backoff mechanism
 (`bugfix/consumption-timezone-and-scheduler-backoff`, not the plain
 try/except this issue originally assumed) so its outcome is recorded like
 every other scheduled job and a persistently-failing run backs off instead
-of retrying every tick. This is also the job `chore/consumption-data-pruning`'s
-pruning job will be gated on succeeding.
+of retrying every tick. Generalize `_schedule_refresh_job` to take the
+scheduling interval as a `Callable[[Scheduler], Job]` instead of hardcoding
+`.hours`, so both the existing hourly-ish jobs and this weekly one share the
+same wrapper with no duplication. Introduce a `WEEKLY_JOB_TIME = "03:00"`
+constant, plus a forward-looking (currently unused) `DAILY_JOB_TIME = "04:00"`
+constant for future daily-cadence jobs. This is also the job
+`chore/consumption-data-pruning`'s pruning job will be gated on succeeding.
 
 ### Acceptance criteria
 
-- [ ] `update_consumption_summary` is registered on a weekly schedule,
+- [ ] `update_consumption_summary` is registered on `scheduler.every().monday.at("03:00")`,
       independent of `refresh_interval_hours`
 - [ ] A successful run records a `job_run` row with `status="success"`
 - [ ] A failing run records `status="failure"` with the error message, and
       does not crash the app (matches `test_refresh_scheduling.py`'s existing
       pattern for the other scheduled jobs)
+- [ ] `_schedule_refresh_job` is generalized (interval as a callback) with
+      no behavioural change to the existing hourly consumption/pricing jobs
+- [ ] Existing test suite remains green
+
+---
+
+## One-time 2-year historical backfill for daily_consumption_summary (#415)
+
+**Blocked by**: #402
+
+**User stories**: 1, 2, 3, 4, 5
+
+### What to build
+
+A new `ConsumptionSummaryBackfill` class (`app/data/consumption_summary.py`,
+alongside `ConsumptionSummaryRetriever`), following the same verb-Protocol DI
+seam as `ConsumptionRetriever`/`PricingRetriever` — this one calls the
+external Octopus API directly, unlike #402's pure DB-to-DB retriever. On
+first startup only, it fetches ~2 years of consumption per meter via the
+existing paginated `fetch_consumption`/`fetch_consumption_page` verbs,
+aggregates in memory by `(energy, date)`, and writes only to
+`daily_consumption_summary` via a new `persist_consumption_summary` verb —
+never to raw `consumption`, so the 45-day retention window is unaffected.
+
+Idempotency is gated on `job_run` history: a new
+`MariaDBClient.has_successful_job_run(job_name)` checks whether a `job_run`
+row with `status="success"` already exists for job name
+`yearly_comparison_backfill`; if so, the backfill no-ops. Runs once at
+startup (not on the recurring scheduler), in a background thread reusing the
+same retry-with-backoff mechanism as `_schedule_refresh_job`.
+
+Also reverts `config.yml`/`config.yml.template`'s `retention_days` from
+`400` to `45` (and the README's Configuration section) — the dedicated
+2-year backfill makes the earlier rationale for the elevated value obsolete.
+GitHub issue #406 (on `chore/consumption-data-pruning`) already tracks this
+same revert; once this ships, #406 will find it already done.
+
+### Acceptance criteria
+
+- [ ] `ConsumptionSummaryBackfill.run()` fetches ~2 years of consumption per
+      meter and writes correct `daily_consumption_summary` totals per
+      `(energy, date)`, without writing any rows to raw `consumption`
+- [ ] A second call (simulating an app restart) is a no-op — no further
+      Octopus API calls, verified via the `job_run` gate
+- [ ] A persistently-failing backfill retries with exponential backoff
+      (mirroring `test_refresh_scheduling.py`'s existing pattern) and does
+      not crash startup
+- [ ] `config.yml`/`config.yml.template`'s `retention_days` is `45`;
+      README's Configuration section updated to match
 - [ ] Existing test suite remains green
 
 ---

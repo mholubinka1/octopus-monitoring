@@ -34,7 +34,9 @@ Create `config.yml` from `config.yml.template`, providing:
   `retention_days` (how far back to backfill on every startup — also the intended data
   retention window, see [ADR-0003](.agent-docs/adr/0003-90-day-data-retention.md); no
   persisted watermark means this backfill re-runs in full on every restart, not just
-  the first one).
+  the first one). This is separate from the one-time 2-year `daily_consumption_summary`
+  backfill that runs once on first startup (gated by `job_run` history), which needs no
+  configuration.
 
 ### Docker Compose
 
