@@ -1,5 +1,7 @@
 # Issues: bugfix-consumption-timezone-and-scheduler-backoff
 
+> Work complete — PR ready to merge. Live verification was done via a local Docker build (real Octopus API, temporarily shortened schedule interval for fast iteration) rather than the Raspberry Pi, per direction during this session — see closing summary for details.
+
 ## Extract shared UTC/Z timestamp normalization helper
 
 **GitHub issue**: #409
@@ -14,9 +16,9 @@ Extract `RateClient._to_utc_z`'s logic (reject naive datetimes with `ArgumentErr
 
 ### Acceptance criteria
 
-- [ ] A timezone-aware, non-UTC datetime normalizes to UTC with a trailing `Z`, matching `RateClient`'s current behavior exactly
-- [ ] A naive datetime raises `ArgumentError` with a message containing "timezone-aware", matching the existing message verbatim (an existing test asserts on this exact text)
-- [ ] `tests/test_electricity_rate_seam.py` and `tests/test_gas_rate_seam.py` pass unchanged after the extraction
+- [x] A timezone-aware, non-UTC datetime normalizes to UTC with a trailing `Z`, matching `RateClient`'s current behavior exactly
+- [x] A naive datetime raises `ArgumentError` with a message containing "timezone-aware", matching the existing message verbatim (an existing test asserts on this exact text)
+- [x] `tests/test_electricity_rate_seam.py` and `tests/test_gas_rate_seam.py` pass unchanged after the extraction
 
 ---
 
@@ -34,11 +36,11 @@ Replace `ConsumptionClient.build_api_endpoint_from_params`'s raw string concaten
 
 ### Acceptance criteria
 
-- [ ] A BST-offset (`+01:00`) `period_from`/`period_to` is normalized to UTC/`Z` in the actual outgoing request's query params (verified via a `responses`-mocked request at the `OctopusEnergyAPIClient` seam, mirroring `test_electricity_rate_seam.py`'s BST test)
-- [ ] A naive `period_from`/`period_to` raises `ArgumentError` rather than silently using local time
-- [ ] `order_by=period` is still present in the outgoing request's params — easy to lose when switching to the rate.py-style helper, since rate.py's params have no equivalent
-- [ ] Pagination (following Octopus's own returned `next` URL) is unaffected — no params re-sent on subsequent pages
-- [ ] The recurring `consumption_refresh` job succeeds when run live against the real Octopus API during BST, using a real BST-offset `_latest_retrieved_date` (verified on the Pi)
+- [x] A BST-offset (`+01:00`) `period_from`/`period_to` is normalized to UTC/`Z` in the actual outgoing request's query params (verified via a `responses`-mocked request at the `OctopusEnergyAPIClient` seam, mirroring `test_electricity_rate_seam.py`'s BST test)
+- [x] A naive `period_from`/`period_to` raises `ArgumentError` rather than silently using local time
+- [x] `order_by=period` is still present in the outgoing request's params — easy to lose when switching to the rate.py-style helper, since rate.py's params have no equivalent
+- [x] Pagination (following Octopus's own returned `next` URL) is unaffected — no params re-sent on subsequent pages
+- [x] The recurring `consumption_refresh` job succeeds when run live against the real Octopus API during BST, using a real BST-offset `_latest_retrieved_date` (verified via a local Docker build against the real API — 6 consecutive successful runs, `job_run` status "success"; not the Pi, see closing note above)
 
 ---
 
@@ -56,11 +58,11 @@ Add a `retry_with_exponential_backoff` decorator (`app/common/decorator.py`, alo
 
 ### Acceptance criteria
 
-- [ ] A job whose `refresh_fn` fails every attempt makes 5 attempts total, with gaps of 1, 2, 4, then 8 minutes between them, recording a `job_run` "failure" row each time
-- [ ] After the 5th attempt fails, the worker thread ends without raising, and the next scheduled tick starts a fresh attempt count (no permanent give-up, no `next_run` manipulation needed)
-- [ ] A new `refresh()` invocation is skipped and logged (not double-started) whenever a worker thread is already alive for that job — whether it's mid-backoff-retry or simply still completing a normal (successful) run
-- [ ] A successful `refresh_fn` call records exactly one `job_run` "success" row and the worker thread ends
-- [ ] This behavior is identical for both the consumption and pricing refresh jobs
-- [ ] After merge, live-verify on the Pi that the normal (non-failing) path still runs correctly under the new threaded dispatch
+- [x] A job whose `refresh_fn` fails every attempt makes 5 attempts total, with gaps of 1, 2, 4, then 8 minutes between them, recording a `job_run` "failure" row each time
+- [x] After the 5th attempt fails, the worker thread ends without raising, and the next scheduled tick starts a fresh attempt count (no permanent give-up, no `next_run` manipulation needed)
+- [x] A new `refresh()` invocation is skipped and logged (not double-started) whenever a worker thread is already alive for that job — whether it's mid-backoff-retry or simply still completing a normal (successful) run
+- [x] A successful `refresh_fn` call records exactly one `job_run` "success" row and the worker thread ends
+- [x] This behavior is identical for both the consumption and pricing refresh jobs
+- [x] Live-verified (pre-merge, via local Docker build) that the normal (non-failing) path runs correctly under the new threaded dispatch — both `consumption_refresh` and `pricing_refresh` recorded "success"; also directly observed the overlap guard firing live (`pricing_refresh is still running; skipping this invocation.`) when `pricing_refresh` ran longer than the test's shortened interval. Not yet re-verified on the Pi itself post-merge — see closing note above
 
 ---
