@@ -1,21 +1,28 @@
 import logging.config
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from logging import Logger, getLogger
 from typing import Any, Generator, List, Optional
 
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
-from data.model import Consumption, ConsumptionSummary, as_energy_char
+from data.model import (
+    Consumption,
+    ConsumptionSummary,
+    as_energy_char,
+    energy_from_char,
+)
 from data.mysql import model
 from data.mysql.model import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Date, create_engine, func, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
+
+SUMMARIZATION_WINDOW_DAYS = 14
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -202,6 +209,49 @@ class MariaDBClient:
             for rate in rates
         ]
         self._write_all(records, "Product rate data")
+
+    def read_consumption_summarization_window(
+        self, as_of: date
+    ) -> List[ConsumptionSummary]:
+        cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS)
+        with self.session_read_scope() as session:
+            consumption_date = func.date(
+                model.consumption.period_from, type_=Date
+            ).label("date")
+            daily_totals = (
+                session.query(
+                    model.consumption.energy.label("energy"),
+                    consumption_date,
+                    func.sum(model.consumption.est_kwh).label("total_kwh"),
+                )
+                .group_by(model.consumption.energy, consumption_date)
+                .subquery()
+            )
+            rows = (
+                session.query(
+                    daily_totals.c.energy,
+                    daily_totals.c.date,
+                    daily_totals.c.total_kwh,
+                )
+                .outerjoin(
+                    model.daily_consumption_summary,
+                    (model.daily_consumption_summary.energy == daily_totals.c.energy)
+                    & (model.daily_consumption_summary.date == daily_totals.c.date),
+                )
+                .filter(
+                    (daily_totals.c.date >= cutoff)
+                    | (model.daily_consumption_summary.energy.is_(None))
+                )
+                .all()
+            )
+        return [
+            ConsumptionSummary(
+                energy=energy_from_char(row.energy),
+                date=row.date,
+                total_kwh=row.total_kwh,
+            )
+            for row in rows
+        ]
 
     def write_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
         records = [

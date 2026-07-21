@@ -21,6 +21,16 @@ def as_energy_char(energy: Energy) -> str:
             return "G"
 
 
+def energy_from_char(char: str) -> Energy:
+    match (char):
+        case "E":
+            return Energy.electricity
+        case "G":
+            return Energy.gas
+        case _:
+            raise ValueError(f"Unknown energy char: {char!r}")
+
+
 class Unit(Enum):
     kwh = 0
     m3 = 1
