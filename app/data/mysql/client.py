@@ -264,6 +264,15 @@ class MariaDBClient:
         ]
         self._write_all(records, "Consumption summary data")
 
+    def has_successful_job_run(self, job_name: str) -> bool:
+        with self.session_read_scope() as session:
+            return (
+                session.query(model.job_run)
+                .filter_by(job_name=job_name, status="success")
+                .first()
+                is not None
+            )
+
     def record_job_run(
         self, job_name: str, status: str, error: Optional[str] = None
     ) -> None:
