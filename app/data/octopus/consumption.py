@@ -50,7 +50,7 @@ class ConsumptionClient:
             self._transport.base_url
             + f"electricity-meter-points/{meter.mpan}/meters/{meter.serial_number}/consumption/"
         )
-        params = self.build_params(period_from, period_to, page_size)
+        params = self._build_params(period_from, period_to, page_size)
         return self.get_consumption_directly_from_endpoint(
             Energy.electricity, api_endpoint, params
         )
@@ -66,12 +66,12 @@ class ConsumptionClient:
             self._transport.base_url
             + f"gas-meter-points/{meter.mprn}/meters/{meter.serial_number}/consumption/"
         )
-        params = self.build_params(period_from, period_to, page_size)
+        params = self._build_params(period_from, period_to, page_size)
         return self.get_consumption_directly_from_endpoint(
             Energy.gas, api_endpoint, params
         )
 
-    def build_params(
+    def _build_params(
         self,
         period_from: Optional[datetime],
         period_to: Optional[datetime],

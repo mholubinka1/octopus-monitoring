@@ -53,7 +53,7 @@ def test_successful_refresh_is_recorded_as_a_successful_job_run(
 def test_persistently_failing_refresh_retries_with_exponential_backoff(
     mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    sleep_delays: list = []
+    sleep_delays: list[int] = []
     monkeypatch.setattr("common.decorator.time.sleep", sleep_delays.append)
     scheduler = Scheduler()
     consumption = Mock(spec=ConsumptionRetriever)
