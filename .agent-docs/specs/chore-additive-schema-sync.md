@@ -40,7 +40,7 @@
 
 - Dropping or altering existing tables/columns (type changes, nullability changes, defaults) — stays a manual, deliberate action.
 - A versioned migration framework (Alembic or similar) — rejected in ADR-0005 as unearned operational weight for a single-user, single-target deployment with no rollback requirement.
-- Any changes to `tariff_comparison_result`, `agile_forecast`, or `daily_saving` tables from the future roadmap specs — this chore only builds the mechanism those features will rely on.
+- Any changes to `agile_forecast` or `cost_forecast` tables from the future roadmap specs — this chore only builds the mechanism those features will rely on.
 
 ## Further Notes
 
