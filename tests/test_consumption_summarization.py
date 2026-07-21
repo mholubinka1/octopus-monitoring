@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from data.consumption_summary import ConsumptionSummaryRetriever
-from data.model import Consumption, Unit
+from data.model import Consumption, ConsumptionSummary, Energy, Unit
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.octopus.model import Agreement, Electricity, Gas
@@ -126,3 +126,35 @@ def test_refresh_summarizes_a_gap_day_older_than_the_trailing_window(
     assert len(stored) == 1
     assert stored[0].date == old_day.date()
     assert stored[0].total_kwh == Decimal("3.00000")
+
+
+def test_summarization_window_is_exactly_fourteen_trailing_days_inclusive_of_as_of(
+    mariadb_client: MariaDBClient,
+) -> None:
+    electricity = _make_electricity_meter()
+    as_of = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    # The 15th day back from as_of -- must be excluded from a 14-day
+    # trailing window that includes as_of itself (as_of, as_of-1, ...,
+    # as_of-13 = 14 dates total).
+    fifteenth_day_back = as_of - timedelta(days=14)
+
+    mariadb_client.write_consumption(
+        electricity,
+        [_half_hour(fifteenth_day_back.replace(hour=0, minute=0), Decimal("5.0"))],
+    )
+    # An existing summary row already covers this day, so it is not a
+    # "gap" either -- only trailing-window inclusion could pull it in.
+    mariadb_client.write_consumption_summary(
+        [
+            ConsumptionSummary(
+                energy=Energy.electricity,
+                date=fifteenth_day_back.date(),
+                total_kwh=Decimal("1.0"),
+            )
+        ]
+    )
+
+    window = mariadb_client.read_consumption_summarization_window(as_of.date())
+
+    windowed_days = {(s.energy, s.date) for s in window}
+    assert (Energy.electricity, fifteenth_day_back.date()) not in windowed_days

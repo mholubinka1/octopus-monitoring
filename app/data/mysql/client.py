@@ -219,7 +219,9 @@ class MariaDBClient:
         # cutoff. Table growth is bounded by the raw retention window once
         # pruning ships (chore/consumption-data-pruning); until then this
         # scales with total raw row count, same as the rest of the app.
-        cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS)
+        # `- 1` because the window is inclusive of as_of itself: 14 trailing
+        # days means as_of, as_of-1, ..., as_of-13 (14 dates), not 15.
+        cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS - 1)
         with self.session_read_scope() as session:
             consumption_date = func.date(
                 model.consumption.period_from, type_=Date
