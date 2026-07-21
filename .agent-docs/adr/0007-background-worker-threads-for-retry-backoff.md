@@ -1,0 +1,9 @@
+# Per-job background worker threads for retry backoff, over blocking retries
+
+`_schedule_refresh_job` previously re-raised after recording a failed `job_run`, which stopped the `schedule` library from ever advancing a failing job's `next_run` — a persistently-failing job retried every ~90 seconds instead of backing off, hammering the Octopus API. The fix needs exponential backoff (1/2/4/8/16 min, 5 attempts, then fall back to the normal hourly cadence).
+
+`main.py`'s scheduler loop is single-threaded (`while True: run_pending_safely(scheduler); time.sleep(1)`), so a classic blocking retry decorator (sleeping inline between attempts) would freeze that thread for up to ~31 minutes on a failure streak — starving the sibling job (pricing vs. consumption refresh) and reintroducing the appearance of a hang, which a prior session already spent time ruling out as a false alarm once.
+
+Decided instead: `refresh()` always dispatches the actual work to a per-job daemon background thread (guarded so a second invocation is skipped, not queued, while a retry sequence is still in flight for that job), and the retry-with-backoff logic lives entirely inside that thread. This is the first use of threading anywhere in this otherwise fully synchronous codebase — a future reader should not "simplify" it back to inline/blocking retries, since that was the exact failure mode being avoided. Because each worker's attempt count is local to its own thread invocation, no `schedule.Job.next_run` manipulation was needed: once a worker exhausts its 5 attempts it simply ends, and the next scheduled hourly tick naturally starts a fresh worker with a fresh attempt count.
+
+**Considered and rejected**: a blocking `retry_with_exponential_backoff` decorator applied inline in the scheduler thread — simpler code, but accepted a ~31-minute single-threaded stall per failure streak, which was judged worse than the original bug for this always-on monitoring app.
