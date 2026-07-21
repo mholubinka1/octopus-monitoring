@@ -113,6 +113,10 @@ consumption over the trailing 12 months, one series per energy
       fenced-SQL convention
 - [ ] Query groups by calendar month, covers the trailing 12 months, and
       produces a distinct row per energy
+- [ ] The window is 12 full calendar-month buckets (current month plus the
+      11 preceding complete months) — anchored to the first of the month,
+      not a naive `CURDATE() - INTERVAL 12 MONTH`, which yields a partial
+      *oldest* month instead
 - [ ] Month label format is `%b %Y` (e.g. "Jan 2026"), not month name alone
 
 ---
@@ -128,18 +132,20 @@ consumption over the trailing 12 months, one series per energy
 Add a second new panel definition to `grafana/mariadb/queries.md`: for
 each of the last 52/53 ISO weeks, the % change in total consumption versus
 the same ISO week number one year prior, plus a 4-week trailing moving
-average of that % change as a second series — one panel per energy. Use
-`WEEK(date, 3)` (ISO week numbering, mode 3) rather than MySQL's default mode
-0, specifically to avoid mode 0's "week 0" partial-week ambiguity in early
-January. When the current year has an ISO week 53 with no matching week 53 a
-year prior, fall back to comparing against that prior year's week 52 rather
-than leaving the comparison null. Documentation-only change — no application
-code.
+average of that % change as a second series — one panel per energy. Group
+by `YEARWEEK(date, 3)` — not `YEAR(date)` paired separately with
+`WEEK(date, 3)`, since that combination can misattribute early-January/
+late-December boundary dates to the wrong week-year (`YEARWEEK` returns the
+correctly-paired ISO year+week directly). Mode 3 avoids MySQL's default mode
+0's "week 0" partial-week ambiguity in early January. When the current year
+has an ISO week 53 with no matching week 53 a year prior, fall back to
+comparing against that prior year's week 52 rather than leaving the
+comparison null. Documentation-only change — no application code.
 
 ### Acceptance criteria
 
-- [ ] Query added to `grafana/mariadb/queries.md`, using `WEEK(date, 3)`
-      ISO week numbering
+- [ ] Query added to `grafana/mariadb/queries.md`, grouping by
+      `YEARWEEK(date, 3)` (not `YEAR(date)` + `WEEK(date, 3)` separately)
 - [ ] Raw YoY % change and a 4-week trailing moving average of that % are
       both present as separate series in the same query/panel
 - [ ] The week-53-fallback-to-week-52 rule is implemented and called out in
