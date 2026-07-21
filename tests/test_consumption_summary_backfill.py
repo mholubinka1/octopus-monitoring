@@ -120,3 +120,39 @@ def test_run_summarizes_two_years_of_fetched_consumption_without_writing_raw_row
         "1.00000"
     )
     assert raw_rows == []
+
+
+@responses.activate
+def test_run_anchors_period_from_to_midnight_even_when_as_of_has_a_time_component(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # A non-midnight as_of (e.g. the app started mid-day) must not leak its
+    # time-of-day into period_from -- Octopus would then omit intervals
+    # before that time on the oldest backfilled day, producing a partial
+    # daily total for it.
+    as_of = datetime(2026, 1, 15, 14, 32, 7, tzinfo=timezone.utc)
+    expected_period_from = datetime(2026, 1, 15, tzinfo=timezone.utc) - timedelta(
+        days=730
+    )
+
+    responses.add(
+        responses.GET,
+        CONSUMPTION_ENDPOINT
+        + "?page_size=100&period_from="
+        + expected_period_from.isoformat().replace("+00:00", "Z")
+        + "&order_by=period",
+        json={"results": [], "next": None},
+        status=200,
+    )
+
+    meter = _make_meter()
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+    source = _RealConsumptionSummaryBackfillSource(octopus, mariadb_client, [meter])
+    backfill = ConsumptionSummaryBackfill(source)
+
+    # If period_from had carried as_of's 14:32:07 time-of-day instead of
+    # being anchored to midnight, the registered response above wouldn't
+    # match and `responses` would raise a ConnectionError instead.
+    backfill.run(as_of=as_of)

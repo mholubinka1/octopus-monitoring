@@ -43,7 +43,13 @@ class ConsumptionSummaryBackfill:
     def run(self, as_of: Optional[datetime] = None) -> None:
         if as_of is None:
             as_of = datetime.now(timezone.utc)
-        period_from = as_of - timedelta(days=BACKFILL_WINDOW_DAYS)
+        # Anchored to midnight UTC of the cutoff date, not as_of's exact
+        # time-of-day -- otherwise Octopus omits intervals before that time
+        # on the oldest backfilled day, producing a partial daily total.
+        cutoff_date = (as_of - timedelta(days=BACKFILL_WINDOW_DAYS)).date()
+        period_from = datetime(
+            cutoff_date.year, cutoff_date.month, cutoff_date.day, tzinfo=timezone.utc
+        )
 
         self._client.refresh_meters()
         totals: Dict[Tuple[Energy, date], Decimal] = {}
