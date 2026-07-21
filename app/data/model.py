@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
@@ -33,6 +33,13 @@ class Consumption:
     unit: Unit  # Electricity: kwh, Gas: m^3
     start: datetime
     end: datetime
+
+
+@dataclass
+class ConsumptionSummary:
+    energy: Energy
+    date: date
+    total_kwh: Decimal
 
 
 def get_raw_unit(energy: Energy) -> Unit:

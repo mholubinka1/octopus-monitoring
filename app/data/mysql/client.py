@@ -7,7 +7,7 @@ from typing import Any, Generator, List, Optional
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
-from data.model import Consumption, as_energy_char
+from data.model import Consumption, ConsumptionSummary, as_energy_char
 from data.mysql import model
 from data.mysql.model import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
@@ -202,6 +202,17 @@ class MariaDBClient:
             for rate in rates
         ]
         self._write_all(records, "Product rate data")
+
+    def write_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+        records = [
+            model.daily_consumption_summary(
+                energy=as_energy_char(summary.energy),
+                date=summary.date,
+                total_kwh=summary.total_kwh,
+            )
+            for summary in summaries
+        ]
+        self._write_all(records, "Consumption summary data")
 
     def record_job_run(
         self, job_name: str, status: str, error: Optional[str] = None
