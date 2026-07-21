@@ -31,7 +31,7 @@ The classification of a pricing plan — `variable`, `economy7`, `agile`, `fixed
 _Avoid_: plan type, rate type
 
 **Agile**:
-Octopus's half-hourly dynamic electricity pricing tariff, detected via tariff code containing `AGILE`. Its rates are fetched and stored through the same generic path as every other product (see `PricingRetriever`); a dedicated Agile forecast/comparison feature is still unbuilt (see Tariff Comparison and Forecasting below).
+Octopus's half-hourly dynamic electricity pricing tariff, detected via tariff code containing `AGILE`. Its rates are fetched and stored through the same generic path as every other product (see `PricingRetriever`); a dedicated Agile cost forecast feature is still unbuilt (see Cost and Forecasting below).
 _Avoid_: dynamic tariff, agile octopus
 
 **Standing Charge**:
@@ -94,34 +94,34 @@ _Avoid_: pricing service
 The top-level facade wiring the Octopus API client and MariaDB client together; holds account/meter state for a run.
 _Avoid_: app client, main client
 
-### Tariff Comparison and Forecasting
+### Cost and Forecasting
 
 **Billing Period**:
-The current invoice cycle for an account, used as the comparison window for tariff comparison. Sourced from Octopus's billing API where available, falling back to a configured `billing.day_of_month` anchor.
+The current invoice cycle for an account. Fetched from Octopus's GraphQL "Kraken" API (`account.billingOptions`), authenticated by exchanging the account's existing REST API key for a short-lived JWT via `obtainKrakenToken` — not available via the REST v1 API this app otherwise uses. For accounts on flexible billing (`isFixed: false`, no `currentBillingPeriodEndDate` from Octopus), the period end is assumed to be one calendar month after the period start, same day-of-month, clamped to the last valid day if that day doesn't exist in the target month. See `.agent-docs/research/octopus-billing-period-api.md`.
 _Avoid_: billing cycle, invoice period
 
-**Cheapest Tariff**:
-The result of simulating actual usage over the current billing period against every published Octopus domestic electricity product for the account's region, to find the lowest-cost alternative to the account's actual tariff.
-_Avoid_: best tariff, tariff recommendation
-
 **Product / Product Rate**:
-`Product` is Octopus's public catalogue entry for a tariff plan, distinct from `Agreement` (the account's actual contract). `Product Rate` is a product's unit rate and standing charge for a region and time period — stored uniformly for every product, including whichever one the account is actually on, so actual cost, the price-curve panel, and cheapest-tariff comparison all read from the same table.
+`Product` is Octopus's public catalogue entry for a tariff plan, distinct from `Agreement` (the account's actual contract). `Product Rate` is a product's unit rate and standing charge for a region and time period — stored uniformly for every product, including whichever one the account is actually on, so actual cost and the price-curve panel read from the same table.
 _Avoid_: tariff (when referring to the public catalogue rather than the account's own agreement)
 
+**Actual Cost**:
+Cost computed directly from real consumption × the real rates actually charged (`consumption` ⋈ `agreement` ⋈ `product_rate`) — covers "yesterday's cost" (no billing-period dependency) and "this billing period's cost so far" (needs the billing period start, so computed and persisted by the app rather than a pure live query).
+_Avoid_: spend, actual spend
+
 **Cost Forecast**:
-A projection of month-end electricity cost, built from month-to-date actual cost plus forecast Agile prices for the remainder of the billing period.
+A projection of total cost for the current billing period, built from actual cost to date plus a forecast for the remaining days: future consumption estimated as the average daily usage of the billing period so far, and future price sourced from Agile Predict's real 14-day forecast, tiled (the last 7 forecast days repeated in sequence) for any remaining days beyond that 14-day horizon.
 _Avoid_: price forecast (that term refers to the underlying Agile price data, not the derived cost projection)
 
 **Agile Predict**:
-A third-party public service (`prices.fly.dev`) providing 14-day-ahead Agile price forecasts per GSP region. Consumed as an external API rather than reimplemented in-house — see `.agent-docs/adr/0002-agile-predict-forecast-dependency.md`.
+A third-party public service (`agilepredict.com`, backed by the same Fly.io app historically documented at `prices.fly.dev` — that domain's `/v2/<region>/` path now serves the HTML frontend, not JSON) providing a hard-capped 14-day-ahead Agile price forecast per GSP region via `GET https://agilepredict.com/api/{region}/`, no authentication required. Consumed as an external API rather than reimplemented in-house — see `.agent-docs/adr/0002-agile-predict-forecast-dependency.md`.
 _Avoid_: the forecast API, prediction service
 
 **Job Run**:
-A logged execution record (job name, status, timestamp) for each scheduled job — consumption refresh, tariff comparison, forecast fetch — used to drive the dashboard's health/staleness panel.
+A logged execution record (job name, status, timestamp) for each scheduled job — consumption refresh, pricing refresh, cost forecast refresh — used to drive the dashboard's health/staleness panel.
 _Avoid_: job log, task run
 
 **Retention Window**:
-The intended 400-day period after which raw consumption, cost, and product-rate rows are meant to be pruned by a daily job — that pruning job is not yet implemented, so nothing is actually deleted today. `retention_days` (default 400) currently only bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `tariff_comparison_result`) are not subject to pruning once it exists. See `.agent-docs/adr/0003-90-day-data-retention.md`.
+The intended 400-day period after which raw consumption and product-rate rows are meant to be pruned by a daily job — that pruning job is not yet implemented, so nothing is actually deleted today. `retention_days` (default 400) currently only bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `cost_forecast`) are not subject to pruning once it exists. See `.agent-docs/adr/0003-90-day-data-retention.md`.
 _Avoid_: data expiry, TTL
 
 **Cheap Window**:
