@@ -5,9 +5,9 @@ from logging import Logger, getLogger
 from typing import Dict, List, Optional, Protocol, Tuple
 
 from common.logging import APP_LOGGER_NAME, config
-from data.model import Consumption, ConsumptionSummary, Energy
+from data.consumption import ConsumptionFetchSource
+from data.model import ConsumptionSummary, Energy
 from data.mysql.client import MariaDBClient
-from data.octopus.model import Meter, MeterSource
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -28,15 +28,7 @@ class ConsumptionSummaryRetriever:
         logger.info(f"Consumption summary refresh: {len(summaries)} day(s) summarized.")
 
 
-class ConsumptionSummaryBackfillSource(MeterSource, Protocol):
-    def fetch_consumption(
-        self, meter: Meter, period_from: datetime
-    ) -> Tuple[Optional[str], List[Consumption]]: ...
-
-    def fetch_consumption_page(
-        self, energy: Energy, next_page: str
-    ) -> Tuple[Optional[str], List[Consumption]]: ...
-
+class ConsumptionSummaryBackfillSource(ConsumptionFetchSource, Protocol):
     def persist_consumption_summary(
         self, summaries: List[ConsumptionSummary]
     ) -> None: ...

@@ -189,6 +189,10 @@ def main() -> None:
 
     startup(consumption, refresh_config)
     run_initial_pricing_sync(pricing)
+    # The backfill (background thread) and this eager sync (foreground) can
+    # both upsert the same recent (energy, date) row concurrently on first
+    # startup. Harmless: both compute the same correct total from the same
+    # underlying consumption rows, so whichever writes last is still right.
     run_backfill_at_startup(yearly_comparison_backfill, client.mariadb)
     run_initial_consumption_summary_sync(consumption_summary)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)

@@ -213,6 +213,12 @@ class MariaDBClient:
     def read_consumption_summarization_window(
         self, as_of: date
     ) -> List[ConsumptionSummary]:
+        # Deliberately no lower bound on the raw `consumption` scan below:
+        # gap detection (a day outside the trailing window with no existing
+        # summary row) requires seeing all of history, not just the recent
+        # cutoff. Table growth is bounded by the raw retention window once
+        # pruning ships (chore/consumption-data-pruning); until then this
+        # scales with total raw row count, same as the rest of the app.
         cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS)
         with self.session_read_scope() as session:
             consumption_date = func.date(
