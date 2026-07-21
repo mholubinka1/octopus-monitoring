@@ -2,13 +2,15 @@ import argparse
 import datetime
 import logging.config
 import sys
+import threading
 import time
 from datetime import datetime as dt
 from datetime import timedelta
 from logging import Logger, getLogger
-from typing import Callable
+from typing import Callable, Optional
 
 from common.config import RefreshSettings, get_settings
+from common.decorator import retry_with_exponential_backoff
 from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
@@ -48,13 +50,25 @@ def _schedule_refresh_job(
     refresh_fn: Callable[[], None],
     mariadb: MariaDBClient,
 ) -> Job:
-    def refresh() -> None:
+    worker: Optional[threading.Thread] = None
+
+    @retry_with_exponential_backoff()
+    def attempt_with_backoff() -> None:
         try:
             refresh_fn()
             mariadb.record_job_run(job_name, "success")
         except Exception as e:
             mariadb.record_job_run(job_name, "failure", error=str(e))
-            raise
+            raise RuntimeError(f"{job_name} failed: {e}") from e
+
+    def refresh() -> threading.Thread:
+        nonlocal worker
+        if worker is not None and worker.is_alive():
+            logger.info(f"{job_name} is still running; skipping this invocation.")
+            return worker
+        worker = threading.Thread(target=attempt_with_backoff, daemon=True)
+        worker.start()
+        return worker
 
     return scheduler.every(refresh_config.refresh_interval).hours.do(refresh)
 
