@@ -2,40 +2,38 @@
 
 One SQL block per panel, grouped by dashboard row, meant to be copied directly into Grafana's MySQL/MariaDB query editor. Mirrors the convention used in `pi-desktop/monitoring/grafana/influxdb2/flux_queries` (one query per panel, comment/heading identifying the panel), adapted to Markdown with fenced SQL blocks.
 
-**Status**: first-pass queries drafted during the design session, against the schema below. Validate against the real schema once `/write-spec` and implementation land — table/column names here are the spec input, not yet built.
+**Status**: reconciled with the current `feature/agile-cost-forecast` and `feature/grafana-dashboard` specs (`.agent-docs/specs/`) — the tariff-comparison feature these queries originally assumed has been dropped entirely; queries below reflect that. Validate against the real schema once implementation lands — table/column names here are the spec input, not yet built (except `consumption`, `agreement`, `product`, `product_rate`, `job_run`, which already exist).
 
-Two Grafana dashboard variables are assumed throughout:
+One Grafana dashboard variable is assumed throughout:
 
-- `${region}` — the account's GSP region code (see **Region Code / GSP** in `context.md`)
-- `${variable_product_code}` — the Octopus standard variable product code to treat as the comparison baseline for savings panels (Octopus renames/rotates this product periodically — this variable needs manual updates when that happens; there's no live "current standard variable product" endpoint being polled)
+- `${region}` — the account's GSP region code (see **Region Code / GSP** in `.agent-docs/context.md`)
 
 ## Schema assumed
 
 ```text
-consumption            (existing) id, energy, period_from, period_to, raw_value, unit, est_kwh
-agreement               (new) id, energy, product_code, tariff_code, valid_from, valid_to
-product                 (new) product_code PK, display_name, direction
-product_rate            (new) id, product_code, region, valid_from, valid_to, unit_rate, standing_charge
-agile_forecast           (new) id, region, period_from, period_to, forecast_unit_rate, fetched_at
-tariff_comparison_result (new) id, billing_period_start, billing_period_end, actual_product_code,
-                                actual_cost, cheapest_product_code, cheapest_cost,
-                                projected_month_end_cost, computed_at
-daily_saving             (new) date PK, actual_cost, variable_cost, saving   -- exempt from 400-day pruning (ADR-0003)
-job_run                  (new) id, job_name, status, ran_at, error_message
-
+consumption      (existing) id, energy, period_from, period_to, raw_value, unit, est_kwh
+agreement        (existing) id, energy, product_code, tariff_code, valid_from, valid_to
+product          (existing) product_code PK, display_name, direction
+product_rate     (existing) id, product_code, region, valid_from, valid_to, unit_rate, standing_charge
+job_run          (existing) id, job_name, status, ran_at, error_message
+agile_forecast   (new) id, region, period_from, period_to, forecast_unit_rate, fetched_at
+cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost_to_date,
+                        projected_total_cost, computed_at
 ```
 
-`agreement` records which `product_code` applied to the meter for a given period — added during this session so cost queries don't have to hardcode "you're on Agile." `product_rate` is the single source of truth for rates: your own product's rates and every comparison candidate's rates live in the same table, keyed by `product_code`.
+`agile_forecast` caches the raw half-hourly AgilePredict response (real 14-day forecast only) for charting. `cost_forecast` is the billing-period-level summary the app computes once daily (actual cost so far + full-period projection, using tiled forecast data internally beyond day 14 — that tiling isn't persisted point-by-point, only the summary is).
 
 ---
 
 ## Row 1 — Cost Summary
 
-### Today's Cost (stat)
+### Yesterday's Cost (stat)
+
+No dependency on billing period — pure join against data already fully populated by the existing pipeline.
 
 ```sql
 SELECT
-  ROUND(SUM(c.est_kwh * pr.unit_rate), 2) + MAX(pr.standing_charge) AS today_cost_gbp
+  ROUND(SUM(c.est_kwh * pr.unit_rate), 2) + MAX(pr.standing_charge) AS yesterday_cost_gbp
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
@@ -45,53 +43,38 @@ JOIN product_rate pr
  AND pr.region = '${region}'
  AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
-  AND c.period_from >= CURDATE();
+  AND c.period_from >= CURDATE() - INTERVAL 1 DAY
+  AND c.period_from < CURDATE();
 
 ```
 
-### Month-to-date Cost (stat)
+### This Billing Period's Cost So Far (stat)
 
 ```sql
-SELECT actual_cost AS month_to_date_cost_gbp
-FROM tariff_comparison_result
+SELECT actual_cost_to_date AS billing_period_cost_gbp
+FROM cost_forecast
 ORDER BY computed_at DESC
 LIMIT 1;
 
 ```
 
-### Projected Month-end Cost (stat)
+### Total Expected Cost This Billing Period (stat)
 
 ```sql
-SELECT projected_month_end_cost AS projected_cost_gbp
-FROM tariff_comparison_result
+SELECT projected_total_cost AS projected_cost_gbp
+FROM cost_forecast
 ORDER BY computed_at DESC
 LIMIT 1;
 
 ```
 
-### This Month vs Last Month (bar gauge)
+### Current Billing Period (stat/table)
+
+Context for the two panels above — shows the dates they're computed against.
 
 ```sql
-SELECT
-  billing_period_start,
-  actual_cost
-FROM tariff_comparison_result t1
-WHERE computed_at = (
-  SELECT MAX(computed_at) FROM tariff_comparison_result t2
-  WHERE t2.billing_period_start = t1.billing_period_start
-)
-ORDER BY billing_period_start DESC
-LIMIT 2;
-
-```
-
-### Cheapest Tariff Saving (stat)
-
-```sql
-SELECT
-  cheapest_product_code,
-  ROUND(actual_cost - cheapest_cost, 2) AS potential_saving_gbp
-FROM tariff_comparison_result
+SELECT billing_period_start, billing_period_end, computed_at
+FROM cost_forecast
 ORDER BY computed_at DESC
 LIMIT 1;
 
@@ -152,24 +135,6 @@ JOIN product_rate pr
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 ORDER BY c.period_from;
-
-```
-
-### Tariff Comparison Detail (table)
-
-```sql
-SELECT
-  billing_period_start,
-  billing_period_end,
-  actual_product_code,
-  actual_cost,
-  cheapest_product_code,
-  cheapest_cost,
-  ROUND(actual_cost - cheapest_cost, 2) AS saving_gbp,
-  computed_at
-FROM tariff_comparison_result
-ORDER BY computed_at DESC
-LIMIT 1;
 
 ```
 
@@ -315,19 +280,6 @@ ORDER BY FIELD(DAYNAME(period_from), 'Monday','Tuesday','Wednesday','Thursday','
 
 ```
 
-### Cumulative Agile-vs-Variable Savings (time series)
-
-Reads from `daily_saving`, not raw `consumption`/`product_rate` — those are pruned at 400 days (ADR-0003), but `daily_saving` is a derived summary and exempt.
-
-```sql
-SELECT
-  date AS time,
-  ROUND(SUM(saving) OVER (ORDER BY date), 2) AS cumulative_saving_gbp
-FROM daily_saving
-ORDER BY date;
-
-```
-
 ### Standing Charge vs Unit-Rate Cost Split (stacked bar, daily)
 
 ```sql
@@ -406,7 +358,7 @@ ORDER BY job_name;
 
 ```
 
-### agile_predict API Reachability (stat)
+### AgilePredict/Kraken Reachability (stat)
 
 ```sql
 SELECT
@@ -414,7 +366,7 @@ SELECT
   ran_at AS last_checked,
   error_message
 FROM job_run
-WHERE job_name = 'fetch_agile_forecast'
+WHERE job_name = 'cost_forecast_refresh'
 ORDER BY ran_at DESC
 LIMIT 1;
 

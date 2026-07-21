@@ -41,8 +41,8 @@ Implement the real pricing pipeline: fetch Octopus's published product catalogue
 
 ## Out of Scope
 
-Tariff comparison/simulation logic (`feature/cheapest-tariff-comparison`). Cost forecasting (`feature/agile-cost-forecast`). Any dashboard changes (`feature/grafana-dashboard`). Export/Outgoing Octopus tariffs (declined during the design session).
+Cost forecasting (`feature/agile-cost-forecast`). Any dashboard changes (`feature/grafana-dashboard`). Export/Outgoing Octopus tariffs (declined during the design session).
 
 ## Further Notes
 
-This is the foundational data-pipeline branch that `feature/cheapest-tariff-comparison` and `feature/agile-cost-forecast` both build on. See **Agreement** and **Product / Product Rate** in `.agent-docs/context.md`, and `.agent-docs/grafana-queries.md` for how these tables are expected to be queried downstream.
+This is the foundational data-pipeline branch that `feature/agile-cost-forecast` builds on. See **Agreement** and **Product / Product Rate** in `.agent-docs/context.md`, and `grafana/mariadb/queries.md` for how these tables are expected to be queried downstream.
