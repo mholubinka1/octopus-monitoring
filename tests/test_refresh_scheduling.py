@@ -80,22 +80,24 @@ def test_a_second_invocation_is_skipped_while_a_worker_is_already_running(
     consumption = Mock(spec=ConsumptionRetriever)
     started = threading.Event()
     release = threading.Event()
+    released_in_time: list[bool] = []
 
     def slow_refresh() -> None:
         started.set()
-        release.wait(timeout=5)
+        released_in_time.append(release.wait(timeout=5))
 
     consumption.refresh.side_effect = slow_refresh
 
     job = register_jobs(scheduler, REFRESH_CONFIG, consumption, mariadb_client)
     first_worker = job.run()
-    started.wait(timeout=5)
+    assert started.wait(timeout=5), "worker did not start within timeout"
 
     second_worker = job.run()
 
     release.set()
     first_worker.join()
 
+    assert released_in_time == [True], "worker did not observe release within timeout"
     assert second_worker is first_worker
     assert consumption.refresh.call_count == 1
 
