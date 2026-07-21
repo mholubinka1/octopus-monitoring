@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from common.config import ApplicationSettings
-from data.model import Consumption, Energy
+from data.model import Consumption, ConsumptionSummary, Energy
 from data.mysql.client import MariaDBClient
 from data.octopus.api import OctopusEnergyAPIClient
 from data.octopus.model import Account, Agreement, Meter, Product, Rate
@@ -44,6 +44,9 @@ class MonitoringClient:
 
     def persist_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
         self.mariadb.write_consumption(meter, consumption)
+
+    def persist_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+        self.mariadb.write_consumption_summary(summaries)
 
     def persist_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
         self.mariadb.write_agreement(meter, agreements)

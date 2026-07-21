@@ -1,0 +1,158 @@
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import List, Optional, Tuple
+
+import responses
+from common.config import OctopusAPISettings
+from data.consumption_summary import ConsumptionSummaryBackfill
+from data.model import Consumption, ConsumptionSummary, Energy
+from data.mysql import model
+from data.mysql.client import MariaDBClient
+from data.octopus.api import OctopusEnergyAPIClient
+from data.octopus.model import Agreement, Electricity, Meter
+
+CONSUMPTION_ENDPOINT = (
+    "https://api.octopus.energy/v1/electricity-meter-points/"
+    "1234567890123/meters/00A1234567/consumption/"
+)
+
+
+class _RealConsumptionSummaryBackfillSource:
+    """A real ConsumptionSummaryBackfillSource adapter for tests: genuine
+    OctopusEnergyAPIClient and MariaDBClient underneath, with meters fixed up
+    front rather than fetched, so tests only need to mock the consumption
+    HTTP endpoints ConsumptionSummaryBackfill actually calls."""
+
+    def __init__(
+        self,
+        octopus: OctopusEnergyAPIClient,
+        mariadb: MariaDBClient,
+        meters: List[Meter],
+    ) -> None:
+        self._octopus = octopus
+        self._mariadb = mariadb
+        self.meters = meters
+
+    def refresh_meters(self) -> None:
+        pass
+
+    def fetch_consumption(
+        self, meter: Meter, period_from: datetime
+    ) -> Tuple[Optional[str], List[Consumption]]:
+        return self._octopus.get_consumption(meter, period_from)
+
+    def fetch_consumption_page(
+        self, energy: Energy, next_page: str
+    ) -> Tuple[Optional[str], List[Consumption]]:
+        return self._octopus.get_consumption_directly_from_endpoint(energy, next_page)
+
+    def persist_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+        self._mariadb.write_consumption_summary(summaries)
+
+
+def _make_meter() -> Electricity:
+    return Electricity(
+        mpan="1234567890123",
+        serial_number="00A1234567",
+        agreements=[
+            Agreement(
+                tariff_code="E-1R-VAR-22-11-01-A",
+                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_to=None,
+            )
+        ],
+    )
+
+
+@responses.activate
+def test_run_summarizes_two_years_of_fetched_consumption_without_writing_raw_rows(
+    mariadb_client: MariaDBClient,
+) -> None:
+    as_of = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    period_from = as_of - timedelta(days=730)
+
+    responses.add(
+        responses.GET,
+        CONSUMPTION_ENDPOINT
+        + f"?page_size=100&period_from={period_from.isoformat().replace('+00:00', 'Z')}"
+        "&order_by=period",
+        json={
+            "results": [
+                {
+                    "consumption": "1.5",
+                    "interval_start": "2024-06-01T00:00:00+00:00",
+                    "interval_end": "2024-06-01T00:30:00+00:00",
+                },
+                {
+                    "consumption": "2.5",
+                    "interval_start": "2024-06-01T00:30:00+00:00",
+                    "interval_end": "2024-06-01T01:00:00+00:00",
+                },
+                {
+                    "consumption": "1.0",
+                    "interval_start": "2024-06-02T00:00:00+00:00",
+                    "interval_end": "2024-06-02T00:30:00+00:00",
+                },
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+
+    meter = _make_meter()
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+    source = _RealConsumptionSummaryBackfillSource(octopus, mariadb_client, [meter])
+    backfill = ConsumptionSummaryBackfill(source)
+
+    backfill.run(as_of=as_of)
+
+    with mariadb_client.session_read_scope() as session:
+        summary_rows = session.query(model.daily_consumption_summary).all()
+        raw_rows = session.query(model.consumption).all()
+
+    stored = {(row.energy, row.date): row.total_kwh for row in summary_rows}
+    assert stored[("E", as_of.replace(year=2024, month=6, day=1).date())] == Decimal(
+        "4.00000"
+    )
+    assert stored[("E", as_of.replace(year=2024, month=6, day=2).date())] == Decimal(
+        "1.00000"
+    )
+    assert raw_rows == []
+
+
+@responses.activate
+def test_run_anchors_period_from_to_midnight_even_when_as_of_has_a_time_component(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # A non-midnight as_of (e.g. the app started mid-day) must not leak its
+    # time-of-day into period_from -- Octopus would then omit intervals
+    # before that time on the oldest backfilled day, producing a partial
+    # daily total for it.
+    as_of = datetime(2026, 1, 15, 14, 32, 7, tzinfo=timezone.utc)
+    expected_period_from = datetime(2026, 1, 15, tzinfo=timezone.utc) - timedelta(
+        days=730
+    )
+
+    responses.add(
+        responses.GET,
+        CONSUMPTION_ENDPOINT
+        + "?page_size=100&period_from="
+        + expected_period_from.isoformat().replace("+00:00", "Z")
+        + "&order_by=period",
+        json={"results": [], "next": None},
+        status=200,
+    )
+
+    meter = _make_meter()
+    octopus = OctopusEnergyAPIClient(
+        OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    )
+    source = _RealConsumptionSummaryBackfillSource(octopus, mariadb_client, [meter])
+    backfill = ConsumptionSummaryBackfill(source)
+
+    # If period_from had carried as_of's 14:32:07 time-of-day instead of
+    # being anchored to midnight, the registered response above wouldn't
+    # match and `responses` would raise a ConnectionError instead.
+    backfill.run(as_of=as_of)

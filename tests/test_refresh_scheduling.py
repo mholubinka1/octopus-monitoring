@@ -4,12 +4,19 @@ from unittest.mock import Mock
 import pytest
 from common.config import RefreshSettings
 from data.consumption import ConsumptionRetriever
+from data.consumption_summary import (
+    ConsumptionSummaryBackfill,
+    ConsumptionSummaryRetriever,
+)
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from main import (
+    register_consumption_summary_job,
     register_jobs,
     register_pricing_job,
+    run_backfill_at_startup,
+    run_initial_consumption_summary_sync,
     run_initial_pricing_sync,
     run_pending_safely,
 )
@@ -155,3 +162,120 @@ def test_run_initial_pricing_sync_does_not_propagate_a_startup_failure() -> None
     pricing.refresh.side_effect = RuntimeError("Octopus API unavailable")
 
     run_initial_pricing_sync(pricing)
+
+
+def test_consumption_summary_job_is_registered_for_monday_at_0300(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+
+    job = register_consumption_summary_job(
+        scheduler, Mock(spec=ConsumptionSummaryRetriever), mariadb_client
+    )
+
+    assert job.unit == "weeks"
+    assert job.start_day == "monday"
+    assert str(job.at_time) == "03:00:00"
+
+
+def test_a_successful_consumption_summary_run_is_recorded_as_a_successful_job_run(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
+
+    job = register_consumption_summary_job(
+        scheduler, consumption_summary, mariadb_client
+    )
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert len(runs) == 1
+    assert runs[0].job_name == "update_consumption_summary"
+    assert runs[0].status == "success"
+
+
+def test_a_persistently_failing_consumption_summary_run_retries_with_backoff(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sleep_delays: list[int] = []
+    monkeypatch.setattr("common.decorator.time.sleep", sleep_delays.append)
+    scheduler = Scheduler()
+    consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
+    consumption_summary.refresh.side_effect = RuntimeError("MariaDB unavailable")
+
+    job = register_consumption_summary_job(
+        scheduler, consumption_summary, mariadb_client
+    )
+    job.run().join()
+
+    assert sleep_delays == [60, 120, 240, 480]
+    assert consumption_summary.refresh.call_count == 5
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert len(runs) == 5
+    assert all(run.status == "failure" for run in runs)
+    assert all(run.error_message == "MariaDB unavailable" for run in runs)
+
+
+def test_run_initial_consumption_summary_sync_does_not_propagate_a_startup_failure() -> (
+    None
+):
+    consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
+    consumption_summary.refresh.side_effect = RuntimeError("MariaDB unavailable")
+
+    run_initial_consumption_summary_sync(consumption_summary)
+
+
+def test_backfill_runs_and_records_success_on_first_startup(
+    mariadb_client: MariaDBClient,
+) -> None:
+    backfill = Mock(spec=ConsumptionSummaryBackfill)
+
+    worker = run_backfill_at_startup(backfill, mariadb_client)
+    assert worker is not None
+    worker.join()
+
+    backfill.run.assert_called_once()
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+    assert len(runs) == 1
+    assert runs[0].job_name == "yearly_comparison_backfill"
+    assert runs[0].status == "success"
+
+
+def test_backfill_is_skipped_once_a_prior_run_has_succeeded(
+    mariadb_client: MariaDBClient,
+) -> None:
+    mariadb_client.record_job_run("yearly_comparison_backfill", "success")
+    backfill = Mock(spec=ConsumptionSummaryBackfill)
+
+    worker = run_backfill_at_startup(backfill, mariadb_client)
+
+    assert worker is None
+    backfill.run.assert_not_called()
+
+
+def test_a_persistently_failing_backfill_retries_with_backoff_and_does_not_crash(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sleep_delays: list[int] = []
+    monkeypatch.setattr("common.decorator.time.sleep", sleep_delays.append)
+    backfill = Mock(spec=ConsumptionSummaryBackfill)
+    backfill.run.side_effect = RuntimeError("Octopus API unavailable")
+
+    worker = run_backfill_at_startup(backfill, mariadb_client)
+    assert worker is not None
+    worker.join()
+
+    assert sleep_delays == [60, 120, 240, 480]
+    assert backfill.run.call_count == 5
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+    assert len(runs) == 5
+    assert all(run.status == "failure" for run in runs)

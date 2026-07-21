@@ -2,7 +2,7 @@
 
 One SQL block per panel, grouped by dashboard row, meant to be copied directly into Grafana's MySQL/MariaDB query editor. Mirrors the convention used in `pi-desktop/monitoring/grafana/influxdb2/flux_queries` (one query per panel, comment/heading identifying the panel), adapted to Markdown with fenced SQL blocks.
 
-**Status**: reconciled with the current `feature/agile-cost-forecast` and `feature/grafana-dashboard` specs (`.agent-docs/specs/`) — the tariff-comparison feature these queries originally assumed has been dropped entirely; queries below reflect that. Validate against the real schema once implementation lands — table/column names here are the spec input, not yet built (except `consumption`, `agreement`, `product`, `product_rate`, `job_run`, which already exist).
+**Status**: reconciled with the current `feature/agile-cost-forecast` and `feature/grafana-dashboard` specs (`.agent-docs/specs/`) — the tariff-comparison feature these queries originally assumed has been dropped entirely; queries below reflect that. Validate against the real schema once implementation lands — table/column names here are the spec input, not yet built (except `consumption`, `agreement`, `product`, `product_rate`, `job_run`, `daily_consumption_summary`, which already exist).
 
 One Grafana dashboard variable is assumed throughout:
 
@@ -11,11 +11,12 @@ One Grafana dashboard variable is assumed throughout:
 ## Schema assumed
 
 ```text
-consumption      (existing) id, energy, period_from, period_to, raw_value, unit, est_kwh
-agreement        (existing) id, energy, product_code, tariff_code, valid_from, valid_to
-product          (existing) product_code PK, display_name, direction
-product_rate     (existing) id, product_code, region, valid_from, valid_to, unit_rate, standing_charge
-job_run          (existing) id, job_name, status, ran_at, error_message
+consumption               (existing) id, energy, period_from, period_to, raw_value, unit, est_kwh
+agreement                 (existing) id, energy, product_code, tariff_code, valid_from, valid_to
+product                   (existing) product_code PK, display_name, direction
+product_rate              (existing) id, product_code, region, valid_from, valid_to, unit_rate, standing_charge
+job_run                   (existing) id, job_name, status, ran_at, error_message
+daily_consumption_summary (existing) energy, date PK(energy, date), total_kwh
 agile_forecast   (new) id, region, period_from, period_to, forecast_unit_rate, fetched_at
 cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost_to_date,
                         projected_total_cost, computed_at
@@ -343,7 +344,122 @@ ORDER BY time;
 
 ---
 
-## Row 4 — Health
+## Row 4 — Yearly Comparison
+
+Reads from `daily_consumption_summary`, not raw `consumption` — populated by `feature/yearly-consumption-comparison`'s weekly `update_consumption_summary` job (and a one-time startup backfill), and exempt from the raw-data retention window, so these panels stay correct after `chore/consumption-data-pruning` starts deleting `consumption` rows older than 45 days.
+
+### Monthly Total Consumption — Last 12 Months, Electricity (bar/time series)
+
+Anchored to the first of the month 11 months ago, not `CURDATE() - INTERVAL 12 MONTH` — that would yield a partial *oldest* month instead of 12 full calendar-month buckets.
+
+```sql
+SELECT
+  DATE_FORMAT(date, '%b %Y') AS month,
+  SUM(total_kwh) AS monthly_kwh
+FROM daily_consumption_summary
+WHERE energy = 'E'
+  AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
+GROUP BY DATE_FORMAT(date, '%Y-%m')
+ORDER BY MIN(date);
+
+```
+
+### Monthly Total Consumption — Last 12 Months, Gas (bar/time series)
+
+```sql
+SELECT
+  DATE_FORMAT(date, '%b %Y') AS month,
+  SUM(total_kwh) AS monthly_kwh
+FROM daily_consumption_summary
+WHERE energy = 'G'
+  AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
+GROUP BY DATE_FORMAT(date, '%Y-%m')
+ORDER BY MIN(date);
+
+```
+
+### Weekly Year-on-Year Change — Last 52/53 Weeks, Electricity (time series)
+
+Groups by `YEARWEEK(date, 3)` (ISO week numbering, mode 3) rather than `YEAR(date)` paired separately with `WEEK(date, 3)` — the latter can misattribute early-January/late-December boundary dates to the wrong week-year, exactly what ISO week numbering exists to avoid. Each week is compared against the same ISO week number one year prior (`yearweek - 100`, e.g. `202630 - 100 = 202530` — subtracting 100 shifts back exactly one week-year while preserving the week number). Both the raw % change and a 4-week trailing moving average of it are returned as separate columns for the same panel.
+
+```sql
+WITH weekly AS (
+  SELECT YEARWEEK(date, 3) AS yearweek, SUM(total_kwh) AS weekly_kwh
+  FROM daily_consumption_summary
+  WHERE energy = 'E'
+  GROUP BY YEARWEEK(date, 3)
+),
+target AS (
+  SELECT
+    yearweek,
+    weekly_kwh AS this_year_kwh,
+    -- Week-53 fallback: some ISO years have a week 53 (roughly every 5-6
+    -- years) but the prior year may only go up to week 52. In that case,
+    -- compare against that prior year's week 52 instead of leaving the
+    -- comparison null.
+    CASE
+      WHEN MOD(yearweek, 100) = 53
+       AND (yearweek - 100) NOT IN (SELECT yearweek FROM weekly)
+      THEN (yearweek - 100) - 1
+      ELSE yearweek - 100
+    END AS comparator_yearweek
+  FROM weekly
+  WHERE yearweek >= YEARWEEK(CURDATE() - INTERVAL 52 WEEK, 3)
+)
+SELECT
+  t.yearweek,
+  ROUND((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100, 2) AS yoy_pct_change,
+  ROUND(
+    AVG((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100)
+      OVER (ORDER BY t.yearweek ROWS BETWEEN 3 PRECEDING AND CURRENT ROW),
+    2
+  ) AS yoy_pct_change_4wk_avg
+FROM target t
+LEFT JOIN weekly c ON c.yearweek = t.comparator_yearweek
+ORDER BY t.yearweek;
+
+```
+
+### Weekly Year-on-Year Change — Last 52/53 Weeks, Gas (time series)
+
+```sql
+WITH weekly AS (
+  SELECT YEARWEEK(date, 3) AS yearweek, SUM(total_kwh) AS weekly_kwh
+  FROM daily_consumption_summary
+  WHERE energy = 'G'
+  GROUP BY YEARWEEK(date, 3)
+),
+target AS (
+  SELECT
+    yearweek,
+    weekly_kwh AS this_year_kwh,
+    -- Week-53 fallback: see the electricity panel above for the rationale.
+    CASE
+      WHEN MOD(yearweek, 100) = 53
+       AND (yearweek - 100) NOT IN (SELECT yearweek FROM weekly)
+      THEN (yearweek - 100) - 1
+      ELSE yearweek - 100
+    END AS comparator_yearweek
+  FROM weekly
+  WHERE yearweek >= YEARWEEK(CURDATE() - INTERVAL 52 WEEK, 3)
+)
+SELECT
+  t.yearweek,
+  ROUND((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100, 2) AS yoy_pct_change,
+  ROUND(
+    AVG((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100)
+      OVER (ORDER BY t.yearweek ROWS BETWEEN 3 PRECEDING AND CURRENT ROW),
+    2
+  ) AS yoy_pct_change_4wk_avg
+FROM target t
+LEFT JOIN weekly c ON c.yearweek = t.comparator_yearweek
+ORDER BY t.yearweek;
+
+```
+
+---
+
+## Row 5 — Health
 
 ### Last Successful Run per Job (table)
 

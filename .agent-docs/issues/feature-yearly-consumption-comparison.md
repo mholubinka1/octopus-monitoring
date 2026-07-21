@@ -1,5 +1,7 @@
 # Issues: feature-yearly-consumption-comparison
 
+> Work complete — PR ready to merge.
+
 ## Daily consumption summary schema (#401)
 
 **Blocked by**: None
@@ -18,13 +20,13 @@ can populate it.
 
 ### Acceptance criteria
 
-- [ ] `daily_consumption_summary(energy, date, total_kwh)` exists in
+- [x] `daily_consumption_summary(energy, date, total_kwh)` exists in
       `model.py` with `(energy, date)` as the composite primary key
-- [ ] `MariaDBClient.write_consumption_summary` upserts rows via the existing
+- [x] `MariaDBClient.write_consumption_summary` upserts rows via the existing
       `upsert`/`session_write_scope` pattern
-- [ ] A unit test (SQLite in-memory, mirroring `test_agreement_persistence.py`)
+- [x] A unit test (SQLite in-memory, mirroring `test_agreement_persistence.py`)
       asserts upsert-on-conflict behaviour for the new table
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
 
@@ -48,16 +50,16 @@ consumption corrections.
 
 ### Acceptance criteria
 
-- [ ] Given seeded `consumption` rows across several days for both energies,
+- [x] Given seeded `consumption` rows across several days for both energies,
       running `refresh()` produces correct `daily_consumption_summary` totals
       per `(energy, date)`
-- [ ] Given a day's summary row already exists with a stale total, and raw
+- [x] Given a day's summary row already exists with a stale total, and raw
       `consumption` for that day (within the trailing 14 days) now sums to a
       different total, running `refresh()` again corrects the stored total
-- [ ] Given raw `consumption` exists for a day older than 14 days with no
+- [x] Given raw `consumption` exists for a day older than 14 days with no
       existing summary row, running `refresh()` summarizes that day too (gap
       case)
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
 
@@ -70,25 +72,80 @@ consumption corrections.
 ### What to build
 
 Register `ConsumptionSummaryRetriever.refresh()` as a new scheduled job,
-`update_consumption_summary`, on a weekly cadence distinct from the existing
-`refresh_interval_hours`-driven consumption/pricing jobs — this needs its own
-scheduler entry. Wrap it in the existing `job_run` mechanism, reusing
-`_schedule_refresh_job`'s background-worker-thread-with-backoff mechanism
+`update_consumption_summary`, on a fixed weekly cadence — Monday at 03:00
+(`scheduler.every().monday.at("03:00")`) — distinct from the existing
+`refresh_interval_hours`-driven consumption/pricing jobs. Wrap it in the
+existing `job_run` mechanism, reusing `_schedule_refresh_job`'s
+background-worker-thread-with-backoff mechanism
 (`bugfix/consumption-timezone-and-scheduler-backoff`, not the plain
 try/except this issue originally assumed) so its outcome is recorded like
 every other scheduled job and a persistently-failing run backs off instead
-of retrying every tick. This is also the job `chore/consumption-data-pruning`'s
-pruning job will be gated on succeeding.
+of retrying every tick. Generalize `_schedule_refresh_job` to take the
+scheduling interval as a `Callable[[Scheduler], Job]` instead of hardcoding
+`.hours`, so both the existing hourly-ish jobs and this weekly one share the
+same wrapper with no duplication. Introduce a `WEEKLY_JOB_TIME = "03:00"`
+constant, plus a forward-looking (currently unused) `DAILY_JOB_TIME = "04:00"`
+constant for future daily-cadence jobs. This is also the job
+`chore/consumption-data-pruning`'s pruning job will be gated on succeeding.
 
 ### Acceptance criteria
 
-- [ ] `update_consumption_summary` is registered on a weekly schedule,
+- [x] `update_consumption_summary` is registered on `scheduler.every().monday.at("03:00")`,
       independent of `refresh_interval_hours`
-- [ ] A successful run records a `job_run` row with `status="success"`
-- [ ] A failing run records `status="failure"` with the error message, and
+- [x] A successful run records a `job_run` row with `status="success"`
+- [x] A failing run records `status="failure"` with the error message, and
       does not crash the app (matches `test_refresh_scheduling.py`'s existing
       pattern for the other scheduled jobs)
-- [ ] Existing test suite remains green
+- [x] `_schedule_refresh_job` is generalized (interval as a callback) with
+      no behavioural change to the existing hourly consumption/pricing jobs
+- [x] Existing test suite remains green
+
+---
+
+## One-time 2-year historical backfill for daily_consumption_summary (#415)
+
+**Blocked by**: #402
+
+**User stories**: 1, 2, 3, 4, 5
+
+### What to build
+
+A new `ConsumptionSummaryBackfill` class (`app/data/consumption_summary.py`,
+alongside `ConsumptionSummaryRetriever`), following the same verb-Protocol DI
+seam as `ConsumptionRetriever`/`PricingRetriever` — this one calls the
+external Octopus API directly, unlike #402's pure DB-to-DB retriever. On
+first startup only, it fetches ~2 years of consumption per meter via the
+existing paginated `fetch_consumption`/`fetch_consumption_page` verbs,
+aggregates in memory by `(energy, date)`, and writes only to
+`daily_consumption_summary` via a new `persist_consumption_summary` verb —
+never to raw `consumption`, so the 45-day retention window is unaffected.
+
+Idempotency is gated on `job_run` history: a new
+`MariaDBClient.has_successful_job_run(job_name)` checks whether a `job_run`
+row with `status="success"` already exists for job name
+`yearly_comparison_backfill`; if so, the backfill no-ops. Runs once at
+startup (not on the recurring scheduler), in a background thread reusing the
+same retry-with-backoff mechanism as `_schedule_refresh_job`.
+
+Also reverts `config.yml`/`config.yml.template`'s `retention_days` from
+`400` to `45` (and the README's Configuration section) — the dedicated
+2-year backfill makes the earlier rationale for the elevated value obsolete.
+GitHub issue #406 (on `chore/consumption-data-pruning`) already tracks this
+same revert; once this ships, #406 will find it already done.
+
+### Acceptance criteria
+
+- [x] `ConsumptionSummaryBackfill.run()` fetches ~2 years of consumption per
+      meter and writes correct `daily_consumption_summary` totals per
+      `(energy, date)`, without writing any rows to raw `consumption`
+- [x] A second call (simulating an app restart) is a no-op — no further
+      Octopus API calls, verified via the `job_run` gate
+- [x] A persistently-failing backfill retries with exponential backoff
+      (mirroring `test_refresh_scheduling.py`'s existing pattern) and does
+      not crash startup
+- [x] `config.yml`/`config.yml.template`'s `retention_days` is `45`;
+      README's Configuration section updated to match
+- [x] Existing test suite remains green
 
 ---
 
@@ -108,16 +165,16 @@ consumption over the trailing 12 months, one series per energy
 
 ### Acceptance criteria
 
-- [ ] Query added to `grafana/mariadb/queries.md` under a new "Yearly
+- [x] Query added to `grafana/mariadb/queries.md` under a new "Yearly
       Comparison" section, following the existing one-query-per-panel,
       fenced-SQL convention
-- [ ] Query groups by calendar month, covers the trailing 12 months, and
+- [x] Query groups by calendar month, covers the trailing 12 months, and
       produces a distinct row per energy
-- [ ] The window is 12 full calendar-month buckets (current month plus the
+- [x] The window is 12 full calendar-month buckets (current month plus the
       11 preceding complete months) — anchored to the first of the month,
       not a naive `CURDATE() - INTERVAL 12 MONTH`, which yields a partial
       *oldest* month instead
-- [ ] Month label format is `%b %Y` (e.g. "Jan 2026"), not month name alone
+- [x] Month label format is `%b %Y` (e.g. "Jan 2026"), not month name alone
 
 ---
 
@@ -144,12 +201,12 @@ comparison null. Documentation-only change — no application code.
 
 ### Acceptance criteria
 
-- [ ] Query added to `grafana/mariadb/queries.md`, grouping by
+- [x] Query added to `grafana/mariadb/queries.md`, grouping by
       `YEARWEEK(date, 3)` (not `YEAR(date)` + `WEEK(date, 3)` separately)
-- [ ] Raw YoY % change and a 4-week trailing moving average of that % are
+- [x] Raw YoY % change and a 4-week trailing moving average of that % are
       both present as separate series in the same query/panel
-- [ ] The week-53-fallback-to-week-52 rule is implemented and called out in
+- [x] The week-53-fallback-to-week-52 rule is implemented and called out in
       an inline comment in the query, given it's a non-obvious edge case
-- [ ] Query produces a distinct row per energy
+- [x] Query produces a distinct row per energy
 
 ---

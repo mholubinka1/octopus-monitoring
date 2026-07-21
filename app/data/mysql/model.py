@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, Numeric, String
+from sqlalchemy import Column, Date, DateTime, Integer, Numeric, String
 from sqlalchemy.dialects.mysql import DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -50,6 +50,15 @@ class product_rate(SQLBase):
     valid_to = Column(DateTime)
     unit_rate = Column(Numeric(9, 6), nullable=False)
     standing_charge = Column(Numeric(9, 6), nullable=False)
+
+
+class daily_consumption_summary(SQLBase):
+    __tablename__ = "daily_consumption_summary"
+    __table_args__ = {"schema": "octopus"}
+
+    energy = Column(String(1), primary_key=True)
+    date = Column(Date, primary_key=True)
+    total_kwh = Column(DECIMAL(8, 5, unsigned=True), nullable=False)
 
 
 class job_run(SQLBase):

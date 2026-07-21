@@ -12,7 +12,7 @@ logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 
-class ConsumptionSource(MeterSource, Protocol):
+class ConsumptionFetchSource(MeterSource, Protocol):
     def fetch_consumption(
         self, meter: Meter, period_from: datetime
     ) -> Tuple[Optional[str], List[Consumption]]: ...
@@ -21,6 +21,8 @@ class ConsumptionSource(MeterSource, Protocol):
         self, energy: Energy, next_page: str
     ) -> Tuple[Optional[str], List[Consumption]]: ...
 
+
+class ConsumptionSource(ConsumptionFetchSource, Protocol):
     def persist_consumption(
         self, meter: Meter, consumption: List[Consumption]
     ) -> None: ...

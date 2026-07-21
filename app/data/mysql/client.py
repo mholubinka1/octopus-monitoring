@@ -1,21 +1,28 @@
 import logging.config
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from logging import Logger, getLogger
 from typing import Any, Generator, List, Optional
 
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
-from data.model import Consumption, as_energy_char
+from data.model import (
+    Consumption,
+    ConsumptionSummary,
+    as_energy_char,
+    energy_from_char,
+)
 from data.mysql import model
 from data.mysql.model import SQLBase
 from data.octopus.model import Agreement, Meter, Product, Rate
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Date, create_engine, func, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
+
+SUMMARIZATION_WINDOW_DAYS = 14
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -202,6 +209,77 @@ class MariaDBClient:
             for rate in rates
         ]
         self._write_all(records, "Product rate data")
+
+    def read_consumption_summarization_window(
+        self, as_of: date
+    ) -> List[ConsumptionSummary]:
+        # Deliberately no lower bound on the raw `consumption` scan below:
+        # gap detection (a day outside the trailing window with no existing
+        # summary row) requires seeing all of history, not just the recent
+        # cutoff. Table growth is bounded by the raw retention window once
+        # pruning ships (chore/consumption-data-pruning); until then this
+        # scales with total raw row count, same as the rest of the app.
+        # `- 1` because the window is inclusive of as_of itself: 14 trailing
+        # days means as_of, as_of-1, ..., as_of-13 (14 dates), not 15.
+        cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS - 1)
+        with self.session_read_scope() as session:
+            consumption_date = func.date(
+                model.consumption.period_from, type_=Date
+            ).label("date")
+            daily_totals = (
+                session.query(
+                    model.consumption.energy.label("energy"),
+                    consumption_date,
+                    func.sum(model.consumption.est_kwh).label("total_kwh"),
+                )
+                .group_by(model.consumption.energy, consumption_date)
+                .subquery()
+            )
+            rows = (
+                session.query(
+                    daily_totals.c.energy,
+                    daily_totals.c.date,
+                    daily_totals.c.total_kwh,
+                )
+                .outerjoin(
+                    model.daily_consumption_summary,
+                    (model.daily_consumption_summary.energy == daily_totals.c.energy)
+                    & (model.daily_consumption_summary.date == daily_totals.c.date),
+                )
+                .filter(
+                    (daily_totals.c.date >= cutoff)
+                    | (model.daily_consumption_summary.energy.is_(None))
+                )
+                .all()
+            )
+        return [
+            ConsumptionSummary(
+                energy=energy_from_char(row.energy),
+                date=row.date,
+                total_kwh=row.total_kwh,
+            )
+            for row in rows
+        ]
+
+    def write_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+        records = [
+            model.daily_consumption_summary(
+                energy=as_energy_char(summary.energy),
+                date=summary.date,
+                total_kwh=summary.total_kwh,
+            )
+            for summary in summaries
+        ]
+        self._write_all(records, "Consumption summary data")
+
+    def has_successful_job_run(self, job_name: str) -> bool:
+        with self.session_read_scope() as session:
+            return (
+                session.query(model.job_run)
+                .filter_by(job_name=job_name, status="success")
+                .first()
+                is not None
+            )
 
     def record_job_run(
         self, job_name: str, status: str, error: Optional[str] = None

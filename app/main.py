@@ -14,6 +14,10 @@ from common.decorator import retry_with_exponential_backoff
 from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
+from data.consumption_summary import (
+    ConsumptionSummaryBackfill,
+    ConsumptionSummaryRetriever,
+)
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from schedule import Job, Scheduler, default_scheduler
@@ -23,6 +27,10 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 
 CONSUMPTION_REFRESH_JOB = "consumption_refresh"
 PRICING_REFRESH_JOB = "pricing_refresh"
+WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
+YEARLY_COMPARISON_BACKFILL_JOB = "yearly_comparison_backfill"
+WEEKLY_JOB_TIME = "03:00"  # Monday, for weekly-cadence jobs
+DAILY_JOB_TIME = "04:00"  # for future daily-cadence jobs (not yet used)
 
 
 def startup(
@@ -43,13 +51,23 @@ def run_initial_pricing_sync(pricing: PricingRetriever) -> None:
         logger.exception("Pricing sync failed at startup; continuing.")
 
 
-def _schedule_refresh_job(
-    scheduler: Scheduler,
-    refresh_config: RefreshSettings,
+def run_initial_consumption_summary_sync(
+    consumption_summary: ConsumptionSummaryRetriever,
+) -> None:
+    try:
+        consumption_summary.refresh()
+    except Exception:
+        logger.exception("Consumption summary sync failed at startup; continuing.")
+
+
+def _run_with_backoff_in_background(
     job_name: str,
     refresh_fn: Callable[[], None],
     mariadb: MariaDBClient,
-) -> Job:
+) -> Callable[[], threading.Thread]:
+    """Returns a callable that starts (or reuses) a background worker thread
+    running refresh_fn with retry-with-backoff, recording the outcome as a
+    job_run. Skips starting a new worker if one is already running."""
     worker: Optional[threading.Thread] = None
 
     @retry_with_exponential_backoff()
@@ -61,7 +79,7 @@ def _schedule_refresh_job(
             mariadb.record_job_run(job_name, "failure", error=str(e))
             raise RuntimeError(f"{job_name} failed: {e}") from e
 
-    def refresh() -> threading.Thread:
+    def run() -> threading.Thread:
         nonlocal worker
         if worker is not None and worker.is_alive():
             logger.info(f"{job_name} is still running; skipping this invocation.")
@@ -70,7 +88,30 @@ def _schedule_refresh_job(
         worker.start()
         return worker
 
-    return scheduler.every(refresh_config.refresh_interval).hours.do(refresh)
+    return run
+
+
+def _schedule_refresh_job(
+    scheduler: Scheduler,
+    schedule_interval: Callable[[Scheduler], Job],
+    job_name: str,
+    refresh_fn: Callable[[], None],
+    mariadb: MariaDBClient,
+) -> Job:
+    refresh = _run_with_backoff_in_background(job_name, refresh_fn, mariadb)
+    return schedule_interval(scheduler).do(refresh)
+
+
+def run_backfill_at_startup(
+    backfill: ConsumptionSummaryBackfill, mariadb: MariaDBClient
+) -> Optional[threading.Thread]:
+    if mariadb.has_successful_job_run(YEARLY_COMPARISON_BACKFILL_JOB):
+        logger.info("Yearly comparison backfill already completed; skipping.")
+        return None
+    run = _run_with_backoff_in_background(
+        YEARLY_COMPARISON_BACKFILL_JOB, backfill.run, mariadb
+    )
+    return run()
 
 
 def register_jobs(
@@ -80,7 +121,11 @@ def register_jobs(
     mariadb: MariaDBClient,
 ) -> Job:
     return _schedule_refresh_job(
-        scheduler, refresh_config, CONSUMPTION_REFRESH_JOB, consumption.refresh, mariadb
+        scheduler,
+        lambda s: s.every(refresh_config.refresh_interval).hours,
+        CONSUMPTION_REFRESH_JOB,
+        consumption.refresh,
+        mariadb,
     )
 
 
@@ -91,7 +136,25 @@ def register_pricing_job(
     mariadb: MariaDBClient,
 ) -> Job:
     return _schedule_refresh_job(
-        scheduler, refresh_config, PRICING_REFRESH_JOB, pricing.refresh, mariadb
+        scheduler,
+        lambda s: s.every(refresh_config.refresh_interval).hours,
+        PRICING_REFRESH_JOB,
+        pricing.refresh,
+        mariadb,
+    )
+
+
+def register_consumption_summary_job(
+    scheduler: Scheduler,
+    consumption_summary: ConsumptionSummaryRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every().monday.at(WEEKLY_JOB_TIME),
+        WEEKLY_CONSUMPTION_SUMMARY_JOB,
+        consumption_summary.refresh,
+        mariadb,
     )
 
 
@@ -121,11 +184,22 @@ def main() -> None:
     client = MonitoringClient(settings)
     consumption = ConsumptionRetriever(client)
     pricing = PricingRetriever(client)
+    consumption_summary = ConsumptionSummaryRetriever(client.mariadb)
+    yearly_comparison_backfill = ConsumptionSummaryBackfill(client)
 
     startup(consumption, refresh_config)
     run_initial_pricing_sync(pricing)
+    # The backfill (background thread) and this eager sync (foreground) can
+    # both upsert the same recent (energy, date) row concurrently on first
+    # startup. Harmless: both compute the same correct total from the same
+    # underlying consumption rows, so whichever writes last is still right.
+    run_backfill_at_startup(yearly_comparison_backfill, client.mariadb)
+    run_initial_consumption_summary_sync(consumption_summary)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
     register_pricing_job(default_scheduler, refresh_config, pricing, client.mariadb)
+    register_consumption_summary_job(
+        default_scheduler, consumption_summary, client.mariadb
+    )
 
     while True:
         run_pending_safely(default_scheduler)
