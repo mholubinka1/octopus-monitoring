@@ -14,6 +14,7 @@ from common.decorator import retry_with_exponential_backoff
 from common.logging import APP_LOGGER_NAME, config
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
+from data.consumption_summary import ConsumptionSummaryRetriever
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from schedule import Job, Scheduler, default_scheduler
@@ -23,6 +24,9 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 
 CONSUMPTION_REFRESH_JOB = "consumption_refresh"
 PRICING_REFRESH_JOB = "pricing_refresh"
+WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
+WEEKLY_JOB_TIME = "03:00"  # Monday, for weekly-cadence jobs
+DAILY_JOB_TIME = "04:00"  # for future daily-cadence jobs (not yet used)
 
 
 def startup(
@@ -43,9 +47,18 @@ def run_initial_pricing_sync(pricing: PricingRetriever) -> None:
         logger.exception("Pricing sync failed at startup; continuing.")
 
 
+def run_initial_consumption_summary_sync(
+    consumption_summary: ConsumptionSummaryRetriever,
+) -> None:
+    try:
+        consumption_summary.refresh()
+    except Exception:
+        logger.exception("Consumption summary sync failed at startup; continuing.")
+
+
 def _schedule_refresh_job(
     scheduler: Scheduler,
-    refresh_config: RefreshSettings,
+    schedule_interval: Callable[[Scheduler], Job],
     job_name: str,
     refresh_fn: Callable[[], None],
     mariadb: MariaDBClient,
@@ -70,7 +83,7 @@ def _schedule_refresh_job(
         worker.start()
         return worker
 
-    return scheduler.every(refresh_config.refresh_interval).hours.do(refresh)
+    return schedule_interval(scheduler).do(refresh)
 
 
 def register_jobs(
@@ -80,7 +93,11 @@ def register_jobs(
     mariadb: MariaDBClient,
 ) -> Job:
     return _schedule_refresh_job(
-        scheduler, refresh_config, CONSUMPTION_REFRESH_JOB, consumption.refresh, mariadb
+        scheduler,
+        lambda s: s.every(refresh_config.refresh_interval).hours,
+        CONSUMPTION_REFRESH_JOB,
+        consumption.refresh,
+        mariadb,
     )
 
 
@@ -91,7 +108,25 @@ def register_pricing_job(
     mariadb: MariaDBClient,
 ) -> Job:
     return _schedule_refresh_job(
-        scheduler, refresh_config, PRICING_REFRESH_JOB, pricing.refresh, mariadb
+        scheduler,
+        lambda s: s.every(refresh_config.refresh_interval).hours,
+        PRICING_REFRESH_JOB,
+        pricing.refresh,
+        mariadb,
+    )
+
+
+def register_consumption_summary_job(
+    scheduler: Scheduler,
+    consumption_summary: ConsumptionSummaryRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every().monday.at(WEEKLY_JOB_TIME),
+        WEEKLY_CONSUMPTION_SUMMARY_JOB,
+        consumption_summary.refresh,
+        mariadb,
     )
 
 
@@ -121,11 +156,16 @@ def main() -> None:
     client = MonitoringClient(settings)
     consumption = ConsumptionRetriever(client)
     pricing = PricingRetriever(client)
+    consumption_summary = ConsumptionSummaryRetriever(client.mariadb)
 
     startup(consumption, refresh_config)
     run_initial_pricing_sync(pricing)
+    run_initial_consumption_summary_sync(consumption_summary)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
     register_pricing_job(default_scheduler, refresh_config, pricing, client.mariadb)
+    register_consumption_summary_job(
+        default_scheduler, consumption_summary, client.mariadb
+    )
 
     while True:
         run_pending_safely(default_scheduler)
