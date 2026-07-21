@@ -56,7 +56,7 @@ Add a `retry_with_exponential_backoff` decorator (`app/common/decorator.py`, alo
 
 ### Acceptance criteria
 
-- [ ] A job whose `refresh_fn` fails every attempt retries at 1, 2, 4, 8, then 16 minutes (5 attempts total), recording a `job_run` "failure" row each time
+- [ ] A job whose `refresh_fn` fails every attempt makes 5 attempts total, with gaps of 1, 2, 4, then 8 minutes between them, recording a `job_run` "failure" row each time
 - [ ] After the 5th attempt fails, the worker thread ends without raising, and the next scheduled tick starts a fresh attempt count (no permanent give-up, no `next_run` manipulation needed)
 - [ ] A new `refresh()` invocation is skipped and logged (not double-started) whenever a worker thread is already alive for that job — whether it's mid-backoff-retry or simply still completing a normal (successful) run
 - [ ] A successful `refresh_fn` call records exactly one `job_run` "success" row and the worker thread ends
