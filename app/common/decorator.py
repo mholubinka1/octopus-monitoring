@@ -48,15 +48,17 @@ def retry_with_exponential_backoff(
                 except Exception as e:
                     if attempt == max_attempts:
                         logger.error(
-                            f"Error attempting to execute {func}: {e}. "
+                            f"Error attempting to execute {func.__qualname__}: {e}. "
                             f"Retries exhausted after {max_attempts} attempts; "
-                            "giving up until the next scheduled run."
+                            "giving up until the next scheduled run.",
+                            exc_info=True,
                         )
                         return
                     logger.warning(
-                        f"Error attempting to execute {func}: {e}. "
+                        f"Error attempting to execute {func.__qualname__}: {e}. "
                         f"Retrying in {delay} seconds "
-                        f"(attempt {attempt}/{max_attempts})."
+                        f"(attempt {attempt}/{max_attempts}).",
+                        exc_info=True,
                     )
                     time.sleep(delay)
                     delay *= multiplier

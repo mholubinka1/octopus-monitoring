@@ -59,7 +59,7 @@ def _schedule_refresh_job(
             mariadb.record_job_run(job_name, "success")
         except Exception as e:
             mariadb.record_job_run(job_name, "failure", error=str(e))
-            raise
+            raise RuntimeError(f"{job_name} failed: {e}") from e
 
     def refresh() -> threading.Thread:
         nonlocal worker
