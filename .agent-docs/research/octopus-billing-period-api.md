@@ -205,12 +205,12 @@ Ran the two calls the recommendation below describes, against this project's rea
 account and API key:
 
 1. `obtainKrakenToken(input: {APIKey: "<real key>"})` → **succeeded**, returned a valid
-   JWT. Decoded payload: `"gty":"API-KEY"`, `"sub":"kraken|account-user:7955799"`,
-   `"email":"meholubinka@gmail.com"` — confirms the account-user API key is accepted
-   at the resolver level, not just present in the schema shape. The auth-path caveat
-   above is resolved: **the existing REST API key is sufficient**, no email/password
+   JWT. Decoded payload: `"gty":"API-KEY"`, `"sub":"kraken|account-user:<redacted>"`,
+   `"email":"<redacted>"` — confirms the account-user API key is accepted at the
+   resolver level, not just present in the schema shape. The auth-path caveat above
+   is resolved: **the existing REST API key is sufficient**, no email/password
    needed.
-2. `account(accountNumber: "A-0E9C03B9") { billingOptions { ... } }` with
+2. `account(accountNumber: "<redacted>") { billingOptions { ... } }` with
    `Authorization: JWT <token>` → returned:
 
    ```json

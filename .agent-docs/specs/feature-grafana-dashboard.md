@@ -26,7 +26,7 @@ Build a single Grafana dashboard, provisioned from the repo, reading directly fr
 
 ## Testing Decisions
 
-- New integration test: seed a test MariaDB instance (a real MariaDB test service is required — several queries use MariaDB-specific window-function and date syntax that may not run identically on SQLite) with fixture rows across `consumption`, `agreement`, `product_rate`, `cost_forecast`, and `job_run`. Execute every query from `grafana/mariadb/queries.md` against it and assert each returns without error and with the expected shape/values for at least one representative panel per row.
+- New integration test: seed a test MariaDB instance (a real MariaDB test service is required — several queries use MariaDB-specific window-function and date syntax that may not run identically on SQLite) with fixture rows across `consumption`, `agreement`, `product_rate`, `agile_forecast`, `cost_forecast`, and `job_run` (`agile_forecast` is what the Price Curve query's forecast half reads from — easy to miss since it's not part of the Cost Summary row). Execute every query from `grafana/mariadb/queries.md` against it and assert each returns without error and with the expected shape/values for at least one representative panel per row.
 - No unit tests for the Grafana JSON provisioning itself — not business logic. Visual verification (open the dashboard, confirm panels render with real data) is the acceptance check, consistent with "act as the first line of behaviour verification" in `.agent-docs/agent.md`.
 
 ## Out of Scope
