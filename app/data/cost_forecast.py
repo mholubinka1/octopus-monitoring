@@ -111,6 +111,15 @@ class CostForecastRetriever:
         billing_period = self._client.get_current_billing_period()
         elapsed_start = _midnight_utc(billing_period.start)
 
+        # Assumes as_of falls within [billing_period.start, billing_period.
+        # end] -- true whenever Kraken's "current" period genuinely contains
+        # "now", which is its documented contract. If Kraken's record were
+        # ever stale enough that as_of had already passed billing_period.end,
+        # this would count a few hours/days belonging to the *next* period
+        # into this one; self-correcting once Kraken's own record rolls
+        # over, and not guarded against here since it's outside Kraken's
+        # documented behavior rather than a case this code can meaningfully
+        # detect or correct for.
         agreement = self._current_electricity_agreement()
         daily_costs = self._client.read_elapsed_billing_period_costs(
             elapsed_start, as_of
@@ -233,7 +242,11 @@ class CostForecastRetriever:
         remaining_seconds = (period_end_boundary - as_of).total_seconds()
         if remaining_seconds <= 0:
             return Decimal("0")
-        remaining_hours = Decimal(remaining_seconds) / Decimal(3600)
+        # str(), not a bare Decimal(float): total_seconds() is a float, and
+        # Decimal(float) captures binary floating-point noise rather than
+        # the exact value -- immaterial once rounded at the Numeric(9,2)
+        # persistence boundary today, but this is a money calculation.
+        remaining_hours = Decimal(str(remaining_seconds)) / Decimal(3600)
 
         future_daily_kwh = project_daily_average_consumption(
             [d.total_kwh for d in daily_costs]
