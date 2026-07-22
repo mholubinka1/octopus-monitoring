@@ -90,6 +90,13 @@ class Rate:
     standing_charge: Decimal
 
 
+@dataclass
+class AgileForecastReading:
+    period_from: datetime
+    period_to: datetime
+    unit_rate: Decimal
+
+
 class TariffType(Enum):
     variable = (0,)
     economy7 = (1,)

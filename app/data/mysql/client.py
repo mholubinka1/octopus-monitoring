@@ -15,7 +15,7 @@ from data.model import (
 )
 from data.mysql import model
 from data.mysql.model import SQLBase
-from data.octopus.model import Agreement, Meter, Product, Rate
+from data.octopus.model import AgileForecastReading, Agreement, Meter, Product, Rate
 from sqlalchemy import Date, create_engine, func, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -61,6 +61,10 @@ def _energy_scoped_id(energy_char: str, dt: datetime) -> str:
 
 def _rate_scoped_id(product_code: str, region: str, valid_from: datetime) -> str:
     return f"{product_code}_{region}_{valid_from.strftime('%Y%m%d%H%M')}"
+
+
+def _forecast_scoped_id(region: str, period_from: datetime) -> str:
+    return f"{region}_{period_from.strftime('%Y%m%d%H%M')}"
 
 
 class SessionBuilder:
@@ -209,6 +213,25 @@ class MariaDBClient:
             for rate in rates
         ]
         self._write_all(records, "Product rate data")
+
+    def write_agile_forecast(
+        self,
+        region: str,
+        readings: List[AgileForecastReading],
+        fetched_at: datetime,
+    ) -> None:
+        records = [
+            model.agile_forecast(
+                id=_forecast_scoped_id(region, reading.period_from),
+                region=region,
+                period_from=reading.period_from,
+                period_to=reading.period_to,
+                forecast_unit_rate=reading.unit_rate,
+                fetched_at=fetched_at,
+            )
+            for reading in readings
+        ]
+        self._write_all(records, "Agile forecast data")
 
     def read_consumption_summarization_window(
         self, as_of: date
