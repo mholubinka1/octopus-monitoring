@@ -10,13 +10,16 @@ from common.logging import APP_LOGGER_NAME, config
 from data.model import (
     Consumption,
     ConsumptionSummary,
+    CostForecast,
+    DailyCostSummary,
+    Energy,
     as_energy_char,
     energy_from_char,
 )
 from data.mysql import model
 from data.mysql.model import SQLBase
-from data.octopus.model import Agreement, Meter, Product, Rate
-from sqlalchemy import Date, create_engine, func, inspect, text
+from data.octopus.model import AgileForecastReading, Agreement, Meter, Product, Rate
+from sqlalchemy import Date, and_, create_engine, func, inspect, or_, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -61,6 +64,10 @@ def _energy_scoped_id(energy_char: str, dt: datetime) -> str:
 
 def _rate_scoped_id(product_code: str, region: str, valid_from: datetime) -> str:
     return f"{product_code}_{region}_{valid_from.strftime('%Y%m%d%H%M')}"
+
+
+def _forecast_scoped_id(region: str, period_from: datetime) -> str:
+    return f"{region}_{period_from.strftime('%Y%m%d%H%M')}"
 
 
 class SessionBuilder:
@@ -209,6 +216,133 @@ class MariaDBClient:
             for rate in rates
         ]
         self._write_all(records, "Product rate data")
+
+    def write_agile_forecast(
+        self,
+        region: str,
+        readings: List[AgileForecastReading],
+        fetched_at: datetime,
+    ) -> None:
+        records = [
+            model.agile_forecast(
+                id=_forecast_scoped_id(region, reading.period_from),
+                region=region,
+                period_from=reading.period_from,
+                period_to=reading.period_to,
+                forecast_unit_rate=reading.unit_rate,
+                fetched_at=fetched_at,
+            )
+            for reading in readings
+        ]
+        self._write_all(records, "Agile forecast data")
+
+    def write_cost_forecast(self, forecast: CostForecast) -> None:
+        record = model.cost_forecast(
+            billing_period_start=forecast.billing_period_start,
+            billing_period_end=forecast.billing_period_end,
+            actual_cost_to_date=forecast.actual_cost_to_date,
+            projected_total_cost=forecast.projected_total_cost,
+            computed_at=forecast.computed_at,
+        )
+        self._write_all([record], "Cost forecast data")
+
+    def read_current_product_rate(
+        self, product_code: str, region: str, as_of: datetime
+    ) -> Optional[Rate]:
+        pr = model.product_rate
+        with self.session_read_scope() as session:
+            row = (
+                session.query(pr)
+                .filter(
+                    pr.product_code == product_code,
+                    pr.region == region,
+                    pr.valid_from <= as_of,
+                    or_(pr.valid_to.is_(None), as_of < pr.valid_to),
+                )
+                # Explicit ordering, not bare .first(): if overlapping rows
+                # ever matched (bad upstream data), .first() with no ORDER
+                # BY is nondeterministic. Most-recently-started wins, same
+                # "ORDER BY valid_from DESC LIMIT 1" convention already used
+                # for current-rate lookups in grafana/mariadb/queries.md.
+                .order_by(pr.valid_from.desc())
+                .first()
+            )
+        if row is None:
+            return None
+        return Rate(
+            valid_from=row.valid_from,
+            valid_to=row.valid_to,
+            unit_rate=row.unit_rate,
+            standing_charge=row.standing_charge,
+        )
+
+    def read_elapsed_billing_period_costs(
+        self, period_from: datetime, period_to: datetime, region: str
+    ) -> List[DailyCostSummary]:
+        # Joins each half-hourly consumption row to whichever agreement and
+        # product_rate actually applied at that moment (not just the
+        # current one), so a mid-period rate change is naturally reflected
+        # day-by-day. A day with zero consumption rows produces no row here
+        # at all -- it's the caller's responsibility to fill that gap, since
+        # there's no consumption row to join a standing charge through.
+        c = model.consumption
+        a = model.agreement
+        pr = model.product_rate
+
+        with self.session_read_scope() as session:
+            day_col = func.date(c.period_from, type_=Date).label("date")
+            joined = (
+                session.query(
+                    day_col,
+                    c.est_kwh.label("est_kwh"),
+                    pr.unit_rate.label("unit_rate"),
+                    pr.standing_charge.label("standing_charge"),
+                )
+                .join(
+                    a,
+                    and_(
+                        a.energy == c.energy,
+                        c.period_from >= a.valid_from,
+                        or_(a.valid_to.is_(None), c.period_from < a.valid_to),
+                    ),
+                )
+                .join(
+                    pr,
+                    and_(
+                        pr.product_code == a.product_code,
+                        pr.region == region,
+                        c.period_from >= pr.valid_from,
+                        or_(pr.valid_to.is_(None), c.period_from < pr.valid_to),
+                    ),
+                )
+                .filter(
+                    c.energy == as_energy_char(Energy.electricity),
+                    c.period_from >= period_from,
+                    c.period_from < period_to,
+                )
+                .subquery()
+            )
+            rows = (
+                session.query(
+                    joined.c.date,
+                    func.sum(joined.c.est_kwh).label("total_kwh"),
+                    func.sum(joined.c.est_kwh * joined.c.unit_rate).label(
+                        "variable_cost"
+                    ),
+                    func.max(joined.c.standing_charge).label("standing_charge"),
+                )
+                .group_by(joined.c.date)
+                .all()
+            )
+
+        return [
+            DailyCostSummary(
+                date=row.date,
+                total_kwh=row.total_kwh,
+                day_cost_gbp=(row.variable_cost + row.standing_charge) / 100,
+            )
+            for row in rows
+        ]
 
     def read_consumption_summarization_window(
         self, as_of: date

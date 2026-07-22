@@ -52,6 +52,22 @@ class ConsumptionSummary:
     total_kwh: Decimal
 
 
+@dataclass
+class DailyCostSummary:
+    date: date
+    total_kwh: Decimal
+    day_cost_gbp: Decimal
+
+
+@dataclass
+class CostForecast:
+    billing_period_start: date
+    billing_period_end: date
+    actual_cost_to_date: Decimal
+    projected_total_cost: Decimal
+    computed_at: datetime
+
+
 def get_raw_unit(energy: Energy) -> Unit:
     match (energy):
         case Energy.gas:

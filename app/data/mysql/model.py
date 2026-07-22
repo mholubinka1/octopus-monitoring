@@ -61,6 +61,30 @@ class daily_consumption_summary(SQLBase):
     total_kwh = Column(DECIMAL(8, 5, unsigned=True), nullable=False)
 
 
+class agile_forecast(SQLBase):
+    __tablename__ = "agile_forecast"
+    __table_args__ = {"schema": "octopus"}
+
+    id = Column(String(70), primary_key=True)
+    region = Column(String(1), nullable=False)
+    period_from = Column(DateTime, nullable=False)
+    period_to = Column(DateTime, nullable=False)
+    forecast_unit_rate = Column(Numeric(9, 6), nullable=False)
+    fetched_at = Column(DateTime, nullable=False)
+
+
+class cost_forecast(SQLBase):
+    __tablename__ = "cost_forecast"
+    __table_args__ = {"schema": "octopus"}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    billing_period_start = Column(Date, nullable=False)
+    billing_period_end = Column(Date, nullable=False)
+    actual_cost_to_date = Column(Numeric(9, 2), nullable=False)
+    projected_total_cost = Column(Numeric(9, 2), nullable=False)
+    computed_at = Column(DateTime, nullable=False)
+
+
 class job_run(SQLBase):
     __tablename__ = "job_run"
     __table_args__ = {"schema": "octopus"}

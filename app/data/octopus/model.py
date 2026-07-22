@@ -1,8 +1,9 @@
+import calendar
 import logging.config
 import re
 from abc import ABC
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from logging import Logger, getLogger
@@ -30,6 +31,39 @@ class Account:
     number: str
     address: str
     postcode: str
+
+
+@dataclass
+class BillingPeriod:
+    start: date
+    end: date
+
+    @classmethod
+    def from_billing_options(
+        cls, period_start: date, period_end: Optional[date], is_fixed: bool
+    ) -> "BillingPeriod":
+        if is_fixed:
+            if period_end is None:
+                raise ValueError(
+                    "Kraken reported isFixed: true with no "
+                    "currentBillingPeriodEndDate -- contradicts its own "
+                    'schema ("Null if the account is on flexible '
+                    'billing"); refusing to guess a fallback date.'
+                )
+            return cls(start=period_start, end=period_end)
+        # Flexible billing (isFixed: false) has no fixed end date from
+        # Kraken -- fall back to start + 1 calendar month, same day-of-month,
+        # clamped to the month's last valid day (e.g. the 31st rolling back
+        # to the 28th/29th/30th).
+        return cls(start=period_start, end=_add_one_month_clamped(period_start))
+
+
+def _add_one_month_clamped(d: date) -> date:
+    year = d.year + (d.month // 12)
+    month = d.month % 12 + 1
+    last_day_of_month = calendar.monthrange(year, month)[1]
+    day = min(d.day, last_day_of_month)
+    return date(year, month, day)
 
 
 class Direction(Enum):
@@ -61,6 +95,13 @@ class Rate:
     valid_to: Optional[datetime]
     unit_rate: Decimal
     standing_charge: Decimal
+
+
+@dataclass
+class AgileForecastReading:
+    period_from: datetime
+    period_to: datetime
+    unit_rate: Decimal
 
 
 class TariffType(Enum):
