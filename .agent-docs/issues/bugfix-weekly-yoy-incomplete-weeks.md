@@ -1,5 +1,7 @@
 # Issues: bugfix-weekly-yoy-incomplete-weeks
 
+> Work complete — PR ready to merge.
+
 ## Exclude incomplete ISO weeks from Weekly YoY panels (#418)
 
 **Blocked by**: None
@@ -38,18 +40,18 @@ completeness guard. Documentation-only — no application code changes.
 
 ### Acceptance criteria
 
-- [ ] `HAVING COUNT(*) = 7` (or equivalent) added to the `weekly` CTE in
+- [x] `HAVING COUNT(*) = 7` (or equivalent) added to the `weekly` CTE in
       both the electricity and gas Weekly YoY queries in
       `grafana/mariadb/queries.md`
-- [ ] An inline comment explains why the guard exists (in-progress current
+- [x] An inline comment explains why the guard exists (in-progress current
       week + partial backfill-boundary week), consistent with the file's
       existing comment conventions
-- [ ] The week-53 fallback logic still correctly falls back to week 52 when
+- [x] The week-53 fallback logic still correctly falls back to week 52 when
       week 53 is either missing entirely or present-but-incomplete
-- [ ] No application code changes — `app/` is untouched
-- [ ] `.agent-docs/context.md`'s `Yearly Comparison` entry mentions that
+- [x] No application code changes — `app/` is untouched
+- [x] `.agent-docs/context.md`'s `Yearly Comparison` entry mentions that
       only complete (7-day) ISO weeks are compared, and why
-- [ ] Manually reasoned through against: an up-to-date table, a partial
+- [x] Manually reasoned through against: an up-to-date table, a partial
       current week, a partial oldest week near the 730-day backfill cutoff,
       and the week-53-fallback case — and run against a real/test MariaDB
       instance if one is reachable
