@@ -159,9 +159,12 @@ class CostForecastRetriever:
         # contains as_of, with valid_to=None treated as unbounded -- not
         # "valid_to is None". Real Agile contracts renew as fixed one-year
         # terms, so Octopus's API never returns valid_to=None for them, not
-        # even for the currently-active one; matching client.py's
-        # read_current_product_rate convention instead of requiring an
-        # open-ended row.
+        # even for the currently-active one; mirrors the range-containment
+        # predicate client.py's read_current_product_rate uses instead of
+        # requiring an open-ended row. Unlike that query, this doesn't order
+        # by valid_from on a tie: Octopus's data model doesn't produce
+        # overlapping agreements for one meter, so the first match in
+        # response order is taken as-is (see spec for this fix).
         agreement = next(
             (
                 a
