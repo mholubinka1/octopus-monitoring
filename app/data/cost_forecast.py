@@ -201,6 +201,15 @@ class CostForecastRetriever:
         daily_costs: List[DailyCostSummary],
         as_of: datetime,
     ) -> Decimal:
+        # billing_period.end is treated as the last billable day
+        # (inclusive), not the first day of the next period -- Kraken
+        # exposes a separate nextBillingDate field distinct from
+        # currentBillingPeriodEndDate, which would be redundant if the end
+        # date were exclusive. Plain date subtraction here already excludes
+        # as_of.date() ("today") from the count, since today's charge is
+        # already fully accounted for by the elapsed-days query/gap-fill
+        # above -- so this correctly counts only the not-yet-charged days
+        # from tomorrow through the inclusive end date, with no overlap.
         remaining_days = (billing_period.end - as_of.date()).days
         if remaining_days <= 0:
             return Decimal("0")

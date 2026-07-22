@@ -237,10 +237,15 @@ def test_today_is_charged_exactly_once_when_as_of_has_a_time_component(
     # Regression test: the daily job always runs at a non-midnight time
     # (DAILY_JOB_TIME = "04:00"), so as_of.date() is "today" and today's
     # midnight is strictly before as_of -- meaning today is elapsed (counted
-    # in actual_cost_to_date) but NOT one of remaining_days (which excludes
-    # as_of.date() by construction: date subtraction always counts days
-    # strictly after the start date). This locks that boundary down instead
-    # of only ever exercising it with as_of pinned to exact midnight.
+    # in actual_cost_to_date) but NOT one of remaining_days. Billing period
+    # end (Jul 10) is treated as the last inclusive billable day, so the
+    # full period is Jul6..Jul10 = 5 calendar days. With as_of = Jul8 04:00:
+    # elapsed = {Jul6, Jul7, Jul8} (3 days); remaining_days =
+    # (Jul10 - Jul8).days = 2, representing {Jul9, Jul10} (the two days
+    # AFTER as_of.date(), per plain date subtraction -- NOT {Jul8, Jul9}).
+    # 3 + 2 = 5 matches the period length exactly, with no day double- or
+    # under-counted. This locks that boundary down instead of only ever
+    # exercising it with as_of pinned to exact midnight.
     _mock_billing_period("2026-07-06", "2026-07-10")
 
     with mariadb_client.session_write_scope() as s:
@@ -288,10 +293,12 @@ def test_today_is_charged_exactly_once_when_as_of_has_a_time_component(
         row = session.query(model.cost_forecast).one()
 
     day_charge = Decimal("2.0") * Decimal("20.00") + Decimal("48.00")  # 88.00p
-    # 3 elapsed days (Jul6-8) + 2 remaining days (Jul9-10) = 5 days total,
-    # matching the full period length exactly -- not 6, which is what
-    # double-charging today would produce.
+    # actual_cost_to_date: 3 elapsed days (Jul6, Jul7, Jul8).
     assert row.actual_cost_to_date == 3 * day_charge / 100
+    # projected_total_cost: 5 day-charges total (3 elapsed + 2 remaining =
+    # Jul9, Jul10) -- the full 5-day period, not 6, which is what
+    # double-charging Jul8 would produce, and not 4, which is what
+    # under-charging (dropping Jul8 or Jul10) would produce.
     assert row.projected_total_cost == 5 * day_charge / 100
 
 
