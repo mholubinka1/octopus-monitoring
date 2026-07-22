@@ -277,7 +277,7 @@ class MariaDBClient:
         )
 
     def read_elapsed_billing_period_costs(
-        self, period_from: datetime, period_to: datetime
+        self, period_from: datetime, period_to: datetime, region: str
     ) -> List[DailyCostSummary]:
         # Joins each half-hourly consumption row to whichever agreement and
         # product_rate actually applied at that moment (not just the
@@ -310,6 +310,7 @@ class MariaDBClient:
                     pr,
                     and_(
                         pr.product_code == a.product_code,
+                        pr.region == region,
                         c.period_from >= pr.valid_from,
                         or_(pr.valid_to.is_(None), c.period_from < pr.valid_to),
                     ),

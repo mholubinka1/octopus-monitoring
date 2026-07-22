@@ -122,9 +122,11 @@ class MonitoringClient:
         self.mariadb.write_agile_forecast(region, readings, fetched_at)
 
     def read_elapsed_billing_period_costs(
-        self, period_from: datetime, period_to: datetime
+        self, period_from: datetime, period_to: datetime, region: str
     ) -> List[DailyCostSummary]:
-        return self.mariadb.read_elapsed_billing_period_costs(period_from, period_to)
+        return self.mariadb.read_elapsed_billing_period_costs(
+            period_from, period_to, region
+        )
 
     def read_current_product_rate(
         self, product_code: str, region: str, as_of: datetime

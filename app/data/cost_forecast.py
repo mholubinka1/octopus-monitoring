@@ -88,7 +88,7 @@ class CostForecastSource(MeterSource, Protocol):
     ) -> None: ...
 
     def read_elapsed_billing_period_costs(
-        self, period_from: datetime, period_to: datetime
+        self, period_from: datetime, period_to: datetime, region: str
     ) -> List[DailyCostSummary]: ...
 
     def read_current_product_rate(
@@ -122,7 +122,7 @@ class CostForecastRetriever:
         # detect or correct for.
         agreement = self._current_electricity_agreement()
         daily_costs = self._client.read_elapsed_billing_period_costs(
-            elapsed_start, as_of
+            elapsed_start, as_of, self._client.region_code
         )
         daily_costs = self._fill_zero_consumption_days(
             billing_period.start, as_of, agreement, daily_costs
@@ -190,19 +190,19 @@ class CostForecastRetriever:
                     agreement.product_code, self._client.region_code, midday
                 )
                 if rate is None:
-                    logger.warning(
+                    raise RuntimeError(
                         f"No product_rate found for {agreement.product_code} "
-                        f"on {day} -- omitting its standing charge from "
-                        "actual_cost_to_date."
+                        f"on {day} -- cannot compute actual_cost_to_date "
+                        "without silently omitting that day's standing "
+                        "charge."
                     )
-                else:
-                    filled.append(
-                        DailyCostSummary(
-                            date=day,
-                            total_kwh=Decimal("0"),
-                            day_cost_gbp=rate.standing_charge / 100,
-                        )
+                filled.append(
+                    DailyCostSummary(
+                        date=day,
+                        total_kwh=Decimal("0"),
+                        day_cost_gbp=rate.standing_charge / 100,
                     )
+                )
             day += timedelta(days=1)
         return filled
 

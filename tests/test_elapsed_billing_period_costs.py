@@ -78,6 +78,7 @@ def test_two_elapsed_days_with_consumption_on_a_stable_rate(
     results = mariadb_client.read_elapsed_billing_period_costs(
         datetime(2026, 7, 6, tzinfo=timezone.utc),
         datetime(2026, 7, 8, tzinfo=timezone.utc),
+        REGION,
     )
 
     by_date = {r.date: r for r in results}
@@ -86,6 +87,52 @@ def test_two_elapsed_days_with_consumption_on_a_stable_rate(
     assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("0.88")
     assert by_date[date(2026, 7, 7)].total_kwh == Decimal("2.0")
     assert by_date[date(2026, 7, 7)].day_cost_gbp == Decimal("0.88")
+
+
+def test_a_rate_for_another_region_is_not_double_matched(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Regression test: the join to product_rate must be scoped by region,
+    # not just product_code + validity window. Octopus tariffs price the
+    # same product_code differently per GSP region, so product_rate holds
+    # one row per (product_code, region, valid_from) -- an unscoped join
+    # would multiply-match every region sharing that product_code/window,
+    # overcounting both kWh and cost.
+    with mariadb_client.session_write_scope() as s:
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=timezone.utc))
+        _seed_rate(
+            s,
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            None,
+            "20.00",
+            "48.00",
+        )
+        # Same product_code, same validity window, a *different* region --
+        # must never be joined against this account's (region H) consumption.
+        s.add(
+            model.product_rate(
+                id=f"{PRODUCT_CODE}_A_202601010000",
+                product_code=PRODUCT_CODE,
+                region="A",
+                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_to=None,
+                unit_rate=Decimal("99.00"),
+                standing_charge=Decimal("99.00"),
+            )
+        )
+        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc), "2.0")
+
+    results = mariadb_client.read_elapsed_billing_period_costs(
+        datetime(2026, 7, 6, tzinfo=timezone.utc),
+        datetime(2026, 7, 7, tzinfo=timezone.utc),
+        REGION,
+    )
+
+    by_date = {r.date: r for r in results}
+    assert by_date[date(2026, 7, 6)].total_kwh == Decimal("2.0")
+    # If the region-A row were incorrectly matched too, total_kwh would be
+    # doubled (4.0) and day_cost_gbp would include the 99.00p rate as well.
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("0.88")
 
 
 def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
@@ -115,6 +162,7 @@ def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
     results = mariadb_client.read_elapsed_billing_period_costs(
         datetime(2026, 7, 6, tzinfo=timezone.utc),
         datetime(2026, 7, 7, tzinfo=timezone.utc),
+        REGION,
     )
 
     by_date = {r.date: r for r in results}
