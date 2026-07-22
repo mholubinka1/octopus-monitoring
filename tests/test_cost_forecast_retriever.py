@@ -83,6 +83,7 @@ class _RealCostForecastSource:
 
 def _make_electricity_meter(
     tariff_code: str = f"E-1R-{PRODUCT_CODE}-{REGION}",
+    valid_to: Optional[datetime] = None,
 ) -> Electricity:
     return Electricity(
         mpan="1234567890123",
@@ -91,7 +92,7 @@ def _make_electricity_meter(
             Agreement(
                 tariff_code=tariff_code,
                 valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
-                valid_to=None,
+                valid_to=valid_to,
             )
         ],
     )
@@ -650,6 +651,70 @@ def test_no_current_agreement_raises_a_clear_error(
 
     with pytest.raises(RuntimeError, match="[Nn]o current .*agreement"):
         retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+
+
+@responses.activate
+def test_current_agreement_with_a_bounded_valid_to_still_matches(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Regression test: real Agile contracts renew as fixed one-year terms --
+    # Octopus's API never returns valid_to=None for them, not even for the
+    # currently-active agreement (confirmed live against a real account's
+    # agreement table). "Current" must mean "as_of falls within this
+    # agreement's range", not "this agreement has no end date".
+    _mock_billing_period("2026-07-06", "2026-08-06")
+
+    with mariadb_client.session_write_scope() as s:
+        s.add(
+            model.agreement(
+                id="E20220101000000",
+                energy="E",
+                product_code=PRODUCT_CODE,
+                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
+                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_to=None,
+            )
+        )
+        s.add(
+            model.product_rate(
+                id=f"{PRODUCT_CODE}_{REGION}_202601010000",
+                product_code=PRODUCT_CODE,
+                region=REGION,
+                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_to=None,
+                unit_rate=Decimal("20.00"),
+                standing_charge=Decimal("48.00"),
+            )
+        )
+        s.add(
+            model.consumption(
+                id="E20260706000000",
+                energy="E",
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                raw_value=Decimal("2.0"),
+                unit="kWh",
+                est_kwh=Decimal("2.0"),
+            )
+        )
+
+    retriever = CostForecastRetriever(
+        _source(
+            mariadb_client,
+            [
+                _make_electricity_meter(
+                    valid_to=datetime(2027, 5, 24, tzinfo=timezone.utc)
+                )
+            ],
+        )
+    )
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(model.cost_forecast).all()
+
+    assert len(stored) == 1
+    assert stored[0].actual_cost_to_date == Decimal("0.88")
 
 
 @responses.activate

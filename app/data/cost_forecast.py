@@ -120,7 +120,7 @@ class CostForecastRetriever:
         # over, and not guarded against here since it's outside Kraken's
         # documented behavior rather than a case this code can meaningfully
         # detect or correct for.
-        agreement = self._current_electricity_agreement()
+        agreement = self._current_electricity_agreement(as_of)
         daily_costs = self._client.read_elapsed_billing_period_costs(
             elapsed_start, as_of, self._client.region_code
         )
@@ -147,7 +147,7 @@ class CostForecastRetriever:
             f"projected total £{forecast.projected_total_cost}."
         )
 
-    def _current_electricity_agreement(self) -> Agreement:
+    def _current_electricity_agreement(self, as_of: datetime) -> Agreement:
         electricity_meter = next(
             (m for m in self._client.meters if m.energy == Energy.electricity), None
         )
@@ -155,13 +155,25 @@ class CostForecastRetriever:
             raise RuntimeError(
                 "No electricity meter found -- cannot compute a cost forecast."
             )
+        # "Current" = the agreement whose [valid_from, valid_to) range
+        # contains as_of, with valid_to=None treated as unbounded -- not
+        # "valid_to is None". Real Agile contracts renew as fixed one-year
+        # terms, so Octopus's API never returns valid_to=None for them, not
+        # even for the currently-active one; matching client.py's
+        # read_current_product_rate convention instead of requiring an
+        # open-ended row.
         agreement = next(
-            (a for a in electricity_meter.agreements if a.valid_to is None), None
+            (
+                a
+                for a in electricity_meter.agreements
+                if a.valid_from <= as_of and (a.valid_to is None or as_of < a.valid_to)
+            ),
+            None,
         )
         if agreement is None:
             raise RuntimeError(
-                "No current (open-ended) agreement found for the electricity "
-                "meter -- cannot compute a cost forecast."
+                "No current agreement found for the electricity meter as of "
+                f"{as_of} -- cannot compute a cost forecast."
             )
         return agreement
 
