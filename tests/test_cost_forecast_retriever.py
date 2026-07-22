@@ -219,9 +219,10 @@ def test_fixed_tariff_actual_cost_and_projection(
     assert row.billing_period_end == date(2026, 8, 6)
     # (2.0 kWh @ 20.00p) + 48.00p standing charge = 88.00p -> £0.88
     assert row.actual_cost_to_date == Decimal("0.88")
-    # remaining_days = billing_period_end (Aug 6) - as_of.date() (Jul 7) = 30,
-    # at 2.0 kWh/day average, same 20.00p rate + 48.00p standing charge/day.
-    remaining_days = 30
+    # total_period_days = Jul6..Aug6 inclusive = 32; remaining_days = 32 - 1
+    # elapsed day (Jul6) = 31, at 2.0 kWh/day average, same 20.00p rate +
+    # 48.00p standing charge/day.
+    remaining_days = 31
     expected_remaining = (
         remaining_days * (Decimal("2.0") * Decimal("20.00") + Decimal("48.00")) / 100
     )
@@ -385,10 +386,67 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
 
     # actual: (24.0 kWh @ 25.00p) + 50.00p standing = 650.00p -> £6.50
     assert row.actual_cost_to_date == Decimal("6.50")
-    # future_daily_kwh = 24.0 (one elapsed day); per_slot_kwh = 24.0/48 = 0.5
-    # remaining variable = 0.5*10.00 + 0.5*30.00 = 20.00p; standing = 50.00p
-    # (remaining_days=1) -> (20.00+50.00)/100 = £0.70
-    assert row.projected_total_cost == Decimal("6.50") + Decimal("0.70")
+    # future_daily_kwh = 24.0 (one elapsed day); per_slot_kwh = 24.0/48 = 0.5.
+    # The remaining window spans the rest of Jul6 (23:00, 23:30 -- the only
+    # two real forecast entries) *and* all of Jul7 (the inclusive billing
+    # period end), which tiling fills by repeating those same two entries
+    # (only one real source day exists to tile from) -- 4 slots total:
+    # 2 * (0.5*10.00 + 0.5*30.00) = 40.00p variable; standing = 1 remaining
+    # day * 50.00p = 50.00p -> (40.00+50.00)/100 = £0.90
+    assert row.projected_total_cost == Decimal("6.50") + Decimal("0.90")
+
+
+@responses.activate
+def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Regression test: the remaining-days slot window must extend through
+    # billing_period_end's own half-hourly slots, not stop at its midnight
+    # boundary. Uses two different flat rates on two different real
+    # (non-tiled) remaining days so a window that silently excluded the
+    # final day would produce a visibly smaller, wrong total.
+    _mock_billing_period("2026-07-06", "2026-07-08")
+    _mock_agile_forecast(
+        _flat_agile_prices(date(2026, 7, 7), 1, "10.00")
+        + _flat_agile_prices(date(2026, 7, 8), 1, "50.00")
+    )
+
+    with mariadb_client.session_write_scope() as s:
+        _seed_agile_agreement_and_rate(s, standing_charge="0.00")
+        s.add(
+            model.consumption(
+                id="E20260706000000",
+                energy="E",
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                raw_value=Decimal("2.0"),
+                unit="kWh",
+                est_kwh=Decimal("2.0"),
+            )
+        )
+
+    retriever = CostForecastRetriever(
+        _source(
+            mariadb_client,
+            [
+                _make_electricity_meter(
+                    tariff_code=f"E-1R-{AGILE_PRODUCT_CODE}-{REGION}"
+                )
+            ],
+        )
+    )
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+
+    with mariadb_client.session_read_scope() as session:
+        row = session.query(model.cost_forecast).one()
+
+    # future_daily_kwh = 2.0 (one elapsed day); 0.00p standing charge
+    # isolates the variable-cost total. Correct: both remaining days priced
+    # -- 2.0*10.00 (Jul7) + 2.0*50.00 (Jul8, the inclusive end date) =
+    # 120.00p -> £1.20. A window that excluded Jul8 would give only
+    # 2.0*10.00 = 20.00p -> £0.20.
+    remaining = row.projected_total_cost - row.actual_cost_to_date
+    assert remaining == Decimal("1.20")
 
 
 @responses.activate
@@ -429,9 +487,11 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
 
     # 1 elapsed day: (2.0 kWh @ 25.00p) + 50.00p standing = 100.00p -> £1.00
     assert row.actual_cost_to_date == Decimal("1.00")
-    # remaining_days = Jul10 - Jul7 = 3, flat 15.00p/kWh throughout (all
-    # within the real forecast, no tiling): 3 * (2.0*15.00 + 50.00) = 240.00p
-    assert row.projected_total_cost == Decimal("1.00") + Decimal("2.40")
+    # total_period_days = Jul6..Jul10 inclusive = 5; remaining_days = 5 - 1
+    # elapsed day = 4 (Jul7-Jul10, the inclusive end date), flat 15.00p/kWh
+    # throughout (all within the real forecast, no tiling):
+    # 4 * (2.0*15.00 + 50.00) = 320.00p
+    assert row.projected_total_cost == Decimal("1.00") + Decimal("3.20")
 
     # The fetched forecast must be persisted for the pre-existing "Price
     # Curve" Grafana panel (reads agile_forecast) to have data to plot --
@@ -448,8 +508,8 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
     mariadb_client: MariaDBClient,
 ) -> None:
     _mock_billing_period("2026-07-06", "2026-07-25")
-    # Only 7 real days of forecast -- billing period end is 19 days out,
-    # so days 8-18 (11 days) must come from tiling.
+    # Only 7 real days of forecast (Jul6-Jul12) -- the remaining window
+    # (Jul7-Jul25, 19 days) needs Jul13-Jul25 (13 days) from tiling.
     _mock_agile_forecast(_flat_agile_prices(date(2026, 7, 6), 7, "15.00"))
 
     with mariadb_client.session_write_scope() as s:
@@ -485,8 +545,10 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
 
     # Flat 15.00p rate throughout (both real and tiled days repeat the same
     # flat price), so the flat-rate formula still applies exactly:
-    # remaining_days = Jul25 - Jul7 = 18; 18 * (2.0*15.00 + 50.00) = 1440.00p
-    assert row.projected_total_cost == Decimal("1.00") + Decimal("14.40")
+    # total_period_days = Jul6..Jul25 inclusive = 20; remaining_days =
+    # 20 - 1 elapsed day = 19 (Jul7-Jul25, the inclusive end date);
+    # 19 * (2.0*15.00 + 50.00) = 1520.00p
+    assert row.projected_total_cost == Decimal("1.00") + Decimal("15.20")
 
 
 @responses.activate
@@ -542,8 +604,9 @@ def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
 
     # Jul6: (2.0*20.00 + 48.00)/100 = 0.88; Jul7 (zero kWh): 48.00/100 = 0.48
     assert row.actual_cost_to_date == Decimal("1.36")
-    # future_daily_kwh = avg([2.0, 0.0]) = 1.0; remaining_days = Aug6-Jul8 = 29
-    remaining_days = 29
+    # future_daily_kwh = avg([2.0, 0.0]) = 1.0; total_period_days =
+    # Jul6..Aug6 inclusive = 32; remaining_days = 32 - 2 elapsed days = 30
+    remaining_days = 30
     expected_remaining = (
         remaining_days * (Decimal("1.0") * Decimal("20.00") + Decimal("48.00")) / 100
     )

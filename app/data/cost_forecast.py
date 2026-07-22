@@ -208,12 +208,16 @@ class CostForecastRetriever:
         # (inclusive), not the first day of the next period -- Kraken
         # exposes a separate nextBillingDate field distinct from
         # currentBillingPeriodEndDate, which would be redundant if the end
-        # date were exclusive. Plain date subtraction here already excludes
-        # as_of.date() ("today") from the count, since today's charge is
-        # already fully accounted for by the elapsed-days query/gap-fill
-        # above -- so this correctly counts only the not-yet-charged days
-        # from tomorrow through the inclusive end date, with no overlap.
-        remaining_days = (billing_period.end - as_of.date()).days
+        # date were exclusive. remaining_days is derived as "total period
+        # days minus days already accounted for in daily_costs" rather than
+        # a raw (end - as_of.date()) subtraction: the latter silently drops
+        # as_of.date() ("today") from *both* the elapsed and remaining
+        # counts whenever as_of lands on an exact midnight (each day in
+        # daily_costs is guaranteed distinct, so its length is exactly the
+        # elapsed-day count) -- this formula can't double- or under-count a
+        # day regardless of what time of day as_of is.
+        total_period_days = (billing_period.end - billing_period.start).days + 1
+        remaining_days = total_period_days - len(daily_costs)
         if remaining_days <= 0:
             return Decimal("0")
 
@@ -251,7 +255,12 @@ class CostForecastRetriever:
         self._client.persist_agile_forecast(
             self._client.region_code, forecast_readings, as_of
         )
-        end_datetime = _midnight_utc(billing_period_end)
+        # +1 day: billing_period_end is the last inclusive billable day, so
+        # the window must extend through its own half-hourly slots, not
+        # stop at its midnight boundary (which would exclude the entire
+        # final day from the variable-cost sum while still charging its
+        # standing fee via remaining_days).
+        end_datetime = _midnight_utc(billing_period_end) + timedelta(days=1)
         tiled = tile_forecast_beyond(forecast_readings, billing_period_end)
         remaining_readings = [
             r
