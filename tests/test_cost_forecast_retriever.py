@@ -83,17 +83,16 @@ class _RealCostForecastSource:
 
 def _make_electricity_meter(
     tariff_code: str = f"E-1R-{PRODUCT_CODE}-{REGION}",
+    valid_from: datetime = datetime(2022, 1, 1, tzinfo=timezone.utc),
     valid_to: Optional[datetime] = None,
+    prior_agreements: Optional[List[Agreement]] = None,
 ) -> Electricity:
     return Electricity(
         mpan="1234567890123",
         serial_number="00A1234567",
-        agreements=[
-            Agreement(
-                tariff_code=tariff_code,
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
-                valid_to=valid_to,
-            )
+        agreements=(prior_agreements or [])
+        + [
+            Agreement(tariff_code=tariff_code, valid_from=valid_from, valid_to=valid_to)
         ],
     )
 
@@ -653,61 +652,71 @@ def test_no_current_agreement_raises_a_clear_error(
         retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
 
 
+def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
+    # Feeds read_elapsed_billing_period_costs's DB-level consumption-to-
+    # agreement join only -- unrelated to _current_electricity_agreement's
+    # in-memory selection, which reads solely from the Electricity meter's
+    # Agreement list passed to CostForecastRetriever.
+    s.add(
+        model.agreement(
+            id="E20220101000000",
+            energy="E",
+            product_code=PRODUCT_CODE,
+            tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
+            valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            valid_to=None,
+        )
+    )
+    s.add(
+        model.product_rate(
+            id=f"{PRODUCT_CODE}_{REGION}_202601010000",
+            product_code=PRODUCT_CODE,
+            region=REGION,
+            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            valid_to=None,
+            unit_rate=Decimal("20.00"),
+            standing_charge=Decimal("48.00"),
+        )
+    )
+    s.add(
+        model.consumption(
+            id="E20260706000000",
+            energy="E",
+            period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
+            period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+            raw_value=Decimal("2.0"),
+            unit="kWh",
+            est_kwh=Decimal("2.0"),
+        )
+    )
+
+
 @responses.activate
 def test_current_agreement_with_a_bounded_valid_to_still_matches(
     mariadb_client: MariaDBClient,
 ) -> None:
-    # Regression test: real Agile contracts renew as fixed one-year terms --
-    # Octopus's API never returns valid_to=None for them, not even for the
-    # currently-active agreement (confirmed live against a real account's
-    # agreement table). "Current" must mean "as_of falls within this
-    # agreement's range", not "this agreement has no end date".
+    # Regression test: real Agile contracts renew as fixed one-year terms, so
+    # Octopus's API never returns valid_to=None even for the currently-active
+    # agreement. Mirrors the real account's shape (a lapsed prior agreement
+    # plus a bounded current one) so the current one is proven to be selected
+    # by range, not merely "the only agreement present".
     _mock_billing_period("2026-07-06", "2026-08-06")
 
     with mariadb_client.session_write_scope() as s:
-        s.add(
-            model.agreement(
-                id="E20220101000000",
-                energy="E",
-                product_code=PRODUCT_CODE,
-                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
-                valid_to=None,
-            )
-        )
-        s.add(
-            model.product_rate(
-                id=f"{PRODUCT_CODE}_{REGION}_202601010000",
-                product_code=PRODUCT_CODE,
-                region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                valid_to=None,
-                unit_rate=Decimal("20.00"),
-                standing_charge=Decimal("48.00"),
-            )
-        )
-        s.add(
-            model.consumption(
-                id="E20260706000000",
-                energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
-                raw_value=Decimal("2.0"),
-                unit="kWh",
-                est_kwh=Decimal("2.0"),
-            )
-        )
+        _seed_fixed_tariff_agreement_and_rate(s)
 
-    retriever = CostForecastRetriever(
-        _source(
-            mariadb_client,
-            [
-                _make_electricity_meter(
-                    valid_to=datetime(2027, 5, 24, tzinfo=timezone.utc)
-                )
-            ],
-        )
+    electricity_meter = _make_electricity_meter(
+        valid_from=datetime(2026, 5, 24, tzinfo=timezone.utc),
+        valid_to=datetime(2027, 5, 24, tzinfo=timezone.utc),
+        prior_agreements=[
+            Agreement(
+                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
+                valid_from=datetime(2025, 5, 24, tzinfo=timezone.utc),
+                valid_to=datetime(2026, 5, 24, tzinfo=timezone.utc),
+            )
+        ],
     )
+    retriever = CostForecastRetriever(_source(mariadb_client, [electricity_meter]))
     retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
 
     with mariadb_client.session_read_scope() as session:
@@ -715,6 +724,52 @@ def test_current_agreement_with_a_bounded_valid_to_still_matches(
 
     assert len(stored) == 1
     assert stored[0].actual_cost_to_date == Decimal("0.88")
+
+
+@responses.activate
+@pytest.mark.parametrize(
+    "valid_from, valid_to, should_match",
+    [
+        pytest.param(
+            datetime(2026, 7, 7, tzinfo=timezone.utc),
+            datetime(2027, 7, 7, tzinfo=timezone.utc),
+            True,
+            id="valid_from_boundary_is_inclusive",
+        ),
+        pytest.param(
+            datetime(2022, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 7, 7, tzinfo=timezone.utc),
+            False,
+            id="valid_to_boundary_is_exclusive",
+        ),
+    ],
+)
+def test_current_agreement_half_open_interval_boundaries(
+    mariadb_client: MariaDBClient,
+    valid_from: datetime,
+    valid_to: datetime,
+    should_match: bool,
+) -> None:
+    # valid_from is inclusive, valid_to is exclusive -- otherwise a renewal's
+    # first instant would match both the expiring and incoming agreement.
+    _mock_billing_period("2026-07-06", "2026-08-06")
+    as_of = datetime(2026, 7, 7, tzinfo=timezone.utc)
+
+    with mariadb_client.session_write_scope() as s:
+        _seed_fixed_tariff_agreement_and_rate(s)
+
+    electricity_meter = _make_electricity_meter(
+        valid_from=valid_from, valid_to=valid_to
+    )
+    retriever = CostForecastRetriever(_source(mariadb_client, [electricity_meter]))
+
+    if should_match:
+        retriever.refresh(as_of=as_of)
+        with mariadb_client.session_read_scope() as session:
+            assert session.query(model.cost_forecast).count() == 1
+    else:
+        with pytest.raises(RuntimeError, match="[Nn]o current .*agreement"):
+            retriever.refresh(as_of=as_of)
 
 
 @responses.activate
