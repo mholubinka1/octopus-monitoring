@@ -146,9 +146,9 @@ same live-monitoring window. Agreed acceptance bar: *meaningfully reduce* the
 frequency of DNS-caused failures, not eliminate them entirely; must be
 testable without a live Pi redeploy.
 
-This document intentionally lives on the `bugfix/cost-forecast-current-
-agreement-range` branch alongside the unrelated agreement-bug fix, rather
-than its own branch — an explicit, deliberate choice this session because two
-agents were working in parallel against one shared working directory. Pick a
-proper dedicated branch (e.g. `chore/dns-resilience-and-session-reuse`) when
-actually picking this up for implementation.
+This document was originally drafted on the `bugfix/cost-forecast-current-
+agreement-range` branch alongside the unrelated agreement-bug fix — an
+explicit, deliberate choice at the time because two agents were working in
+parallel against one shared working directory. Now moved to its own
+dedicated `chore/dns-resilience-and-session-reuse` branch (created from
+`main` after PR #426 merged) for implementation.
