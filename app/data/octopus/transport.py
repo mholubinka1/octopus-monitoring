@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Type, TypeVar
 import requests
 from common.config import OctopusAPISettings
 from common.decorator import retry
-from common.exceptions import APIError
+from common.http import raise_for_http_error
 from pydantic import BaseModel
 
 REQUEST_TIMEOUT_SECONDS = 30
@@ -36,10 +36,4 @@ class OctopusTransport:
             response.raise_for_status()
             return response_model.model_validate(response.json())
         except Exception as e:
-            if response is not None and response.status_code != 200:
-                try:
-                    error_body: object = response.json()
-                except ValueError:
-                    error_body = response.text
-                raise APIError(error_body) from e
-            raise RuntimeError(f"Failed to {description}: {e}.") from e
+            raise_for_http_error(response, e, description)

@@ -118,6 +118,11 @@ class MonitoringClient:
     def fetch_agile_forecast(self, region: str) -> List[AgileForecastReading]:
         return self._agile_predict.get_forecast(region)
 
+    def persist_agile_forecast(
+        self, region: str, readings: List[AgileForecastReading], fetched_at: datetime
+    ) -> None:
+        self.mariadb.write_agile_forecast(region, readings, fetched_at)
+
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime
     ) -> List[DailyCostSummary]:

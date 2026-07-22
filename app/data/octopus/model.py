@@ -42,7 +42,14 @@ class BillingPeriod:
     def from_billing_options(
         cls, period_start: date, period_end: Optional[date], is_fixed: bool
     ) -> "BillingPeriod":
-        if is_fixed and period_end is not None:
+        if is_fixed:
+            if period_end is None:
+                raise ValueError(
+                    "Kraken reported isFixed: true with no "
+                    "currentBillingPeriodEndDate -- contradicts its own "
+                    'schema ("Null if the account is on flexible '
+                    'billing"); refusing to guess a fallback date.'
+                )
             return cls(start=period_start, end=period_end)
         # Flexible billing (isFixed: false) has no fixed end date from
         # Kraken -- fall back to start + 1 calendar month, same day-of-month,

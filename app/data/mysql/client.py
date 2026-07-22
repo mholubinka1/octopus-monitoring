@@ -12,6 +12,7 @@ from data.model import (
     ConsumptionSummary,
     CostForecast,
     DailyCostSummary,
+    Energy,
     as_energy_char,
     energy_from_char,
 )
@@ -308,7 +309,7 @@ class MariaDBClient:
                     ),
                 )
                 .filter(
-                    c.energy == "E",
+                    c.energy == as_energy_char(Energy.electricity),
                     c.period_from >= period_from,
                     c.period_from < period_to,
                 )

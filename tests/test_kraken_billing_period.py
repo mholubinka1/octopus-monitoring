@@ -6,6 +6,7 @@ import responses
 from common.config import OctopusAPISettings
 from common.exceptions import APIError
 from data.octopus.kraken import BillingPeriodClient, KrakenTransport
+from data.octopus.model import BillingPeriod
 
 GRAPHQL_ENDPOINT = "https://api.octopus.energy/v1/graphql/"
 
@@ -161,3 +162,15 @@ def test_every_call_re_authenticates_rather_than_reusing_a_cached_token() -> Non
         if "obtainKrakenToken" in call.request.body.decode()
     ]
     assert len(token_mint_calls) == 2
+
+
+def test_isFixed_true_with_no_end_date_raises_rather_than_silently_falling_back() -> (
+    None
+):
+    # isFixed: true with a null end date contradicts Kraken's own schema
+    # ("Null if the account is on flexible billing") -- a genuine contract
+    # violation, not the expected flexible-billing case. Falling through to
+    # the flexible-billing month-clamp math here would fabricate a plausible
+    # -looking date instead of surfacing the anomaly.
+    with pytest.raises(ValueError, match="isFixed.*true"):
+        BillingPeriod.from_billing_options(date(2026, 7, 6), None, is_fixed=True)

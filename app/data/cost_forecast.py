@@ -83,6 +83,10 @@ class CostForecastSource(MeterSource, Protocol):
 
     def fetch_agile_forecast(self, region: str) -> List[AgileForecastReading]: ...
 
+    def persist_agile_forecast(
+        self, region: str, readings: List[AgileForecastReading], fetched_at: datetime
+    ) -> None: ...
+
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime
     ) -> List[DailyCostSummary]: ...
@@ -136,9 +140,21 @@ class CostForecastRetriever:
 
     def _current_electricity_agreement(self) -> Agreement:
         electricity_meter = next(
-            m for m in self._client.meters if m.energy == Energy.electricity
+            (m for m in self._client.meters if m.energy == Energy.electricity), None
         )
-        return next(a for a in electricity_meter.agreements if a.valid_to is None)
+        if electricity_meter is None:
+            raise RuntimeError(
+                "No electricity meter found -- cannot compute a cost forecast."
+            )
+        agreement = next(
+            (a for a in electricity_meter.agreements if a.valid_to is None), None
+        )
+        if agreement is None:
+            raise RuntimeError(
+                "No current (open-ended) agreement found for the electricity "
+                "meter -- cannot compute a cost forecast."
+            )
+        return agreement
 
     def _fill_zero_consumption_days(
         self,
@@ -217,6 +233,12 @@ class CostForecastRetriever:
         self, billing_period_end: date, future_daily_kwh: Decimal, as_of: datetime
     ) -> Decimal:
         forecast_readings = self._client.fetch_agile_forecast(self._client.region_code)
+        # Persisted for the pre-existing "Price Curve" Grafana panel, which
+        # reads agile_forecast directly -- fetching it for this in-memory
+        # projection alone would never give that panel any data.
+        self._client.persist_agile_forecast(
+            self._client.region_code, forecast_readings, as_of
+        )
         end_datetime = _midnight_utc(billing_period_end)
         tiled = tile_forecast_beyond(forecast_readings, billing_period_end)
         remaining_readings = [
