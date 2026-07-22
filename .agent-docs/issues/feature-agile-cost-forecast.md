@@ -1,5 +1,7 @@
 # Issues: feature-agile-cost-forecast
 
+> Work complete — PR ready to merge.
+>
 > Note: User Story 1 ("yesterday's electricity cost") is already fully
 > satisfied — the "Yesterday's Cost" Grafana panel in
 > `grafana/mariadb/queries.md` is a live query against existing
@@ -49,22 +51,22 @@ loudly.
 
 ### Acceptance criteria
 
-- [ ] New client authenticates via `obtainKrakenToken(APIKey: ...)` and
+- [x] New client authenticates via `obtainKrakenToken(APIKey: ...)` and
       queries `billingOptions` for a given account number
-- [ ] `isFixed: true` returns `currentBillingPeriodEndDate` directly as the
+- [x] `isFixed: true` returns `currentBillingPeriodEndDate` directly as the
       billing period end
-- [ ] `isFixed: false` computes `billing_period_end` as start + 1 calendar
+- [x] `isFixed: false` computes `billing_period_end` as start + 1 calendar
       month, same day-of-month, clamped to the month's last valid day
       (tested with a start date on the 29th/30th/31st rolling into a
       shorter month)
-- [ ] An unreachable/error Kraken response raises a clear exception (not
+- [x] An unreachable/error Kraken response raises a clear exception (not
       silently swallowed or returning a sentinel)
-- [ ] No JWT or refresh token is persisted across calls — every call
+- [x] No JWT or refresh token is persisted across calls — every call
       re-authenticates via the stored API key
-- [ ] Unit tests (`responses`-mocked GraphQL POST): `isFixed: true` case,
+- [x] Unit tests (`responses`-mocked GraphQL POST): `isFixed: true` case,
       `isFixed: false` fallback case (including the month-clamping edge
       case), and an unreachable/error case
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
 
@@ -106,20 +108,20 @@ Two pure functions, independently unit-testable without any live API or DB:
 
 ### Acceptance criteria
 
-- [ ] `AgilePredictClient` fetches the 14-day forecast for a given region
-- [ ] `agile_forecast` table added via additive schema sync, populated only
+- [x] `AgilePredictClient` fetches the 14-day forecast for a given region
+- [x] `agile_forecast` table added via additive schema sync, populated only
       with real (non-tiled) 14-day forecast data
-- [ ] Tiling function: given 14-day forecast fixture data and a target date
+- [x] Tiling function: given 14-day forecast fixture data and a target date
       well past day 14, produces a sequence where days 15+ correctly repeat
       days 8–14 in order, and terminates correctly (asserted, not just
       assumed, for a long target period)
-- [ ] Consumption projection function: given fixture elapsed-period
+- [x] Consumption projection function: given fixture elapsed-period
       consumption data, returns the correct flat daily average
-- [ ] An unreachable/error AgilePredict response raises a clear exception
-- [ ] Unit tests (`responses`-mocked): a 14-day-cap forecast response, a
+- [x] An unreachable/error AgilePredict response raises a clear exception
+- [x] Unit tests (`responses`-mocked): a 14-day-cap forecast response, a
       failure/unreachable case; pure-function tests for tiling and
       consumption projection using fixture data
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
 
@@ -268,41 +270,41 @@ honest reflection of state, not a fabricated placeholder.
 
 ### Acceptance criteria
 
-- [ ] `cost_forecast` table added via additive schema sync
-- [ ] `CostForecast`/`DailyCostSummary` domain types added to `data/model.py`
-- [ ] `MariaDBClient.read_elapsed_billing_period_costs` joins
+- [x] `cost_forecast` table added via additive schema sync
+- [x] `CostForecast`/`DailyCostSummary` domain types added to `data/model.py`
+- [x] `MariaDBClient.read_elapsed_billing_period_costs` joins
       `consumption`⋈`agreement`⋈`product_rate`, grouped by day, taking
       `MAX(standing_charge)` per day (not over the whole range)
-- [ ] `MariaDBClient.read_current_product_rate` returns the currently-valid
+- [x] `MariaDBClient.read_current_product_rate` returns the currently-valid
       rate for a product/region
-- [ ] `CostForecastRetriever.refresh()` computes and persists
+- [x] `CostForecastRetriever.refresh()` computes and persists
       `actual_cost_to_date` and `projected_total_cost` together in one row,
       both already converted to GBP
-- [ ] Elapsed window anchored to midnight UTC of `billing_period_start`
-- [ ] Current tariff/agreement sourced from `self._client.meters`, not a
+- [x] Elapsed window anchored to midnight UTC of `billing_period_start`
+- [x] Current tariff/agreement sourced from `self._client.meters`, not a
       new DB read
-- [ ] Fixed/variable tariff forecast uses the current known `unit_rate` for
+- [x] Fixed/variable tariff forecast uses the current known `unit_rate` for
       all remaining days — no `AgilePredictClient` call needed for those
       tariffs
-- [ ] Agile tariff forecast uses `AgilePredictClient`'s real forecast plus
+- [x] Agile tariff forecast uses `AgilePredictClient`'s real forecast plus
       the tiling function for remaining days beyond the real horizon;
       standing charge still from `read_current_product_rate`
-- [ ] Future consumption for remaining days uses the consumption-projection
+- [x] Future consumption for remaining days uses the consumption-projection
       function, fed from the combined query's `total_kwh` values
-- [ ] `cost_forecast_refresh` daily job registered at `DAILY_JOB_TIME`,
+- [x] `cost_forecast_refresh` daily job registered at `DAILY_JOB_TIME`,
       following the existing `register_<x>_job`/`_schedule_refresh_job`
       pattern
-- [ ] On Kraken or AgilePredict unreachability (including the first-ever
+- [x] On Kraken or AgilePredict unreachability (including the first-ever
       run): `job_run` recorded as a failure, no row written, any prior row
       left unchanged
-- [ ] All 10 Given-When-Then scenarios above have a corresponding test
-- [ ] End-to-end test: seeded test-DB session (fixture
+- [x] All 10 Given-When-Then scenarios above have a corresponding test
+- [x] End-to-end test: seeded test-DB session (fixture
       `consumption`/`agreement`/`product_rate` rows, mocked Kraken/
       AgilePredict), asserting the written `cost_forecast` row's
       `actual_cost_to_date` and `projected_total_cost` match expected
       values
-- [ ] No changes needed to `grafana/mariadb/queries.md` — the panels
+- [x] No changes needed to `grafana/mariadb/queries.md` — the panels
       already exist and read from the new table as-is
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
