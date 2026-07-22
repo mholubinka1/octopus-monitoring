@@ -271,9 +271,14 @@ def test_a_successful_cost_forecast_run_is_recorded_as_a_successful_job_run(
     assert runs[0].status == "success"
 
 
-def test_a_failed_cost_forecast_run_is_recorded_as_a_failed_job_run_and_no_row_left_dangling(
+def test_a_failed_cost_forecast_run_is_recorded_as_a_failed_job_run(
     mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # This exercises the job-registration/backoff wrapper shared by every
+    # job in this file, using a Mock retriever -- it does not touch
+    # cost_forecast at all. CostForecastRetriever's own "no row written on
+    # failure" behavior is covered separately, against a real MariaDBClient,
+    # by the test_kraken_unreachable_* tests in test_cost_forecast_retriever.py.
     monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
     scheduler = Scheduler()
     cost_forecast = Mock(spec=CostForecastRetriever)

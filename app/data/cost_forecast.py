@@ -208,18 +208,32 @@ class CostForecastRetriever:
         # (inclusive), not the first day of the next period -- Kraken
         # exposes a separate nextBillingDate field distinct from
         # currentBillingPeriodEndDate, which would be redundant if the end
-        # date were exclusive. remaining_days is derived as "total period
-        # days minus days already accounted for in daily_costs" rather than
-        # a raw (end - as_of.date()) subtraction: the latter silently drops
+        # date were exclusive. remaining_days (whole future days, for
+        # standing charge only) is derived as "total period days minus days
+        # already accounted for in daily_costs" rather than a raw
+        # (end - as_of.date()) subtraction: the latter silently drops
         # as_of.date() ("today") from *both* the elapsed and remaining
-        # counts whenever as_of lands on an exact midnight (each day in
-        # daily_costs is guaranteed distinct, so its length is exactly the
-        # elapsed-day count) -- this formula can't double- or under-count a
-        # day regardless of what time of day as_of is.
+        # counts whenever as_of lands on an exact midnight.
         total_period_days = (billing_period.end - billing_period.start).days + 1
         remaining_days = total_period_days - len(daily_costs)
-        if remaining_days <= 0:
+
+        # remaining_hours spans from as_of through the end of the inclusive
+        # billing_period_end -- unlike remaining_days, this correctly
+        # includes the *rest of today* whenever as_of has already been
+        # counted as an elapsed day (i.e. whenever as_of isn't exactly
+        # midnight, the normal production case since the daily job runs at
+        # DAILY_JOB_TIME = "04:00"). Today's standing charge is already
+        # fully covered by the elapsed-days query/gap-fill above (a flat
+        # per-day fee, not prorated), so remaining_days alone is correct for
+        # standing_cost -- but the *variable* (unit-rate) cost for today's
+        # not-yet-metered remaining hours would otherwise be silently
+        # dropped every single day, since Octopus consumption data lags and
+        # "today" frequently has no rows yet by the time the job runs.
+        period_end_boundary = _midnight_utc(billing_period.end) + timedelta(days=1)
+        remaining_seconds = (period_end_boundary - as_of).total_seconds()
+        if remaining_seconds <= 0:
             return Decimal("0")
+        remaining_hours = Decimal(remaining_seconds) / Decimal(3600)
 
         future_daily_kwh = project_daily_average_consumption(
             [d.total_kwh for d in daily_costs]
@@ -234,14 +248,16 @@ class CostForecastRetriever:
                 "project remaining billing period cost."
             )
 
-        standing_cost = remaining_days * current_rate.standing_charge
+        standing_cost = max(remaining_days, 0) * current_rate.standing_charge
 
         if agreement.tariff_type == TariffType.agile:
             variable_cost = self._project_agile_variable_cost(
                 billing_period.end, future_daily_kwh, as_of
             )
         else:
-            variable_cost = remaining_days * future_daily_kwh * current_rate.unit_rate
+            variable_cost = (
+                (remaining_hours / 24) * future_daily_kwh * current_rate.unit_rate
+            )
 
         return (variable_cost + standing_cost) / 100
 

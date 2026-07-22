@@ -232,21 +232,19 @@ def test_fixed_tariff_actual_cost_and_projection(
 
 
 @responses.activate
-def test_today_is_charged_exactly_once_when_as_of_has_a_time_component(
+def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_of(
     mariadb_client: MariaDBClient,
 ) -> None:
     # Regression test: the daily job always runs at a non-midnight time
-    # (DAILY_JOB_TIME = "04:00"), so as_of.date() is "today" and today's
-    # midnight is strictly before as_of -- meaning today is elapsed (counted
-    # in actual_cost_to_date) but NOT one of remaining_days. Billing period
-    # end (Jul 10) is treated as the last inclusive billable day, so the
-    # full period is Jul6..Jul10 = 5 calendar days. With as_of = Jul8 04:00:
-    # elapsed = {Jul6, Jul7, Jul8} (3 days); remaining_days =
-    # (Jul10 - Jul8).days = 2, representing {Jul9, Jul10} (the two days
-    # AFTER as_of.date(), per plain date subtraction -- NOT {Jul8, Jul9}).
-    # 3 + 2 = 5 matches the period length exactly, with no day double- or
-    # under-counted. This locks that boundary down instead of only ever
-    # exercising it with as_of pinned to exact midnight.
+    # (DAILY_JOB_TIME = "04:00"). Billing period end (Jul 10) is the last
+    # inclusive billable day, so the full period is Jul6..Jul10 = 5 days.
+    # With as_of = Jul8 04:00: elapsed = {Jul6, Jul7, Jul8} (3 days, each
+    # already charged a full standing fee via the elapsed query/gap-fill);
+    # remaining_days (whole future days, for standing charge only) =
+    # 5 total - 3 elapsed = 2, representing {Jul9, Jul10} -- not {Jul8,
+    # Jul9}, since remaining_days always excludes as_of.date() ("today").
+    # 3 + 2 = 5 standing-charge-days total, matching the period length
+    # exactly, with today's standing fee counted once, not twice.
     _mock_billing_period("2026-07-06", "2026-07-10")
 
     with mariadb_client.session_write_scope() as s:
@@ -271,7 +269,9 @@ def test_today_is_charged_exactly_once_when_as_of_has_a_time_component(
                 standing_charge=Decimal("48.00"),
             )
         )
-        # Elapsed days Jul6, Jul7, Jul8 (as_of = Jul8 04:00) each get 2.0 kWh.
+        # Elapsed days Jul6, Jul7, Jul8 (as_of = Jul8 04:00) each get 6.0 kWh
+        # -- chosen (rather than a rounder-looking value) so the partial-
+        # today variable-cost fraction below divides out to a clean number.
         for day in (6, 7, 8):
             s.add(
                 model.consumption(
@@ -279,9 +279,9 @@ def test_today_is_charged_exactly_once_when_as_of_has_a_time_component(
                     energy="E",
                     period_from=datetime(2026, 7, day, 0, 0, tzinfo=timezone.utc),
                     period_to=datetime(2026, 7, day, 0, 30, tzinfo=timezone.utc),
-                    raw_value=Decimal("2.0"),
+                    raw_value=Decimal("6.0"),
                     unit="kWh",
-                    est_kwh=Decimal("2.0"),
+                    est_kwh=Decimal("6.0"),
                 )
             )
 
@@ -293,14 +293,18 @@ def test_today_is_charged_exactly_once_when_as_of_has_a_time_component(
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
 
-    day_charge = Decimal("2.0") * Decimal("20.00") + Decimal("48.00")  # 88.00p
-    # actual_cost_to_date: 3 elapsed days (Jul6, Jul7, Jul8).
+    day_charge = Decimal("6.0") * Decimal("20.00") + Decimal("48.00")  # 168.00p
+    # actual_cost_to_date: 3 elapsed days (Jul6, Jul7, Jul8), each already
+    # fully charged its own standing fee -- 3 * 168.00p = 504.00p -> £5.04.
     assert row.actual_cost_to_date == 3 * day_charge / 100
-    # projected_total_cost: 5 day-charges total (3 elapsed + 2 remaining =
-    # Jul9, Jul10) -- the full 5-day period, not 6, which is what
-    # double-charging Jul8 would produce, and not 4, which is what
-    # under-charging (dropping Jul8 or Jul10) would produce.
-    assert row.projected_total_cost == 5 * day_charge / 100
+    # remaining_days = 2 (Jul9, Jul10) -> standing_cost = 2*48.00 = 96.00p.
+    # remaining_hours spans from Jul8 04:00 through the end of Jul10
+    # (period_end_boundary = Jul11 00:00) = 68 hours -- covering the rest
+    # of Jul8 (already elapsed for standing-charge purposes, but NOT yet
+    # priced for its remaining consumption) plus Jul9 and Jul10 in full.
+    # variable_cost = (68/24) * 6.0 kWh/day * 20.00p = 340.00p.
+    # remaining total = (340.00 + 96.00)/100 = £4.36.
+    assert row.projected_total_cost == 3 * day_charge / 100 + Decimal("4.36")
 
 
 def _seed_agile_agreement_and_rate(
@@ -643,6 +647,57 @@ def test_no_current_agreement_raises_a_clear_error(
     retriever = CostForecastRetriever(_source(mariadb_client, [lapsed_meter]))
 
     with pytest.raises(RuntimeError, match="[Nn]o current .*agreement"):
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+
+
+@responses.activate
+def test_no_current_product_rate_raises_a_clear_error(
+    mariadb_client: MariaDBClient,
+) -> None:
+    _mock_billing_period("2026-07-06", "2026-07-10")
+
+    with mariadb_client.session_write_scope() as s:
+        s.add(
+            model.agreement(
+                id="E20220101000000",
+                energy="E",
+                product_code=PRODUCT_CODE,
+                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
+                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_to=None,
+            )
+        )
+        # Covers Jul6's consumption (so the elapsed query succeeds) but
+        # expires before as_of (Jul7 00:00), so the remaining-cost lookup
+        # for "the current rate" finds nothing.
+        s.add(
+            model.product_rate(
+                id=f"{PRODUCT_CODE}_{REGION}_202601010000",
+                product_code=PRODUCT_CODE,
+                region=REGION,
+                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_to=datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc),
+                unit_rate=Decimal("20.00"),
+                standing_charge=Decimal("48.00"),
+            )
+        )
+        s.add(
+            model.consumption(
+                id="E20260706000000",
+                energy="E",
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                raw_value=Decimal("2.0"),
+                unit="kWh",
+                est_kwh=Decimal("2.0"),
+            )
+        )
+
+    retriever = CostForecastRetriever(
+        _source(mariadb_client, [_make_electricity_meter()])
+    )
+
+    with pytest.raises(RuntimeError, match="[Nn]o product_rate found"):
         retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
 
 

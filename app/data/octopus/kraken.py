@@ -7,7 +7,7 @@ from common.decorator import retry
 from common.exceptions import APIError
 from common.http import raise_for_http_error
 from data.octopus.model import BillingPeriod
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 REQUEST_TIMEOUT_SECONDS = 30
 
@@ -27,8 +27,6 @@ class ObtainKrakenTokenResponse(BaseModel):
 
 
 class BillingOptionsData(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
     period_start: date = Field(alias="currentBillingPeriodStartDate")
     period_end: Optional[date] = Field(alias="currentBillingPeriodEndDate")
     is_fixed: bool = Field(alias="isFixed")
