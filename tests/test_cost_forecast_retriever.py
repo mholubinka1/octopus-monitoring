@@ -157,7 +157,7 @@ def _source(mariadb: MariaDBClient, meters: List[Meter]) -> _RealCostForecastSou
     settings = OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     return _RealCostForecastSource(
         mariadb,
-        BillingPeriodClient(settings, KrakenTransport(settings)),
+        BillingPeriodClient(settings, KrakenTransport()),
         AgilePredictClient(),
         meters,
         REGION,

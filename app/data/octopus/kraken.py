@@ -70,9 +70,6 @@ query billingOptions($accountNumber: String!) {
 class KrakenTransport:
     base_url: str = "https://api.octopus.energy/v1/graphql/"
 
-    def __init__(self, settings: OctopusAPISettings) -> None:
-        self._api_key = settings.api_key
-
     @retry()
     def post(
         self,

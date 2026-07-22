@@ -41,7 +41,7 @@ def _mock_billing_options(start: str, end: object, is_fixed: bool) -> None:
 
 def _client() -> BillingPeriodClient:
     settings = OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
-    return BillingPeriodClient(settings, KrakenTransport(settings))
+    return BillingPeriodClient(settings, KrakenTransport())
 
 
 @responses.activate

@@ -167,7 +167,10 @@ class CostForecastRetriever:
         # read_elapsed_billing_period_costs -- there's no consumption row to
         # join a standing charge through. The standing charge still accrues
         # for that day regardless of usage, so it's filled in here from
-        # whichever product_rate applied at that day's midday.
+        # whichever product_rate applied at that day's midday. One query per
+        # missing day (accepted tradeoff: a billing period is at most ~31
+        # days and zero-consumption days are rare, so this never approaches
+        # a scale where batching the lookup would be worth the complexity).
         present_days = {d.date for d in daily_costs}
         filled = list(daily_costs)
         day = billing_period_start

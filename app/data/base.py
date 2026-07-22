@@ -37,9 +37,7 @@ class MonitoringClient:
     def __init__(self, settings: ApplicationSettings) -> None:
         self.octopus = OctopusEnergyAPIClient(settings.octopus)
         self.mariadb = MariaDBClient(settings.mariadb)
-        self._billing_period = BillingPeriodClient(
-            settings.octopus, KrakenTransport(settings.octopus)
-        )
+        self._billing_period = BillingPeriodClient(settings.octopus, KrakenTransport())
         self._agile_predict = AgilePredictClient()
 
         (account, meters) = self.octopus.get_account_meter_information()
