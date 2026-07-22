@@ -390,6 +390,10 @@ WITH weekly AS (
   FROM daily_consumption_summary
   WHERE energy = 'E'
   GROUP BY YEARWEEK(date, 3)
+  -- Completeness guard: only compare weeks with all 7 days present. The
+  -- current, still-in-progress ISO week never has 7 days yet, and the
+  -- oldest weeks near the one-time 2-year backfill's boundary can also be
+  -- short since that cutoff isn't week-aligned.
   HAVING COUNT(*) = 7
 ),
 target AS (
@@ -433,6 +437,7 @@ WITH weekly AS (
   FROM daily_consumption_summary
   WHERE energy = 'G'
   GROUP BY YEARWEEK(date, 3)
+  -- Completeness guard: see the electricity panel above for the rationale.
   HAVING COUNT(*) = 7
 ),
 target AS (
