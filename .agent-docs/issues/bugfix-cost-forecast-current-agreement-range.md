@@ -1,5 +1,7 @@
 # Issues: bugfix-cost-forecast-current-agreement-range
 
+> Work complete — PR ready to merge.
+
 ## Fix current-agreement lookup to use range containment, not valid_to IS NULL
 
 **GitHub issue**: #425
@@ -21,14 +23,14 @@ regression test with a bounded, non-`None` `valid_to` that still spans
 
 ### Acceptance criteria
 
-- [ ] `_current_electricity_agreement(as_of)` selects an agreement using
+- [x] `_current_electricity_agreement(as_of)` selects an agreement using
       `valid_from <= as_of and (valid_to is None or as_of < valid_to)`.
-- [ ] `refresh()` passes `as_of` through to `_current_electricity_agreement`.
-- [ ] New test: a current agreement with a bounded `valid_to` spanning
+- [x] `refresh()` passes `as_of` through to `_current_electricity_agreement`.
+- [x] New test: a current agreement with a bounded `valid_to` spanning
       `as_of` results in `refresh()` succeeding and persisting a forecast row.
-- [ ] Existing test `test_no_current_agreement_raises_a_clear_error` still
+- [x] Existing test `test_no_current_agreement_raises_a_clear_error` still
       passes against the reworded error message.
-- [ ] All other existing tests in `tests/test_cost_forecast_retriever.py`
+- [x] All other existing tests in `tests/test_cost_forecast_retriever.py`
       still pass unchanged.
 
 ---
