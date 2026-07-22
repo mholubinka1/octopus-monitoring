@@ -259,6 +259,12 @@ class MariaDBClient:
                     pr.valid_from <= as_of,
                     or_(pr.valid_to.is_(None), as_of < pr.valid_to),
                 )
+                # Explicit ordering, not bare .first(): if overlapping rows
+                # ever matched (bad upstream data), .first() with no ORDER
+                # BY is nondeterministic. Most-recently-started wins, same
+                # "ORDER BY valid_from DESC LIMIT 1" convention already used
+                # for current-rate lookups in grafana/mariadb/queries.md.
+                .order_by(pr.valid_from.desc())
                 .first()
             )
         if row is None:
