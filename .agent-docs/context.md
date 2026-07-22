@@ -61,7 +61,7 @@ _Avoid_: customer, user
 ### Data Storage
 
 **MariaDB `octopus` database**:
-The sole active persistence store for this app. The database itself is created by `mariadb/init.sql`; every table inside it is defined solely by `app/data/mysql/model.py` (see **Schema Sync**) and includes `consumption`, `agreement`, `product`, `product_rate`, and `job_run`.
+The sole active persistence store for this app. The database itself is created by `mariadb/init.sql`; every table inside it is defined solely by `app/data/mysql/model.py` (see **Schema Sync**) and includes `consumption`, `agreement`, `product`, `product_rate`, `daily_consumption_summary`, `agile_forecast`, `cost_forecast`, and `job_run`.
 _Avoid_: the database, mysql db
 
 **Schema Sync**:
