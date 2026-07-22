@@ -52,7 +52,15 @@ def test_get_forecast_maps_agile_pred_to_unit_rate_with_thirty_minute_periods() 
 
 
 @responses.activate
-def test_empty_prices_array_raises_a_clear_error() -> None:
+def test_empty_prices_array_raises_a_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The "no prices" APIError is raised outside get_forecast's own
+    # try/except, so it propagates through the @retry() wrapper like any
+    # other exception -- without this monkeypatch, responses keeps serving
+    # the same empty body on every retry and the test burns ~20s in real
+    # time.sleep(10) calls before failing.
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
     _mock_forecast([])
 
     with pytest.raises(APIError, match=REGION):
