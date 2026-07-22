@@ -382,12 +382,15 @@ ORDER BY MIN(date);
 
 Groups by `YEARWEEK(date, 3)` (ISO week numbering, mode 3) rather than `YEAR(date)` paired separately with `WEEK(date, 3)` — the latter can misattribute early-January/late-December boundary dates to the wrong week-year, exactly what ISO week numbering exists to avoid. Each week is compared against the same ISO week number one year prior (`yearweek - 100`, e.g. `202630 - 100 = 202530` — subtracting 100 shifts back exactly one week-year while preserving the week number). Both the raw % change and a 4-week trailing moving average of it are returned as separate columns for the same panel.
 
+`weekly` only keeps weeks with all 7 days present (`HAVING COUNT(*) = 7`) — the current, still-in-progress ISO week never has 7 days yet, and the oldest weeks near the one-time 2-year backfill's boundary can also be short since that cutoff isn't week-aligned. Filtering incomplete weeks out of `weekly` before `target` and the comparator join both read from it means: an incomplete current week never becomes a target row (nothing sensible to plot for a week that isn't over), and an incomplete comparator week naturally produces a `NULL` `yoy_pct_change` via the `LEFT JOIN` (target week still shown, just no % for that point) instead of dividing against a partial total.
+
 ```sql
 WITH weekly AS (
   SELECT YEARWEEK(date, 3) AS yearweek, SUM(total_kwh) AS weekly_kwh
   FROM daily_consumption_summary
   WHERE energy = 'E'
   GROUP BY YEARWEEK(date, 3)
+  HAVING COUNT(*) = 7
 ),
 target AS (
   SELECT
@@ -422,12 +425,15 @@ ORDER BY t.yearweek;
 
 ### Weekly Year-on-Year Change — Last 52/53 Weeks, Gas (time series)
 
+Same completeness guard as the electricity panel above — see its description for the rationale.
+
 ```sql
 WITH weekly AS (
   SELECT YEARWEEK(date, 3) AS yearweek, SUM(total_kwh) AS weekly_kwh
   FROM daily_consumption_summary
   WHERE energy = 'G'
   GROUP BY YEARWEEK(date, 3)
+  HAVING COUNT(*) = 7
 ),
 target AS (
   SELECT
