@@ -8,15 +8,18 @@ from data.consumption_summary import (
     ConsumptionSummaryBackfill,
     ConsumptionSummaryRetriever,
 )
+from data.cost_forecast import CostForecastRetriever
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from main import (
     register_consumption_summary_job,
+    register_cost_forecast_refresh_job,
     register_jobs,
     register_pricing_job,
     run_backfill_at_startup,
     run_initial_consumption_summary_sync,
+    run_initial_cost_forecast_sync,
     run_initial_pricing_sync,
     run_pending_safely,
 )
@@ -229,6 +232,61 @@ def test_run_initial_consumption_summary_sync_does_not_propagate_a_startup_failu
     consumption_summary.refresh.side_effect = RuntimeError("MariaDB unavailable")
 
     run_initial_consumption_summary_sync(consumption_summary)
+
+
+def test_run_initial_cost_forecast_sync_does_not_propagate_a_startup_failure() -> None:
+    cost_forecast = Mock(spec=CostForecastRetriever)
+    cost_forecast.refresh.side_effect = RuntimeError("Kraken unavailable")
+
+    run_initial_cost_forecast_sync(cost_forecast)
+
+
+def test_cost_forecast_refresh_job_is_registered_daily_at_0400(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+
+    job = register_cost_forecast_refresh_job(
+        scheduler, Mock(spec=CostForecastRetriever), mariadb_client
+    )
+
+    assert job.unit == "days"
+    assert str(job.at_time) == "04:00:00"
+
+
+def test_a_successful_cost_forecast_run_is_recorded_as_a_successful_job_run(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    cost_forecast = Mock(spec=CostForecastRetriever)
+
+    job = register_cost_forecast_refresh_job(scheduler, cost_forecast, mariadb_client)
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert len(runs) == 1
+    assert runs[0].job_name == "cost_forecast_refresh"
+    assert runs[0].status == "success"
+
+
+def test_a_failed_cost_forecast_run_is_recorded_as_a_failed_job_run_and_no_row_left_dangling(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    scheduler = Scheduler()
+    cost_forecast = Mock(spec=CostForecastRetriever)
+    cost_forecast.refresh.side_effect = RuntimeError("Kraken unavailable")
+
+    job = register_cost_forecast_refresh_job(scheduler, cost_forecast, mariadb_client)
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert all(run.status == "failure" for run in runs)
+    assert len(runs) > 0
 
 
 def test_backfill_runs_and_records_success_on_first_startup(

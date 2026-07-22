@@ -18,6 +18,7 @@ from data.consumption_summary import (
     ConsumptionSummaryBackfill,
     ConsumptionSummaryRetriever,
 )
+from data.cost_forecast import CostForecastRetriever
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from schedule import Job, Scheduler, default_scheduler
@@ -29,8 +30,9 @@ CONSUMPTION_REFRESH_JOB = "consumption_refresh"
 PRICING_REFRESH_JOB = "pricing_refresh"
 WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
 YEARLY_COMPARISON_BACKFILL_JOB = "yearly_comparison_backfill"
+COST_FORECAST_REFRESH_JOB = "cost_forecast_refresh"
 WEEKLY_JOB_TIME = "03:00"  # Monday, for weekly-cadence jobs
-DAILY_JOB_TIME = "04:00"  # for future daily-cadence jobs (not yet used)
+DAILY_JOB_TIME = "04:00"  # for daily-cadence jobs
 
 
 def startup(
@@ -58,6 +60,13 @@ def run_initial_consumption_summary_sync(
         consumption_summary.refresh()
     except Exception:
         logger.exception("Consumption summary sync failed at startup; continuing.")
+
+
+def run_initial_cost_forecast_sync(cost_forecast: CostForecastRetriever) -> None:
+    try:
+        cost_forecast.refresh()
+    except Exception:
+        logger.exception("Cost forecast sync failed at startup; continuing.")
 
 
 def _run_with_backoff_in_background(
@@ -158,6 +167,20 @@ def register_consumption_summary_job(
     )
 
 
+def register_cost_forecast_refresh_job(
+    scheduler: Scheduler,
+    cost_forecast: CostForecastRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every().day.at(DAILY_JOB_TIME),
+        COST_FORECAST_REFRESH_JOB,
+        cost_forecast.refresh,
+        mariadb,
+    )
+
+
 def run_pending_safely(scheduler: Scheduler) -> None:
     try:
         scheduler.run_pending()
@@ -186,6 +209,7 @@ def main() -> None:
     pricing = PricingRetriever(client)
     consumption_summary = ConsumptionSummaryRetriever(client.mariadb)
     yearly_comparison_backfill = ConsumptionSummaryBackfill(client)
+    cost_forecast = CostForecastRetriever(client)
 
     startup(consumption, refresh_config)
     run_initial_pricing_sync(pricing)
@@ -195,11 +219,13 @@ def main() -> None:
     # underlying consumption rows, so whichever writes last is still right.
     run_backfill_at_startup(yearly_comparison_backfill, client.mariadb)
     run_initial_consumption_summary_sync(consumption_summary)
+    run_initial_cost_forecast_sync(cost_forecast)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
     register_pricing_job(default_scheduler, refresh_config, pricing, client.mariadb)
     register_consumption_summary_job(
         default_scheduler, consumption_summary, client.mariadb
     )
+    register_cost_forecast_refresh_job(default_scheduler, cost_forecast, client.mariadb)
 
     while True:
         run_pending_safely(default_scheduler)
