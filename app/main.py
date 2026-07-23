@@ -31,8 +31,8 @@ PRICING_REFRESH_JOB = "pricing_refresh"
 WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
 YEARLY_COMPARISON_BACKFILL_JOB = "yearly_comparison_backfill"
 COST_FORECAST_REFRESH_JOB = "cost_forecast_refresh"
-WEEKLY_JOB_TIME = "03:00"  # Monday, for weekly-cadence jobs
-DAILY_JOB_TIME = "04:00"  # for daily-cadence jobs
+DAILY_JOB_TIME = "04:00"  # shared by every daily/weekly-cadence job, so
+# none of them land in watchtower's 03:00 update window (see docker-compose.yml)
 
 
 def startup(
@@ -160,7 +160,7 @@ def register_consumption_summary_job(
 ) -> Job:
     return _schedule_refresh_job(
         scheduler,
-        lambda s: s.every().monday.at(WEEKLY_JOB_TIME),
+        lambda s: s.every().monday.at(DAILY_JOB_TIME),
         WEEKLY_CONSUMPTION_SUMMARY_JOB,
         consumption_summary.refresh,
         mariadb,

@@ -167,7 +167,7 @@ def test_run_initial_pricing_sync_does_not_propagate_a_startup_failure() -> None
     run_initial_pricing_sync(pricing)
 
 
-def test_consumption_summary_job_is_registered_for_monday_at_0300(
+def test_consumption_summary_job_is_registered_for_monday_at_0400(
     mariadb_client: MariaDBClient,
 ) -> None:
     scheduler = Scheduler()
@@ -178,7 +178,7 @@ def test_consumption_summary_job_is_registered_for_monday_at_0300(
 
     assert job.unit == "weeks"
     assert job.start_day == "monday"
-    assert str(job.at_time) == "03:00:00"
+    assert str(job.at_time) == "04:00:00"
 
 
 def test_a_successful_consumption_summary_run_is_recorded_as_a_successful_job_run(
