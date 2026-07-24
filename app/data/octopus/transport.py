@@ -15,7 +15,8 @@ class OctopusTransport:
     base_url: str = "https://api.octopus.energy/v1/"
 
     def __init__(self, settings: OctopusAPISettings) -> None:
-        self._api_key = settings.api_key
+        self._session = requests.Session()
+        self._session.auth = (settings.api_key, "")
 
     @retry()
     def get(
@@ -27,9 +28,8 @@ class OctopusTransport:
     ) -> T:
         response: Optional[requests.Response] = None
         try:
-            response = requests.get(
+            response = self._session.get(
                 url=url,
-                auth=(self._api_key, ""),
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
