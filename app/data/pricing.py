@@ -84,7 +84,7 @@ class PricingRetriever:
 
     def _sync_own_product_rates(self) -> None:
         for meter, agreement in self._meter_agreement_pairs():
-            if agreement.has_no_possible_rate_window:
+            if agreement.has_zero_or_negative_width:
                 logger.debug(
                     f"Agreement {agreement.product_code}/{agreement.tariff_code} "
                     f"has a zero or negative-width valid range "

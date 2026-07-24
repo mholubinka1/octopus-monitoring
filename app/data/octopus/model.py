@@ -153,7 +153,7 @@ class Agreement:
         return cls(tariff_code, valid_from, valid_to)
 
     @property
-    def has_no_possible_rate_window(self) -> bool:
+    def has_zero_or_negative_width(self) -> bool:
         return self.valid_to is not None and self.valid_from >= self.valid_to
 
 
