@@ -84,6 +84,17 @@ class PricingRetriever:
 
     def _sync_own_product_rates(self) -> None:
         for meter, agreement in self._meter_agreement_pairs():
+            if (
+                agreement.valid_to is not None
+                and agreement.valid_from >= agreement.valid_to
+            ):
+                logger.debug(
+                    f"Agreement {agreement.product_code}/{agreement.tariff_code} "
+                    f"has a zero or negative-width valid range "
+                    f"({agreement.valid_from} to {agreement.valid_to}) — no rate "
+                    "window is possible, skipping."
+                )
+                continue
             fetch_rates = (
                 self._client.fetch_electricity_rates
                 if meter.energy == Energy.electricity
