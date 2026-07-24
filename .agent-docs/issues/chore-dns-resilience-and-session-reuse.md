@@ -1,5 +1,7 @@
 # Issues: chore-dns-resilience-and-session-reuse
 
+> Work complete — PR ready to merge.
+
 ## Persistent HTTP session in OctopusTransport
 
 **GitHub issue**: #427
@@ -23,14 +25,14 @@ alone.
 
 ### Acceptance criteria
 
-- [ ] `OctopusTransport.__init__` creates `self._session = requests.Session()`
+- [x] `OctopusTransport.__init__` creates `self._session = requests.Session()`
       and sets auth on it once, instead of passing `auth=(...)` per call.
-- [ ] `get()` calls `self._session.get(...)` instead of the module-level
+- [x] `get()` calls `self._session.get(...)` instead of the module-level
       `requests.get(...)`.
-- [ ] All existing tests in `tests/test_octopus_transport.py` pass unmodified.
-- [ ] New test proves the same `Session` instance is reused across multiple
+- [x] All existing tests in `tests/test_octopus_transport.py` pass unmodified.
+- [x] New test proves the same `Session` instance is reused across multiple
       `get()` calls.
-- [ ] New regression test: a connection-level failure on the first attempt
+- [x] New regression test: a connection-level failure on the first attempt
       followed by a successful response on retry still succeeds end-to-end,
       proving session reuse doesn't break the existing `@retry()` path.
 
@@ -53,9 +55,9 @@ service only, so a brief unresponsive spell from the LAN's primary resolver
 
 ### Acceptance criteria
 
-- [ ] `energy-monitor` service in `docker-compose.yml` has
+- [x] `energy-monitor` service in `docker-compose.yml` has
       `dns: [192.168.0.50, 1.1.1.1]`, primary listed first.
-- [ ] `mariadb` service is unchanged (no `dns:` key added).
-- [ ] `docker compose config` validates the file cleanly.
+- [x] `mariadb` service is unchanged (no `dns:` key added).
+- [x] `docker compose config` validates the file cleanly.
 
 ---
