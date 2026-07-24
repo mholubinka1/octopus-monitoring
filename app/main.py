@@ -32,7 +32,9 @@ WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
 YEARLY_COMPARISON_BACKFILL_JOB = "yearly_comparison_backfill"
 COST_FORECAST_REFRESH_JOB = "cost_forecast_refresh"
 DAILY_JOB_TIME = "04:00"  # shared by every daily/weekly-cadence job, so
-# none of them land in watchtower's 03:00 update window (see docker-compose.yml)
+# none of them land in watchtower's 03:00 update window -- that schedule is
+# configured on the Pi host (pi-desktop's compose stack), not in this repo's
+# docker-compose.yml, which only enables watchtower via container labels.
 
 
 def startup(
