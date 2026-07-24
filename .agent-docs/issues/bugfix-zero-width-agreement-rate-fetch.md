@@ -1,5 +1,7 @@
 # Issues: bugfix-zero-width-agreement-rate-fetch
 
+> Work complete — PR ready to merge.
+
 ## Skip rate fetches for zero/negative-width agreements
 
 **GitHub issue**: #431
@@ -20,15 +22,15 @@ local to `_sync_own_product_rates()` — it does not touch `_meter_agreement_pai
 
 ### Acceptance criteria
 
-- [ ] An electricity agreement with `valid_from == valid_to` never reaches
+- [x] An electricity agreement with `valid_from == valid_to` never reaches
       `fetch_electricity_rates`, and a debug-level log line is emitted for it.
-- [ ] A gas agreement with `valid_from == valid_to` never reaches `fetch_gas_rates`,
+- [x] A gas agreement with `valid_from == valid_to` never reaches `fetch_gas_rates`,
       and a debug-level log line is emitted for it.
-- [ ] `_sync_comparison_rates()`'s `own_product_codes` exclusion set is unaffected —
+- [x] `_sync_comparison_rates()`'s `own_product_codes` exclusion set is unaffected —
       a skipped agreement's product code still excludes it from comparison-rate
       syncing.
-- [ ] Existing agreements with valid (non-degenerate) ranges are unaffected — rates
+- [x] Existing agreements with valid (non-degenerate) ranges are unaffected — rates
       are still fetched and persisted for them exactly as before.
-- [ ] Full test suite and pre-commit hooks pass.
+- [x] Full test suite and pre-commit hooks pass.
 
 ---
