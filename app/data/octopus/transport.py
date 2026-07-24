@@ -15,7 +15,15 @@ class OctopusTransport:
     base_url: str = "https://api.octopus.energy/v1/"
 
     def __init__(self, settings: OctopusAPISettings) -> None:
-        self._api_key = settings.api_key
+        # Shared across concurrent background job threads (see
+        # _run_with_backoff_in_background in main.py) -- one Session for
+        # connection reuse, relying on urllib3's own internally-locked
+        # connection pool for concurrent GETs. requests.Session doesn't
+        # document a blanket thread-safety guarantee, so session state
+        # (auth, headers, cookies) must never be mutated after construction;
+        # auth is set once here, immediately below, and nowhere else.
+        self._session = requests.Session()
+        self._session.auth = (settings.api_key, "")
 
     @retry()
     def get(
@@ -27,9 +35,8 @@ class OctopusTransport:
     ) -> T:
         response: Optional[requests.Response] = None
         try:
-            response = requests.get(
+            response = self._session.get(
                 url=url,
-                auth=(self._api_key, ""),
                 params=params,
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
