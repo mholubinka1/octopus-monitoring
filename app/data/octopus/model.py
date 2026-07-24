@@ -152,6 +152,10 @@ class Agreement:
         valid_to = None if not info.valid_to else datetime.fromisoformat(info.valid_to)
         return cls(tariff_code, valid_from, valid_to)
 
+    @property
+    def has_no_possible_rate_window(self) -> bool:
+        return self.valid_to is not None and self.valid_from >= self.valid_to
+
 
 class Meter(ABC):
     energy: Energy

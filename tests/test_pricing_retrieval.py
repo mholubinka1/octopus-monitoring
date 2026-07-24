@@ -690,7 +690,9 @@ def test_refresh_skips_the_rate_fetch_for_a_zero_width_electricity_agreement(
         stored = session.query(model.product_rate).all()
     assert stored == []
     assert any(
-        record.levelno == logging.DEBUG and "E-1R-VAR-22-11-01-C" in record.message
+        record.levelno == logging.DEBUG
+        and "VAR-22-11-01/E-1R-VAR-22-11-01-C" in record.message
+        and "zero or negative-width" in record.message
         for record in caplog.records
     )
 
@@ -722,7 +724,9 @@ def test_refresh_skips_the_rate_fetch_for_a_zero_width_gas_agreement(
         stored = session.query(model.product_rate).all()
     assert stored == []
     assert any(
-        record.levelno == logging.DEBUG and "G-1R-VAR-22-11-01-C" in record.message
+        record.levelno == logging.DEBUG
+        and "VAR-22-11-01/G-1R-VAR-22-11-01-C" in record.message
+        and "zero or negative-width" in record.message
         for record in caplog.records
     )
 
