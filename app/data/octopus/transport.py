@@ -15,6 +15,10 @@ class OctopusTransport:
     base_url: str = "https://api.octopus.energy/v1/"
 
     def __init__(self, settings: OctopusAPISettings) -> None:
+        # Shared across concurrent background job threads (see
+        # _run_with_backoff_in_background in main.py) -- safe without extra
+        # locking since urllib3's connection pool is internally locked, and
+        # auth is set once here and never mutated per-call.
         self._session = requests.Session()
         self._session.auth = (settings.api_key, "")
 
