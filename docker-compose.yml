@@ -9,6 +9,9 @@ services:
       - /mnt/media/pi-media/monitoring/log/energy-monitor:/log
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    dns:
+      - 192.168.0.50
+      - 1.1.1.1
     restart: unless-stopped
     depends_on:
       mariadb:
