@@ -93,6 +93,20 @@ def _make_electricity_meter() -> Electricity:
     )
 
 
+def _make_electricity_meter_with_zero_width_agreement() -> Electricity:
+    return Electricity(
+        mpan="1234567890123",
+        serial_number="00A1234567",
+        agreements=[
+            Agreement(
+                tariff_code="E-1R-VAR-22-11-01-C",
+                valid_from=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
+                valid_to=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
+            )
+        ],
+    )
+
+
 def _make_gas_meter() -> Gas:
     return Gas(
         mprn="9876543210987",
@@ -102,6 +116,20 @@ def _make_gas_meter() -> Gas:
                 tariff_code="G-1R-VAR-22-11-01-A",
                 valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
                 valid_to=None,
+            )
+        ],
+    )
+
+
+def _make_gas_meter_with_zero_width_agreement() -> Gas:
+    return Gas(
+        mprn="9876543210987",
+        serial_number="00G7654321",
+        agreements=[
+            Agreement(
+                tariff_code="G-1R-VAR-22-11-01-C",
+                valid_from=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
+                valid_to=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
             )
         ],
     )
@@ -633,3 +661,121 @@ def test_refresh_does_not_refetch_the_account_s_own_product_during_the_compariso
 
     assert len(stored) == 1
     assert stored[0].unit_rate == Decimal("24.53")
+
+
+@responses.activate
+def test_refresh_skips_the_rate_fetch_for_a_zero_width_electricity_agreement(
+    mariadb_client: MariaDBClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    responses.add(
+        responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
+    )
+    _mock_electricity_rate_endpoints(
+        product_code="VAR-22-11-01", tariff_code="E-1R-VAR-22-11-01-C"
+    )
+    electricity_meter = _make_electricity_meter_with_zero_width_agreement()
+    source = _make_source(mariadb_client, [electricity_meter])
+
+    with caplog.at_level(logging.DEBUG, logger="octopus-monitor"):
+        PricingRetriever(source).refresh()
+
+    rate_calls = [
+        call
+        for call in responses.calls
+        if "electricity-tariffs/E-1R-VAR-22-11-01-C" in call.request.url
+    ]
+    assert rate_calls == []
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(model.product_rate).all()
+    assert stored == []
+    assert any(
+        record.levelno == logging.DEBUG
+        and "VAR-22-11-01/E-1R-VAR-22-11-01-C" in record.message
+        and "zero or negative-width" in record.message
+        for record in caplog.records
+    )
+
+
+@responses.activate
+def test_refresh_skips_the_rate_fetch_for_a_zero_width_gas_agreement(
+    mariadb_client: MariaDBClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    responses.add(
+        responses.GET, PRODUCTS_ENDPOINT, json={"results": [], "next": None}, status=200
+    )
+    _mock_gas_rate_endpoints(
+        product_code="VAR-22-11-01", tariff_code="G-1R-VAR-22-11-01-C"
+    )
+    gas_meter = _make_gas_meter_with_zero_width_agreement()
+    source = _make_source(mariadb_client, [gas_meter])
+
+    with caplog.at_level(logging.DEBUG, logger="octopus-monitor"):
+        PricingRetriever(source).refresh()
+
+    rate_calls = [
+        call
+        for call in responses.calls
+        if "gas-tariffs/G-1R-VAR-22-11-01-C" in call.request.url
+    ]
+    assert rate_calls == []
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(model.product_rate).all()
+    assert stored == []
+    assert any(
+        record.levelno == logging.DEBUG
+        and "VAR-22-11-01/G-1R-VAR-22-11-01-C" in record.message
+        and "zero or negative-width" in record.message
+        for record in caplog.records
+    )
+
+
+@responses.activate
+def test_refresh_still_excludes_a_zero_width_agreement_s_product_from_comparison_sync(
+    mariadb_client: MariaDBClient,
+) -> None:
+    """A zero-width agreement's own rate fetch is skipped, but its product
+    code must still count as "owned" so the comparison pass doesn't treat it
+    as a general-catalogue product and fetch rates for it under an
+    arbitrarily-picked billing method."""
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT,
+        json={
+            "results": [
+                {
+                    "code": "VAR-22-11-01",
+                    "display_name": "Flexible Octopus",
+                    "direction": "IMPORT",
+                }
+            ],
+            "next": None,
+        },
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        PRODUCTS_ENDPOINT + "VAR-22-11-01/",
+        json={
+            "single_register_electricity_tariffs": {
+                "H": {"direct_debit_monthly": {"code": "E-1R-VAR-22-11-01-H"}}
+            }
+        },
+        status=200,
+    )
+    electricity_meter = _make_electricity_meter_with_zero_width_agreement()
+    source = _make_source(mariadb_client, [electricity_meter])
+
+    PricingRetriever(source).refresh()
+
+    product_detail_calls = [
+        call
+        for call in responses.calls
+        if call.request.url.startswith(PRODUCTS_ENDPOINT + "VAR-22-11-01/")
+    ]
+    assert len(product_detail_calls) == 1
+
+    with mariadb_client.session_read_scope() as session:
+        stored = session.query(model.product_rate).all()
+    assert stored == []
