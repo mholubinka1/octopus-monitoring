@@ -262,12 +262,12 @@ FROM (
   JOIN agreement a
     ON a.energy = c.energy
    AND c.period_from >= a.valid_from
- AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
   JOIN product_rate pr
     ON pr.product_code = a.product_code
    AND pr.region = '${region}'
    AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+   AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(c.period_from)
