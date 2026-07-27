@@ -35,6 +35,8 @@ lookback) and can land independently of the pruning job itself.
 
 ## Weekly raw-data pruning job (#407)
 
+> Work complete — PR ready to merge.
+
 **Blocked by**: #406 (Revert retention_days to 45), #403 (Schedule the weekly
 consumption-summary job, from `feature/yearly-consumption-comparison`)
 
@@ -58,18 +60,18 @@ work.
 
 ### Acceptance criteria
 
-- [ ] `consumption` rows older than `retention_days` are deleted;
+- [x] `consumption` rows older than `retention_days` are deleted;
       `product_rate` rows with `valid_to` older than the cutoff are deleted;
       rows within the window, and `product_rate` rows with `valid_to IS NULL`
       or a future `valid_to`, are untouched
-- [ ] `agreement` rows are never deleted, regardless of age
-- [ ] Given the latest `update_consumption_summary` `job_run` is a failure
+- [x] `agreement` rows are never deleted, regardless of age
+- [x] Given the latest `update_consumption_summary` `job_run` is a failure
       (or absent), `prune_old_data` performs no deletions and records its own
       `job_run` reflecting the skip
-- [ ] Given the latest `update_consumption_summary` `job_run` is a success,
+- [x] Given the latest `update_consumption_summary` `job_run` is a success,
       pruning proceeds and records its own successful `job_run`
-- [ ] ADR-0003 reflects the shipped 45-day/pruning-implemented state
-- [ ] Existing test suite remains green
+- [x] ADR-0003 reflects the shipped 45-day/pruning-implemented state
+- [x] Existing test suite remains green
 
 ---
 
