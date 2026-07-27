@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from data.mysql import model
 from data.mysql.client import MariaDBClient
@@ -20,7 +20,7 @@ def test_an_agreement_is_persisted_and_queryable(
         [
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ]
@@ -41,7 +41,7 @@ def test_an_agreement_is_persisted_and_queryable(
 def test_resyncing_an_agreement_updates_it_in_place_not_a_duplicate(
     mariadb_client: MariaDBClient,
 ) -> None:
-    valid_from = datetime(2022, 11, 1, tzinfo=timezone.utc)
+    valid_from = datetime(2022, 11, 1, tzinfo=UTC)
     meter = _make_meter(
         [
             Agreement(
@@ -58,7 +58,7 @@ def test_resyncing_an_agreement_updates_it_in_place_not_a_duplicate(
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
                 valid_from=valid_from,
-                valid_to=datetime(2023, 5, 1, tzinfo=timezone.utc),
+                valid_to=datetime(2023, 5, 1, tzinfo=UTC),
             )
         ]
     )

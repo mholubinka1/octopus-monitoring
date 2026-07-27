@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 
 import pytest
 import requests
@@ -41,7 +41,7 @@ def test_get_reuses_the_same_session_across_multiple_calls(
         OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     )
 
-    serving_sessions: List[requests.Session] = []
+    serving_sessions: list[requests.Session] = []
     original_get = requests.Session.get
 
     def spy_get(self: requests.Session, *args: Any, **kwargs: Any) -> requests.Response:

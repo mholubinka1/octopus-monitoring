@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List, Optional, Tuple
 
 from common.config import OctopusAPISettings
 from data.model import Consumption, Energy
@@ -21,7 +20,7 @@ class OctopusEnergyAPIClient:
 
     # region Account Information
 
-    def get_account_meter_information(self) -> Tuple[Account, List[Meter]]:
+    def get_account_meter_information(self) -> tuple[Account, list[Meter]]:
         return self._account.get_account_meter_information()
 
     def get_region_code(self, postcode: str) -> str:
@@ -31,29 +30,27 @@ class OctopusEnergyAPIClient:
 
     # region Pricing
 
-    def get_products(self) -> List[Product]:
+    def get_products(self) -> list[Product]:
         return self._product.get_products()
 
     def get_products_directly_from_endpoint(
         self, api_endpoint: str
-    ) -> Tuple[Optional[str], List[Product]]:
+    ) -> tuple[str | None, list[Product]]:
         return self._product.get_products_directly_from_endpoint(api_endpoint)
 
     def get_product_region_availability(self, product_code: str, region: str) -> bool:
         return self._product.get_product_region_availability(product_code, region)
 
-    def get_electricity_tariff_code(
-        self, product_code: str, region: str
-    ) -> Optional[str]:
+    def get_electricity_tariff_code(self, product_code: str, region: str) -> str | None:
         return self._product.get_electricity_tariff_code(product_code, region)
 
     def get_electricity_rates(
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime] = None,
-        period_to: Optional[datetime] = None,
-    ) -> List[Rate]:
+        period_from: datetime | None = None,
+        period_to: datetime | None = None,
+    ) -> list[Rate]:
         return self._rate.get_electricity_rates(
             product_code, tariff_code, period_from, period_to
         )
@@ -62,9 +59,9 @@ class OctopusEnergyAPIClient:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime] = None,
-        period_to: Optional[datetime] = None,
-    ) -> List[Rate]:
+        period_from: datetime | None = None,
+        period_to: datetime | None = None,
+    ) -> list[Rate]:
         return self._rate.get_gas_rates(
             product_code, tariff_code, period_from, period_to
         )
@@ -74,13 +71,13 @@ class OctopusEnergyAPIClient:
     # region Consumption
 
     def get_consumption(
-        self, meter: Meter, period_from: datetime, period_to: Optional[datetime] = None
-    ) -> Tuple[Optional[str], List[Consumption]]:
+        self, meter: Meter, period_from: datetime, period_to: datetime | None = None
+    ) -> tuple[str | None, list[Consumption]]:
         return self._consumption.get_consumption(meter, period_from, period_to)
 
     def get_consumption_directly_from_endpoint(
         self, energy: Energy, api_endpoint: str
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self._consumption.get_consumption_directly_from_endpoint(
             energy, api_endpoint
         )

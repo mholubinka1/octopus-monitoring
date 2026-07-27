@@ -3,9 +3,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
-VOLUME_CORRECTION = Decimal(1.02264)
-AVERAGE_CALORIFIC_VALUE = Decimal(39.5)
-TO_KWH_DIVISOR = Decimal(3.6)
+VOLUME_CORRECTION = Decimal("1.02264")
+AVERAGE_CALORIFIC_VALUE = Decimal("39.5")
+TO_KWH_DIVISOR = Decimal("3.6")
 
 
 class Energy(Enum):
@@ -82,10 +82,4 @@ def to_estimated_kwh(energy: Energy, raw: Decimal) -> Decimal:
     if energy == Energy.electricity:
         return raw
     if energy == Energy.gas:
-        try:
-            result = (
-                raw * VOLUME_CORRECTION * AVERAGE_CALORIFIC_VALUE
-            ) / TO_KWH_DIVISOR
-            return result
-        except Exception as e:
-            raise e
+        return (raw * VOLUME_CORRECTION * AVERAGE_CALORIFIC_VALUE) / TO_KWH_DIVISOR

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from data.mysql import model
@@ -8,6 +8,7 @@ from data.mysql.client import MariaDBClient
 def test_an_agreement_row_round_trips_through_the_schema(
     mariadb_client: MariaDBClient,
 ) -> None:
+    valid_from = datetime(2022, 11, 1, tzinfo=UTC)
     with mariadb_client.session_write_scope() as session:
         session.add(
             model.agreement(
@@ -15,7 +16,7 @@ def test_an_agreement_row_round_trips_through_the_schema(
                 energy="E",
                 product_code="VAR-22-11-01",
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1),
+                valid_from=valid_from,
                 valid_to=None,
             )
         )
@@ -28,7 +29,7 @@ def test_an_agreement_row_round_trips_through_the_schema(
     assert stored[0].energy == "E"
     assert stored[0].product_code == "VAR-22-11-01"
     assert stored[0].tariff_code == "E-1R-VAR-22-11-01-A"
-    assert stored[0].valid_from == datetime(2022, 11, 1)
+    assert stored[0].valid_from == valid_from.replace(tzinfo=None)
     assert stored[0].valid_to is None
 
 
@@ -56,14 +57,16 @@ def test_a_product_row_round_trips_through_the_schema(
 def test_a_product_rate_row_round_trips_through_the_schema(
     mariadb_client: MariaDBClient,
 ) -> None:
+    valid_from = datetime(2026, 1, 1, tzinfo=UTC)
+    valid_to = datetime(2026, 1, 1, 0, 30, tzinfo=UTC)
     with mariadb_client.session_write_scope() as session:
         session.add(
             model.product_rate(
                 id="AGILE-24-10-01_H_2026010100",
                 product_code="AGILE-24-10-01",
                 region="H",
-                valid_from=datetime(2026, 1, 1),
-                valid_to=datetime(2026, 1, 1, 0, 30),
+                valid_from=valid_from,
+                valid_to=valid_to,
                 unit_rate=Decimal("24.531200"),
                 standing_charge=Decimal("48.200100"),
             )
@@ -75,7 +78,7 @@ def test_a_product_rate_row_round_trips_through_the_schema(
     assert len(stored) == 1
     assert stored[0].product_code == "AGILE-24-10-01"
     assert stored[0].region == "H"
-    assert stored[0].valid_from == datetime(2026, 1, 1)
-    assert stored[0].valid_to == datetime(2026, 1, 1, 0, 30)
+    assert stored[0].valid_from == valid_from.replace(tzinfo=None)
+    assert stored[0].valid_to == valid_to.replace(tzinfo=None)
     assert stored[0].unit_rate == Decimal("24.531200")
     assert stored[0].standing_charge == Decimal("48.200100")

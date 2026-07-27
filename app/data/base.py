@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List, Optional, Tuple
 
 from common.config import ApplicationSettings
 from data.model import (
@@ -31,7 +30,7 @@ class MonitoringClient:
     _agile_predict: AgilePredictClient
 
     account: Account
-    meters: List[Meter]
+    meters: list[Meter]
     region_code: str
 
     def __init__(self, settings: ApplicationSettings) -> None:
@@ -40,7 +39,7 @@ class MonitoringClient:
         self._billing_period = BillingPeriodClient(settings.octopus, KrakenTransport())
         self._agile_predict = AgilePredictClient()
 
-        (account, meters) = self.octopus.get_account_meter_information()
+        account, meters = self.octopus.get_account_meter_information()
         self.account = account
         self.meters = meters
 
@@ -49,29 +48,29 @@ class MonitoringClient:
     def refresh_meters(
         self,
     ) -> None:
-        (_, meters) = self.octopus.get_account_meter_information()
+        _, meters = self.octopus.get_account_meter_information()
         self.meters = meters
 
     def fetch_consumption(
         self, meter: Meter, period_from: datetime
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self.octopus.get_consumption(meter, period_from)
 
     def fetch_consumption_page(
         self, energy: Energy, next_page: str
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self.octopus.get_consumption_directly_from_endpoint(energy, next_page)
 
-    def persist_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
+    def persist_consumption(self, meter: Meter, consumption: list[Consumption]) -> None:
         self.mariadb.write_consumption(meter, consumption)
 
-    def persist_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+    def persist_consumption_summary(self, summaries: list[ConsumptionSummary]) -> None:
         self.mariadb.write_consumption_summary(summaries)
 
-    def persist_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
+    def persist_agreement(self, meter: Meter, agreements: list[Agreement]) -> None:
         self.mariadb.write_agreement(meter, agreements)
 
-    def fetch_products(self) -> List[Product]:
+    def fetch_products(self) -> list[Product]:
         return self.octopus.get_products()
 
     def is_product_available_in_region(self, product_code: str, region: str) -> bool:
@@ -84,9 +83,9 @@ class MonitoringClient:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]:
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]:
         return self.octopus.get_electricity_rates(
             product_code, tariff_code, period_from, period_to
         )
@@ -95,42 +94,42 @@ class MonitoringClient:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]:
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]:
         return self.octopus.get_gas_rates(
             product_code, tariff_code, period_from, period_to
         )
 
-    def persist_rate(self, product_code: str, region: str, rates: List[Rate]) -> None:
+    def persist_rate(self, product_code: str, region: str, rates: list[Rate]) -> None:
         self.mariadb.write_product_rate(product_code, region, rates)
 
     def fetch_electricity_tariff_code(
         self, product_code: str, region: str
-    ) -> Optional[str]:
+    ) -> str | None:
         return self.octopus.get_electricity_tariff_code(product_code, region)
 
     def get_current_billing_period(self) -> BillingPeriod:
         return self._billing_period.get_current_billing_period()
 
-    def fetch_agile_forecast(self, region: str) -> List[AgileForecastReading]:
+    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]:
         return self._agile_predict.get_forecast(region)
 
     def persist_agile_forecast(
-        self, region: str, readings: List[AgileForecastReading], fetched_at: datetime
+        self, region: str, readings: list[AgileForecastReading], fetched_at: datetime
     ) -> None:
         self.mariadb.write_agile_forecast(region, readings, fetched_at)
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
-    ) -> List[DailyCostSummary]:
+    ) -> list[DailyCostSummary]:
         return self.mariadb.read_elapsed_billing_period_costs(
             period_from, period_to, region
         )
 
     def read_current_product_rate(
         self, product_code: str, region: str, as_of: datetime
-    ) -> Optional[Rate]:
+    ) -> Rate | None:
         return self.mariadb.read_current_product_rate(product_code, region, as_of)
 
     def persist_cost_forecast(self, forecast: CostForecast) -> None:

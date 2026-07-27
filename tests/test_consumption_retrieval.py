@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from datetime import UTC, datetime
 
 import pytest
 import responses
@@ -26,7 +25,7 @@ class _RealConsumptionSource:
         self,
         octopus: OctopusEnergyAPIClient,
         mariadb: MariaDBClient,
-        meters: List[Meter],
+        meters: list[Meter],
     ) -> None:
         self._octopus = octopus
         self._mariadb = mariadb
@@ -37,15 +36,15 @@ class _RealConsumptionSource:
 
     def fetch_consumption(
         self, meter: Meter, period_from: datetime
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self._octopus.get_consumption(meter, period_from)
 
     def fetch_consumption_page(
         self, energy: Energy, next_page: str
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self._octopus.get_consumption_directly_from_endpoint(energy, next_page)
 
-    def persist_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
+    def persist_consumption(self, meter: Meter, consumption: list[Consumption]) -> None:
         self._mariadb.write_consumption(meter, consumption)
 
 
@@ -56,7 +55,7 @@ def _make_meter() -> Electricity:
         agreements=[
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],
@@ -112,9 +111,7 @@ def test_refresh_resumes_from_the_true_max_across_all_pages_not_just_the_last(
     source = _RealConsumptionSource(octopus, mariadb_client, [meter])
     retriever = ConsumptionRetriever(source)
 
-    retriever.get_meter_consumption(
-        meter, period_from=datetime(2026, 1, 1, tzinfo=timezone.utc)
-    )
+    retriever.get_meter_consumption(meter, period_from=datetime(2026, 1, 1, tzinfo=UTC))
 
     retriever.refresh()
 

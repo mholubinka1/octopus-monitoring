@@ -1,9 +1,9 @@
 import logging.config
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from itertools import groupby
 from logging import Logger, getLogger
-from typing import List, Optional, Protocol
+from typing import Protocol
 
 from common.logging import APP_LOGGER_NAME, config
 from data.model import CostForecast, DailyCostSummary, Energy
@@ -24,10 +24,10 @@ HALF_HOURS_PER_DAY = 48
 
 
 def _midnight_utc(d: date) -> datetime:
-    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+    return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
-def project_daily_average_consumption(daily_totals_kwh: List[Decimal]) -> Decimal:
+def project_daily_average_consumption(daily_totals_kwh: list[Decimal]) -> Decimal:
     if not daily_totals_kwh:
         raise ValueError(
             "No elapsed days of consumption to project a future average from."
@@ -36,8 +36,8 @@ def project_daily_average_consumption(daily_totals_kwh: List[Decimal]) -> Decima
 
 
 def tile_forecast_beyond(
-    forecast: List[AgileForecastReading], target_end: date
-) -> List[AgileForecastReading]:
+    forecast: list[AgileForecastReading], target_end: date
+) -> list[AgileForecastReading]:
     if not forecast:
         return []
 
@@ -55,7 +55,7 @@ def tile_forecast_beyond(
 
     source_days = real_days[-TILE_SOURCE_WINDOW_DAYS:]
 
-    tiled: List[AgileForecastReading] = []
+    tiled: list[AgileForecastReading] = []
     day_offset = 1
     while True:
         synthetic_day = last_real_day + timedelta(days=day_offset)
@@ -81,19 +81,19 @@ class CostForecastSource(MeterSource, Protocol):
 
     def get_current_billing_period(self) -> BillingPeriod: ...
 
-    def fetch_agile_forecast(self, region: str) -> List[AgileForecastReading]: ...
+    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]: ...
 
     def persist_agile_forecast(
-        self, region: str, readings: List[AgileForecastReading], fetched_at: datetime
+        self, region: str, readings: list[AgileForecastReading], fetched_at: datetime
     ) -> None: ...
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
-    ) -> List[DailyCostSummary]: ...
+    ) -> list[DailyCostSummary]: ...
 
     def read_current_product_rate(
         self, product_code: str, region: str, as_of: datetime
-    ) -> Optional[Rate]: ...
+    ) -> Rate | None: ...
 
     def persist_cost_forecast(self, forecast: CostForecast) -> None: ...
 
@@ -104,9 +104,9 @@ class CostForecastRetriever:
     def __init__(self, client: CostForecastSource) -> None:
         self._client = client
 
-    def refresh(self, as_of: Optional[datetime] = None) -> None:
+    def refresh(self, as_of: datetime | None = None) -> None:
         if as_of is None:
-            as_of = datetime.now(timezone.utc)
+            as_of = datetime.now(UTC)
 
         billing_period = self._client.get_current_billing_period()
         elapsed_start = _midnight_utc(billing_period.start)
@@ -127,7 +127,7 @@ class CostForecastRetriever:
         daily_costs = self._fill_zero_consumption_days(
             billing_period.start, as_of, agreement, daily_costs
         )
-        actual_cost_to_date = sum((d.day_cost_gbp for d in daily_costs), Decimal("0"))
+        actual_cost_to_date = sum((d.day_cost_gbp for d in daily_costs), Decimal(0))
 
         remaining_cost = self._project_remaining_cost(
             billing_period, agreement, daily_costs, as_of
@@ -185,8 +185,8 @@ class CostForecastRetriever:
         billing_period_start: date,
         as_of: datetime,
         agreement: Agreement,
-        daily_costs: List[DailyCostSummary],
-    ) -> List[DailyCostSummary]:
+        daily_costs: list[DailyCostSummary],
+    ) -> list[DailyCostSummary]:
         # A day with zero consumption rows produces no row from the join in
         # read_elapsed_billing_period_costs -- there's no consumption row to
         # join a standing charge through. The standing charge still accrues
@@ -214,7 +214,7 @@ class CostForecastRetriever:
                 filled.append(
                     DailyCostSummary(
                         date=day,
-                        total_kwh=Decimal("0"),
+                        total_kwh=Decimal(0),
                         day_cost_gbp=rate.standing_charge / 100,
                     )
                 )
@@ -225,7 +225,7 @@ class CostForecastRetriever:
         self,
         billing_period: BillingPeriod,
         agreement: Agreement,
-        daily_costs: List[DailyCostSummary],
+        daily_costs: list[DailyCostSummary],
         as_of: datetime,
     ) -> Decimal:
         # billing_period.end is treated as the last billable day
@@ -256,7 +256,7 @@ class CostForecastRetriever:
         period_end_boundary = _midnight_utc(billing_period.end) + timedelta(days=1)
         remaining_seconds = (period_end_boundary - as_of).total_seconds()
         if remaining_seconds <= 0:
-            return Decimal("0")
+            return Decimal(0)
         # str(), not a bare Decimal(float): total_seconds() is a float, and
         # Decimal(float) captures binary floating-point noise rather than
         # the exact value -- immaterial once rounded at the Numeric(9,2)
@@ -312,6 +312,4 @@ class CostForecastRetriever:
             if as_of <= r.period_from < end_datetime
         ]
         per_slot_kwh = future_daily_kwh / HALF_HOURS_PER_DAY
-        return sum(
-            (per_slot_kwh * r.unit_rate for r in remaining_readings), Decimal("0")
-        )
+        return sum((per_slot_kwh * r.unit_rate for r in remaining_readings), Decimal(0))

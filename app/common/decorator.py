@@ -1,7 +1,8 @@
 import logging.config
 import time
+from collections.abc import Callable
 from logging import Logger, getLogger
-from typing import Any, Callable, Optional
+from typing import Any
 
 from common.logging import APP_LOGGER_NAME, config
 
@@ -11,8 +12,8 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 
 def retry(
     stop_after: int = 3, retry_delay: int = 10
-) -> Callable[[Callable[..., Optional[Any]]], Callable[..., Any]]:
-    def decorator(func: Callable[..., Optional[Any]]) -> Callable[..., Any]:
+) -> Callable[[Callable[..., Any | None]], Callable[..., Any]]:
+    def decorator(func: Callable[..., Any | None]) -> Callable[..., Any]:
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             attempt = 1
             while attempt < stop_after:
@@ -28,7 +29,7 @@ def retry(
             except Exception as e:
                 error = f"Error attempting to execute {func}: {e}. \nRetries exhausted."
                 logger.error(error)
-                raise e
+                raise
 
         return wrapper
 
@@ -47,11 +48,10 @@ def retry_with_exponential_backoff(
                     return
                 except Exception as e:
                     if attempt == max_attempts:
-                        logger.error(
-                            f"Error attempting to execute {func.__qualname__}: {e}. "
+                        logger.exception(
+                            f"Error attempting to execute {func.__qualname__}. "
                             f"Retries exhausted after {max_attempts} attempts; "
-                            "giving up until the next scheduled run.",
-                            exc_info=True,
+                            "giving up until the next scheduled run."
                         )
                         return
                     logger.warning(

@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
 from data.octopus.model import Electricity, Gas, Meter
@@ -18,23 +18,23 @@ class ConsumptionReading(BaseModel):
 
 
 class ConsumptionResponse(BaseModel):
-    results: List[ConsumptionReading]
-    next: Optional[str] = None
+    results: list[ConsumptionReading]
+    next: str | None = None
 
 
 class ConsumptionClient:
-    _consumption_funcs: Dict
+    _consumption_funcs: dict
 
     def __init__(self, transport: OctopusTransport) -> None:
         self._transport = transport
-        self._consumption_funcs: Dict = {
+        self._consumption_funcs: dict = {
             Energy.electricity: self.get_electricity_consumption,
             Energy.gas: self.get_gas_consumption,
         }
 
     def get_consumption(
-        self, meter: Meter, period_from: datetime, period_to: Optional[datetime] = None
-    ) -> Tuple[Optional[str], List[Consumption]]:
+        self, meter: Meter, period_from: datetime, period_to: datetime | None = None
+    ) -> tuple[str | None, list[Consumption]]:
         func = self._consumption_funcs[meter.energy]
         value = func(meter, period_from, period_to)
         return value
@@ -42,10 +42,10 @@ class ConsumptionClient:
     def get_electricity_consumption(
         self,
         meter: Electricity,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
+        period_from: datetime | None,
+        period_to: datetime | None,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         api_endpoint = (
             self._transport.base_url
             + f"electricity-meter-points/{meter.mpan}/meters/{meter.serial_number}/consumption/"
@@ -58,10 +58,10 @@ class ConsumptionClient:
     def get_gas_consumption(
         self,
         meter: Gas,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
+        period_from: datetime | None,
+        period_to: datetime | None,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         api_endpoint = (
             self._transport.base_url
             + f"gas-meter-points/{meter.mprn}/meters/{meter.serial_number}/consumption/"
@@ -73,11 +73,11 @@ class ConsumptionClient:
 
     def _build_params(
         self,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
+        period_from: datetime | None,
+        period_to: datetime | None,
         page_size: int,
-    ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {"page_size": page_size, "order_by": "period"}
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"page_size": page_size, "order_by": "period"}
         if period_from:
             params["period_from"] = to_utc_z(period_from)
         if period_to:
@@ -88,8 +88,8 @@ class ConsumptionClient:
         self,
         energy: Energy,
         api_endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[Optional[str], List[Consumption]]:
+        params: dict[str, Any] | None = None,
+    ) -> tuple[str | None, list[Consumption]]:
         parsed = self._transport.get(
             api_endpoint,
             ConsumptionResponse,

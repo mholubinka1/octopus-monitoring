@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from data.mysql import model
@@ -40,7 +40,7 @@ def _compute_total_cost(mariadb_client: MariaDBClient, energy: str) -> Decimal:
         )
 
     variable_cost = sum(
-        (Decimal(str(row.est_kwh)) * row.unit_rate for row in rows), Decimal("0")
+        (Decimal(str(row.est_kwh)) * row.unit_rate for row in rows), Decimal(0)
     )
     standing_charge = max(row.standing_charge for row in rows)
     return variable_cost + standing_charge
@@ -56,7 +56,7 @@ def test_electricity_cost_is_computable_via_a_simple_join(
                 energy="E",
                 product_code="AGILE-24-10-01",
                 tariff_code="E-1R-AGILE-24-10-01-H",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -65,8 +65,8 @@ def test_electricity_cost_is_computable_via_a_simple_join(
                 id="AGILE-24-10-01_H_202601010000",
                 product_code="AGILE-24-10-01",
                 region="H",
-                valid_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+                valid_to=datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.20"),
             )
@@ -76,8 +76,8 @@ def test_electricity_cost_is_computable_via_a_simple_join(
                 id="AGILE-24-10-01_H_202601010030",
                 product_code="AGILE-24-10-01",
                 region="H",
-                valid_from=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
+                valid_to=datetime(2026, 1, 1, 1, 0, tzinfo=UTC),
                 unit_rate=Decimal("30.00"),
                 standing_charge=Decimal("48.20"),
             )
@@ -86,8 +86,8 @@ def test_electricity_cost_is_computable_via_a_simple_join(
             model.consumption(
                 id="E20260101000000",
                 energy="E",
-                period_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("0.5"),
                 unit="kWh",
                 est_kwh=Decimal("0.5"),
@@ -97,8 +97,8 @@ def test_electricity_cost_is_computable_via_a_simple_join(
             model.consumption(
                 id="E20260101003000",
                 energy="E",
-                period_from=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
-                period_to=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
+                period_from=datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
+                period_to=datetime(2026, 1, 1, 1, 0, tzinfo=UTC),
                 raw_value=Decimal("0.3"),
                 unit="kWh",
                 est_kwh=Decimal("0.3"),
@@ -121,7 +121,7 @@ def test_gas_cost_is_computable_via_a_simple_join(
                 energy="G",
                 product_code="VAR-22-11-01",
                 tariff_code="G-1R-VAR-22-11-01-H",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -130,8 +130,8 @@ def test_gas_cost_is_computable_via_a_simple_join(
                 id="VAR-22-11-01_H_202601010000",
                 product_code="VAR-22-11-01",
                 region="H",
-                valid_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 1, 2, 0, 0, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+                valid_to=datetime(2026, 1, 2, 0, 0, tzinfo=UTC),
                 unit_rate=Decimal("7.00"),
                 standing_charge=Decimal("29.11"),
             )
@@ -140,8 +140,8 @@ def test_gas_cost_is_computable_via_a_simple_join(
             model.consumption(
                 id="G20260101000000",
                 energy="G",
-                period_from=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 1, 2, 0, 0, tzinfo=timezone.utc),
+                period_from=datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 1, 2, 0, 0, tzinfo=UTC),
                 raw_value=Decimal("10.0"),
                 unit="kWh",
                 est_kwh=Decimal("10.0"),

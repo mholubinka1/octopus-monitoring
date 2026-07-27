@@ -12,6 +12,7 @@ from data.cost_forecast import CostForecastRetriever
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
+from data.pruning import DataPruner
 from main import (
     register_consumption_summary_job,
     register_cost_forecast_refresh_job,
@@ -173,7 +174,10 @@ def test_consumption_summary_job_is_registered_for_monday_at_0400(
     scheduler = Scheduler()
 
     job = register_consumption_summary_job(
-        scheduler, Mock(spec=ConsumptionSummaryRetriever), mariadb_client
+        scheduler,
+        Mock(spec=ConsumptionSummaryRetriever),
+        Mock(spec=DataPruner),
+        mariadb_client,
     )
 
     assert job.unit == "weeks"
@@ -188,15 +192,18 @@ def test_a_successful_consumption_summary_run_is_recorded_as_a_successful_job_ru
     consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
 
     job = register_consumption_summary_job(
-        scheduler, consumption_summary, mariadb_client
+        scheduler, consumption_summary, Mock(spec=DataPruner), mariadb_client
     )
     job.run().join()
 
     with mariadb_client.session_read_scope() as session:
-        runs = session.query(model.job_run).all()
+        runs = (
+            session.query(model.job_run)
+            .filter_by(job_name="update_consumption_summary")
+            .all()
+        )
 
     assert len(runs) == 1
-    assert runs[0].job_name == "update_consumption_summary"
     assert runs[0].status == "success"
 
 
@@ -208,21 +215,32 @@ def test_a_persistently_failing_consumption_summary_run_retries_with_backoff(
     scheduler = Scheduler()
     consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
     consumption_summary.refresh.side_effect = RuntimeError("MariaDB unavailable")
+    pruner = Mock(spec=DataPruner)
 
     job = register_consumption_summary_job(
-        scheduler, consumption_summary, mariadb_client
+        scheduler, consumption_summary, pruner, mariadb_client
     )
     job.run().join()
 
     assert sleep_delays == [60, 120, 240, 480]
     assert consumption_summary.refresh.call_count == 5
+    pruner.run.assert_not_called()
 
     with mariadb_client.session_read_scope() as session:
-        runs = session.query(model.job_run).all()
+        summary_runs = (
+            session.query(model.job_run)
+            .filter_by(job_name="update_consumption_summary")
+            .all()
+        )
+        prune_runs = (
+            session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+        )
 
-    assert len(runs) == 5
-    assert all(run.status == "failure" for run in runs)
-    assert all(run.error_message == "MariaDB unavailable" for run in runs)
+    assert len(summary_runs) == 5
+    assert all(run.status == "failure" for run in summary_runs)
+    assert all(run.error_message == "MariaDB unavailable" for run in summary_runs)
+    assert len(prune_runs) == 1
+    assert prune_runs[0].status == "skipped"
 
 
 def test_run_initial_consumption_summary_sync_does_not_propagate_a_startup_failure() -> (
@@ -292,6 +310,74 @@ def test_a_failed_cost_forecast_run_is_recorded_as_a_failed_job_run(
 
     assert all(run.status == "failure" for run in runs)
     assert len(runs) > 0
+
+
+def test_pruning_runs_immediately_after_a_successful_summary_run_in_the_same_tick(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
+    pruner = Mock(spec=DataPruner)
+
+    job = register_consumption_summary_job(
+        scheduler, consumption_summary, pruner, mariadb_client
+    )
+    job.run().join()
+
+    pruner.run.assert_called_once()
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+    assert len(runs) == 1
+    assert runs[0].status == "success"
+
+
+def test_pruning_is_skipped_and_recorded_when_the_summary_run_ultimately_fails(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    scheduler = Scheduler()
+    consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
+    consumption_summary.refresh.side_effect = RuntimeError("MariaDB unavailable")
+    pruner = Mock(spec=DataPruner)
+
+    job = register_consumption_summary_job(
+        scheduler, consumption_summary, pruner, mariadb_client
+    )
+    job.run().join()
+
+    pruner.run.assert_not_called()
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+    assert len(runs) == 1
+    assert runs[0].status == "skipped"
+
+
+def test_pruning_reflects_this_cycles_outcome_not_a_stale_previous_success(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression test: prune_old_data must gate on *this* cycle's summary
+    outcome, not whichever job_run happened to be most recently recorded.
+    A prior cycle's success sitting in the table must not let pruning
+    proceed if this cycle's summarization then fails."""
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    mariadb_client.record_job_run("update_consumption_summary", "success")
+    scheduler = Scheduler()
+    consumption_summary = Mock(spec=ConsumptionSummaryRetriever)
+    consumption_summary.refresh.side_effect = RuntimeError("MariaDB unavailable")
+    pruner = Mock(spec=DataPruner)
+
+    job = register_consumption_summary_job(
+        scheduler, consumption_summary, pruner, mariadb_client
+    )
+    job.run().join()
+
+    pruner.run.assert_not_called()
+    with mariadb_client.session_read_scope() as session:
+        prune_runs = (
+            session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+        )
+    assert len(prune_runs) == 1
+    assert prune_runs[0].status == "skipped"
 
 
 def test_backfill_runs_and_records_success_on_first_startup(

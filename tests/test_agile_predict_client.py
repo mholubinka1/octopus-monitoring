@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -12,7 +12,7 @@ ENDPOINT = f"https://agilepredict.com/api/{REGION}/"
 
 
 def _price_entry(offset_minutes: int, pred: str) -> dict:
-    date_time = datetime(2026, 7, 22, 0, 0, tzinfo=timezone.utc) + timedelta(
+    date_time = datetime(2026, 7, 22, 0, 0, tzinfo=UTC) + timedelta(
         minutes=offset_minutes
     )
     return {
@@ -45,10 +45,10 @@ def test_get_forecast_maps_agile_pred_to_unit_rate_with_thirty_minute_periods() 
     readings = AgilePredictClient().get_forecast(REGION)
 
     assert len(readings) == 2
-    assert readings[0].period_from == datetime(2026, 7, 22, 0, 0, tzinfo=timezone.utc)
-    assert readings[0].period_to == datetime(2026, 7, 22, 0, 30, tzinfo=timezone.utc)
+    assert readings[0].period_from == datetime(2026, 7, 22, 0, 0, tzinfo=UTC)
+    assert readings[0].period_to == datetime(2026, 7, 22, 0, 30, tzinfo=UTC)
     assert readings[0].unit_rate == Decimal("21.19")
-    assert readings[1].period_from == datetime(2026, 7, 22, 0, 30, tzinfo=timezone.utc)
+    assert readings[1].period_from == datetime(2026, 7, 22, 0, 30, tzinfo=UTC)
 
 
 @responses.activate

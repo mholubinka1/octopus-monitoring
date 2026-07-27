@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from sqlalchemy import Column, Date, DateTime, Integer, Numeric, String
 from sqlalchemy.dialects.mysql import DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
@@ -7,7 +9,7 @@ SQLBase = declarative_base()
 
 class consumption(SQLBase):
     __tablename__ = "consumption"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(String(50), primary_key=True)
     energy = Column(String(1))
@@ -20,7 +22,7 @@ class consumption(SQLBase):
 
 class agreement(SQLBase):
     __tablename__ = "agreement"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(String(50), primary_key=True)
     energy = Column(String(1), nullable=False)
@@ -32,7 +34,7 @@ class agreement(SQLBase):
 
 class product(SQLBase):
     __tablename__ = "product"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     product_code = Column(String(50), primary_key=True)
     display_name = Column(String(200))
@@ -41,7 +43,7 @@ class product(SQLBase):
 
 class product_rate(SQLBase):
     __tablename__ = "product_rate"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(String(70), primary_key=True)
     product_code = Column(String(50), nullable=False)
@@ -54,7 +56,7 @@ class product_rate(SQLBase):
 
 class daily_consumption_summary(SQLBase):
     __tablename__ = "daily_consumption_summary"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     energy = Column(String(1), primary_key=True)
     date = Column(Date, primary_key=True)
@@ -63,7 +65,7 @@ class daily_consumption_summary(SQLBase):
 
 class agile_forecast(SQLBase):
     __tablename__ = "agile_forecast"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(String(70), primary_key=True)
     region = Column(String(1), nullable=False)
@@ -75,7 +77,7 @@ class agile_forecast(SQLBase):
 
 class cost_forecast(SQLBase):
     __tablename__ = "cost_forecast"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     billing_period_start = Column(Date, nullable=False)
@@ -87,7 +89,7 @@ class cost_forecast(SQLBase):
 
 class job_run(SQLBase):
     __tablename__ = "job_run"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_name = Column(String(100), nullable=False)

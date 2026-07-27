@@ -19,17 +19,23 @@ lookback) and can land independently of the pruning job itself.
 
 ### Acceptance criteria
 
-- [ ] `config.yml.template`'s `retention_days` is `45`
-- [ ] README's Configuration section description matches the reverted value
+> Already shipped as part of `feature/yearly-consumption-comparison` (PR #416)
+> before this chore's branch existed; closed as a no-op duplicate. See
+> ADR-0003 for the shipped rationale.
+
+- [x] `config.yml.template`'s `retention_days` is `45`
+- [x] README's Configuration section description matches the reverted value
       and explains why (long-term history now lives in
       `daily_consumption_summary`, not raw data)
-- [ ] `tests/test_config_settings.py` still passes unchanged (it doesn't
+- [x] `tests/test_config_settings.py` still passes unchanged (it doesn't
       assert on the specific production default, only the parsing mechanism)
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
 
 ## Weekly raw-data pruning job (#407)
+
+> Work complete — PR ready to merge.
 
 **Blocked by**: #406 (Revert retention_days to 45), #403 (Schedule the weekly
 consumption-summary job, from `feature/yearly-consumption-comparison`)
@@ -54,18 +60,18 @@ work.
 
 ### Acceptance criteria
 
-- [ ] `consumption` rows older than `retention_days` are deleted;
+- [x] `consumption` rows older than `retention_days` are deleted;
       `product_rate` rows with `valid_to` older than the cutoff are deleted;
       rows within the window, and `product_rate` rows with `valid_to IS NULL`
       or a future `valid_to`, are untouched
-- [ ] `agreement` rows are never deleted, regardless of age
-- [ ] Given the latest `update_consumption_summary` `job_run` is a failure
+- [x] `agreement` rows are never deleted, regardless of age
+- [x] Given the latest `update_consumption_summary` `job_run` is a failure
       (or absent), `prune_old_data` performs no deletions and records its own
       `job_run` reflecting the skip
-- [ ] Given the latest `update_consumption_summary` `job_run` is a success,
+- [x] Given the latest `update_consumption_summary` `job_run` is a success,
       pruning proceeds and records its own successful `job_run`
-- [ ] ADR-0003 reflects the shipped 45-day/pruning-implemented state
-- [ ] Existing test suite remains green
+- [x] ADR-0003 reflects the shipped 45-day/pruning-implemented state
+- [x] Existing test suite remains green
 
 ---
 

@@ -1,12 +1,12 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 import yaml
 from common.config import ApplicationSettings, get_settings
 from pydantic import ValidationError
 
-VALID_CONFIG: Dict[str, Any] = {
+VALID_CONFIG: dict[str, Any] = {
     "octopus": {"account_number": "A-1234ABCD", "api_key": "sk_live_test"},
     "mariadb": {
         "host": "localhost",

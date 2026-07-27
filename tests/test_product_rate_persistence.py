@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from data.mysql import model
@@ -24,8 +24,8 @@ def test_a_product_rate_is_persisted_and_queryable(
     mariadb_client: MariaDBClient,
 ) -> None:
     rate = _make_rate(
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
-        datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
         "24.53",
         "48.20",
     )
@@ -45,8 +45,8 @@ def test_a_product_rate_is_persisted_and_queryable(
 def test_resyncing_a_product_rate_updates_it_in_place_not_a_duplicate(
     mariadb_client: MariaDBClient,
 ) -> None:
-    valid_from = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    valid_to = datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc)
+    valid_from = datetime(2026, 1, 1, tzinfo=UTC)
+    valid_to = datetime(2026, 1, 1, 0, 30, tzinfo=UTC)
     mariadb_client.write_product_rate(
         PRODUCT_CODE, REGION, [_make_rate(valid_from, valid_to, "24.53", "48.20")]
     )
@@ -67,14 +67,14 @@ def test_half_hourly_rates_for_the_same_product_are_stored_as_distinct_rows(
 ) -> None:
     rates = [
         _make_rate(
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
-            datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
             "24.53",
             "48.20",
         ),
         _make_rate(
-            datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
-            datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
+            datetime(2026, 1, 1, 1, 0, tzinfo=UTC),
             "26.10",
             "48.20",
         ),

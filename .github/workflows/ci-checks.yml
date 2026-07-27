@@ -1,0 +1,76 @@
+name: Code Quality Checks
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  checks:
+    name: Run all code quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install markdownlint-cli and markdown-link-check
+        run: npm install -g markdownlint-cli markdown-link-check
+
+      - name: Verify uv.lock is consistent with pyproject.toml
+        run: uv lock --check
+
+      - name: Install project dependencies
+        run: uv sync --locked
+
+      - name: Type check with mypy
+        run: uv run mypy app
+
+      - name: Check import ordering with isort
+        run: uv run isort --check-only --profile black app tests
+
+      - name: Check code formatting with black
+        run: uv run black --check app tests
+
+      - name: Check linting with ruff
+        run: uv run ruff check --no-fix app tests
+
+      - name: Check linting with pylint
+        run: uv run pylint app tests
+
+      - name: Check YAML style with yamllint
+        run: uv run --with yamllint yamllint .
+
+      - name: Check spelling with codespell
+        run: uv run --with codespell codespell --skip=uv.lock
+
+      - name: Check markdown style
+        run: markdownlint '**/*.md' --ignore node_modules
+
+      - name: Check markdown links
+        run: |
+          find . -name "*.md" -not -path "./.git/*" -not -path "./node_modules/*" \
+            -print0 | xargs -0 -r markdown-link-check --config .markdown-link-check.json
+
+      - name: Security analysis with bandit
+        run: uv run --with 'bandit[toml]' bandit -r -c pyproject.toml app
+
+      - name: Scan for secrets with gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -45,7 +45,7 @@ def test_consumption_fetched_from_octopus_is_persisted_and_queryable(
         agreements=[
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],

@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, TypeVar
 
 import requests
 from common.config import OctopusAPISettings
@@ -29,11 +29,11 @@ class OctopusTransport:
     def get(
         self,
         url: str,
-        response_model: Type[T],
-        params: Optional[Dict[str, Any]] = None,
+        response_model: type[T],
+        params: dict[str, Any] | None = None,
         description: str = "request",
     ) -> T:
-        response: Optional[requests.Response] = None
+        response: requests.Response | None = None
         try:
             response = self._session.get(
                 url=url,

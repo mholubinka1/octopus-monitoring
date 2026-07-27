@@ -2,7 +2,7 @@ import logging.config
 from datetime import datetime
 from decimal import Decimal
 from logging import Logger, getLogger
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
@@ -25,12 +25,12 @@ TARIFF_PATH = {
 class RateReading(BaseModel):
     value_inc_vat: Decimal
     valid_from: datetime
-    valid_to: Optional[datetime] = None
+    valid_to: datetime | None = None
 
 
 class RateResponse(BaseModel):
-    results: List[RateReading]
-    next: Optional[str] = None
+    results: list[RateReading]
+    next: str | None = None
 
 
 class RateClient:
@@ -41,9 +41,9 @@ class RateClient:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime] = None,
-        period_to: Optional[datetime] = None,
-    ) -> List[Rate]:
+        period_from: datetime | None = None,
+        period_to: datetime | None = None,
+    ) -> list[Rate]:
         return self._get_rates(
             Energy.electricity, product_code, tariff_code, period_from, period_to
         )
@@ -52,9 +52,9 @@ class RateClient:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime] = None,
-        period_to: Optional[datetime] = None,
-    ) -> List[Rate]:
+        period_from: datetime | None = None,
+        period_to: datetime | None = None,
+    ) -> list[Rate]:
         return self._get_rates(
             Energy.gas, product_code, tariff_code, period_from, period_to
         )
@@ -64,9 +64,9 @@ class RateClient:
         energy: Energy,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]:
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]:
         tariff_path = TARIFF_PATH[energy]
         unit_rates = self._get_all_readings(
             self._endpoint(
@@ -95,15 +95,15 @@ class RateClient:
     def _get_all_readings(
         self,
         api_endpoint: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
+        period_from: datetime | None,
+        period_to: datetime | None,
         description: str,
-    ) -> List[RateReading]:
-        readings: List[RateReading] = []
-        params: Optional[Dict[str, Any]] = self._build_params(period_from, period_to)
-        endpoint: Optional[str] = api_endpoint
+    ) -> list[RateReading]:
+        readings: list[RateReading] = []
+        params: dict[str, Any] | None = self._build_params(period_from, period_to)
+        endpoint: str | None = api_endpoint
         while endpoint:
-            (endpoint, page) = self._get_readings_directly_from_endpoint(
+            endpoint, page = self._get_readings_directly_from_endpoint(
                 endpoint, params, description
             )
             readings.extend(page)
@@ -112,10 +112,10 @@ class RateClient:
 
     def _build_params(
         self,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {"page_size": DEFAULT_PAGE_SIZE}
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"page_size": DEFAULT_PAGE_SIZE}
         if period_from:
             params["period_from"] = to_utc_z(period_from)
         if period_to:
@@ -125,9 +125,9 @@ class RateClient:
     def _get_readings_directly_from_endpoint(
         self,
         api_endpoint: str,
-        params: Optional[Dict[str, Any]],
+        params: dict[str, Any] | None,
         description: str,
-    ) -> Tuple[Optional[str], List[RateReading]]:
+    ) -> tuple[str | None, list[RateReading]]:
         parsed = self._transport.get(
             api_endpoint, RateResponse, params=params, description=description
         )
@@ -135,9 +135,9 @@ class RateClient:
 
     @staticmethod
     def _pair(
-        unit_rates: List[RateReading], standing_charges: List[RateReading]
-    ) -> List[Rate]:
-        rates: List[Rate] = []
+        unit_rates: list[RateReading], standing_charges: list[RateReading]
+    ) -> list[Rate]:
+        rates: list[Rate] = []
         for unit_rate in unit_rates:
             standing_charge = next(
                 (

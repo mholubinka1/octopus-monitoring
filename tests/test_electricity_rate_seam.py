@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from urllib.parse import parse_qs, urlparse
 
@@ -69,8 +69,8 @@ def test_half_hourly_unit_rates_are_paired_with_the_standing_charge_in_effect() 
     assert len(rates) == 2
     assert rates[0].unit_rate == Decimal("24.53")
     assert rates[0].standing_charge == Decimal("48.20")
-    assert rates[0].valid_from == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
-    assert rates[0].valid_to == datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc)
+    assert rates[0].valid_from == datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+    assert rates[0].valid_to == datetime(2026, 1, 1, 0, 30, tzinfo=UTC)
     assert rates[1].unit_rate == Decimal("26.10")
     assert rates[1].standing_charge == Decimal("48.20")
 
@@ -118,7 +118,7 @@ def test_a_unit_rate_window_with_no_covering_standing_charge_is_skipped_not_cras
     rates = _octopus().get_electricity_rates(PRODUCT_CODE, TARIFF_CODE)
 
     assert len(rates) == 1
-    assert rates[0].valid_from == datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+    assert rates[0].valid_from == datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
 
 
 @responses.activate
@@ -230,7 +230,7 @@ def test_a_non_utc_period_is_normalized_to_utc_z_format_in_the_request() -> None
 
 
 def test_a_naive_period_is_rejected_rather_than_silently_using_local_time() -> None:
-    naive_period_from = datetime(2024, 1, 6, 0, 0, 0)
+    naive_period_from = datetime(2024, 1, 6)  # noqa: DTZ001 -- naive is the point
 
     with pytest.raises(ArgumentError, match="timezone-aware"):
         _octopus().get_electricity_rates(

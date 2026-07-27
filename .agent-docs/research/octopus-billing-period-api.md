@@ -73,7 +73,7 @@ Introspecting `BillingOptionsType` (`__type(name:"BillingOptionsType"){fields{na
 description}}`) returns exactly the billing-period fields this feature needs:
 
 | field | type | description (verbatim) |
-|---|---|---|
+| --- | --- | --- |
 | `periodStartDay` | `Int` | "The day of the month on which the account's billing period should start." |
 | `periodLength` | `AccountBillingOptionsPeriodLength` | (enum, e.g. monthly/quarterly) |
 | `periodLengthMultiplier` | `Int` | (unlabeled in schema; multiplies `periodLength`) |

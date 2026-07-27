@@ -1,6 +1,5 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional, Tuple
 
 import responses
 from common.config import OctopusAPISettings
@@ -27,7 +26,7 @@ class _RealConsumptionSummaryBackfillSource:
         self,
         octopus: OctopusEnergyAPIClient,
         mariadb: MariaDBClient,
-        meters: List[Meter],
+        meters: list[Meter],
     ) -> None:
         self._octopus = octopus
         self._mariadb = mariadb
@@ -38,15 +37,15 @@ class _RealConsumptionSummaryBackfillSource:
 
     def fetch_consumption(
         self, meter: Meter, period_from: datetime
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self._octopus.get_consumption(meter, period_from)
 
     def fetch_consumption_page(
         self, energy: Energy, next_page: str
-    ) -> Tuple[Optional[str], List[Consumption]]:
+    ) -> tuple[str | None, list[Consumption]]:
         return self._octopus.get_consumption_directly_from_endpoint(energy, next_page)
 
-    def persist_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+    def persist_consumption_summary(self, summaries: list[ConsumptionSummary]) -> None:
         self._mariadb.write_consumption_summary(summaries)
 
 
@@ -57,7 +56,7 @@ def _make_meter() -> Electricity:
         agreements=[
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],
@@ -68,7 +67,7 @@ def _make_meter() -> Electricity:
 def test_run_summarizes_two_years_of_fetched_consumption_without_writing_raw_rows(
     mariadb_client: MariaDBClient,
 ) -> None:
-    as_of = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    as_of = datetime(2026, 1, 15, tzinfo=UTC)
     period_from = as_of - timedelta(days=730)
 
     responses.add(
@@ -130,10 +129,8 @@ def test_run_anchors_period_from_to_midnight_even_when_as_of_has_a_time_componen
     # time-of-day into period_from -- Octopus would then omit intervals
     # before that time on the oldest backfilled day, producing a partial
     # daily total for it.
-    as_of = datetime(2026, 1, 15, 14, 32, 7, tzinfo=timezone.utc)
-    expected_period_from = datetime(2026, 1, 15, tzinfo=timezone.utc) - timedelta(
-        days=730
-    )
+    as_of = datetime(2026, 1, 15, 14, 32, 7, tzinfo=UTC)
+    expected_period_from = datetime(2026, 1, 15, tzinfo=UTC) - timedelta(days=730)
 
     responses.add(
         responses.GET,
