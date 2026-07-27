@@ -9,7 +9,7 @@ def test_projects_the_average_of_the_elapsed_daily_totals() -> None:
         [Decimal("10.0"), Decimal("12.0"), Decimal("8.0")]
     )
 
-    assert result == Decimal("10")
+    assert result == Decimal(10)
 
 
 def test_a_single_elapsed_day_projects_that_days_total() -> None:
@@ -20,10 +20,10 @@ def test_a_single_elapsed_day_projects_that_days_total() -> None:
 
 def test_zero_consumption_days_are_included_in_the_average() -> None:
     result = project_daily_average_consumption(
-        [Decimal("0"), Decimal("0"), Decimal("12.0")]
+        [Decimal(0), Decimal(0), Decimal("12.0")]
     )
 
-    assert result == Decimal("4")
+    assert result == Decimal(4)
 
 
 def test_no_elapsed_days_raises_a_clear_error() -> None:

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -63,8 +63,8 @@ def test_gas_unit_rates_are_paired_with_the_standing_charge_in_effect() -> None:
     assert len(rates) == 1
     assert rates[0].unit_rate == Decimal("6.89")
     assert rates[0].standing_charge == Decimal("29.11")
-    assert rates[0].valid_from == datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert rates[0].valid_to == datetime(2026, 1, 2, tzinfo=timezone.utc)
+    assert rates[0].valid_from == datetime(2026, 1, 1, tzinfo=UTC)
+    assert rates[0].valid_to == datetime(2026, 1, 2, tzinfo=UTC)
 
 
 @responses.activate

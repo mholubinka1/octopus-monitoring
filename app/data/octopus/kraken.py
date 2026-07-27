@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, TypeVar
 
 import requests
 from common.config import OctopusAPISettings
@@ -28,7 +28,7 @@ class ObtainKrakenTokenResponse(BaseModel):
 
 class BillingOptionsData(BaseModel):
     period_start: date = Field(alias="currentBillingPeriodStartDate")
-    period_end: Optional[date] = Field(alias="currentBillingPeriodEndDate")
+    period_end: date | None = Field(alias="currentBillingPeriodEndDate")
     is_fixed: bool = Field(alias="isFixed")
 
 
@@ -72,12 +72,12 @@ class KrakenTransport:
     def post(
         self,
         query: str,
-        variables: Dict[str, Any],
-        response_model: Type[T],
+        variables: dict[str, Any],
+        response_model: type[T],
         description: str = "request",
-        token: Optional[str] = None,
+        token: str | None = None,
     ) -> T:
-        response: Optional[requests.Response] = None
+        response: requests.Response | None = None
         try:
             headers = {"Authorization": f"JWT {token}"} if token else {}
             response = requests.post(

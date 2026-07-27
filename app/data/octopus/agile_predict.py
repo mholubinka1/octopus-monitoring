@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional
 
 import requests
 from common.decorator import retry
@@ -19,10 +18,10 @@ class AgilePredictPriceEntry(BaseModel):
 
 
 class AgilePredictRegionForecast(BaseModel):
-    prices: List[AgilePredictPriceEntry]
+    prices: list[AgilePredictPriceEntry]
 
 
-class AgilePredictResponse(RootModel[List[AgilePredictRegionForecast]]):
+class AgilePredictResponse(RootModel[list[AgilePredictRegionForecast]]):
     pass
 
 
@@ -30,9 +29,9 @@ class AgilePredictClient:
     base_url: str = "https://agilepredict.com/api/"
 
     @retry()
-    def get_forecast(self, region: str) -> List[AgileForecastReading]:
+    def get_forecast(self, region: str) -> list[AgileForecastReading]:
         url = self.base_url + f"{region}/"
-        response: Optional[requests.Response] = None
+        response: requests.Response | None = None
         try:
             response = requests.get(url=url, timeout=REQUEST_TIMEOUT_SECONDS)
             response.raise_for_status()

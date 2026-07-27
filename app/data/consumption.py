@@ -1,7 +1,7 @@
 import logging.config
 from datetime import datetime
 from logging import Logger, getLogger
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Protocol
 
 from common.decorator import retry
 from common.logging import APP_LOGGER_NAME, config
@@ -15,29 +15,29 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 class ConsumptionFetchSource(MeterSource, Protocol):
     def fetch_consumption(
         self, meter: Meter, period_from: datetime
-    ) -> Tuple[Optional[str], List[Consumption]]: ...
+    ) -> tuple[str | None, list[Consumption]]: ...
 
     def fetch_consumption_page(
         self, energy: Energy, next_page: str
-    ) -> Tuple[Optional[str], List[Consumption]]: ...
+    ) -> tuple[str | None, list[Consumption]]: ...
 
 
 class ConsumptionSource(ConsumptionFetchSource, Protocol):
     def persist_consumption(
-        self, meter: Meter, consumption: List[Consumption]
+        self, meter: Meter, consumption: list[Consumption]
     ) -> None: ...
 
 
 class ConsumptionRetriever:
     _client: ConsumptionSource
 
-    _latest_retrieved_date: Dict[Energy, datetime]
+    _latest_retrieved_date: dict[Energy, datetime]
 
     def __init__(self, client: ConsumptionSource) -> None:
         self._client = client
-        self._latest_retrieved_date: Dict[Energy, datetime] = {}
+        self._latest_retrieved_date: dict[Energy, datetime] = {}
 
-    def retrieve(self, period_from: Optional[datetime]) -> None:
+    def retrieve(self, period_from: datetime | None) -> None:
         self._client.refresh_meters()
         for meter in self._client.meters:
             self.get_meter_consumption(meter, period_from)
@@ -54,12 +54,12 @@ class ConsumptionRetriever:
     def get_meter_consumption(
         self,
         meter: Meter,
-        period_from: Optional[datetime] = None,
+        period_from: datetime | None = None,
     ) -> None:
         if not period_from:
             period_from = meter.start_date()
         logger.debug(f"Retrieving {meter.energy.name} consumption from {period_from}.")
-        (next_page, consumption) = self._client.fetch_consumption(meter, period_from)
+        next_page, consumption = self._client.fetch_consumption(meter, period_from)
         latest_retrieved_date = period_from
         while True:
             if consumption:
@@ -78,7 +78,7 @@ class ConsumptionRetriever:
         )
         self._latest_retrieved_date[meter.energy] = latest_retrieved_date
 
-    def write(self, meter: Meter, consumption: List[Consumption]) -> None:
+    def write(self, meter: Meter, consumption: list[Consumption]) -> None:
         _min = min(c.start for c in consumption)
         _max = max(c.end for c in consumption)
         logger.info(

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from data.mysql import model
@@ -17,8 +17,8 @@ def test_returns_the_rate_valid_at_the_given_moment(
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+                valid_to=datetime(2026, 7, 1, tzinfo=UTC),
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
             )
@@ -28,7 +28,7 @@ def test_returns_the_rate_valid_at_the_given_moment(
                 id=f"{PRODUCT_CODE}_{REGION}_202607010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 7, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("25.00"),
                 standing_charge=Decimal("50.00"),
@@ -36,7 +36,7 @@ def test_returns_the_rate_valid_at_the_given_moment(
         )
 
     rate = mariadb_client.read_current_product_rate(
-        PRODUCT_CODE, REGION, datetime(2026, 7, 22, tzinfo=timezone.utc)
+        PRODUCT_CODE, REGION, datetime(2026, 7, 22, tzinfo=UTC)
     )
 
     assert rate is not None
@@ -53,8 +53,8 @@ def test_returns_the_historical_rate_valid_at_a_past_moment(
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+                valid_to=datetime(2026, 7, 1, tzinfo=UTC),
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
             )
@@ -64,7 +64,7 @@ def test_returns_the_historical_rate_valid_at_a_past_moment(
                 id=f"{PRODUCT_CODE}_{REGION}_202607010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 7, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("25.00"),
                 standing_charge=Decimal("50.00"),
@@ -72,7 +72,7 @@ def test_returns_the_historical_rate_valid_at_a_past_moment(
         )
 
     rate = mariadb_client.read_current_product_rate(
-        PRODUCT_CODE, REGION, datetime(2026, 3, 1, tzinfo=timezone.utc)
+        PRODUCT_CODE, REGION, datetime(2026, 3, 1, tzinfo=UTC)
     )
 
     assert rate is not None
@@ -92,7 +92,7 @@ def test_overlapping_rows_deterministically_prefer_the_most_recently_started(
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
@@ -103,7 +103,7 @@ def test_overlapping_rows_deterministically_prefer_the_most_recently_started(
                 id=f"{PRODUCT_CODE}_{REGION}_202603010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 3, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 3, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("25.00"),
                 standing_charge=Decimal("50.00"),
@@ -111,7 +111,7 @@ def test_overlapping_rows_deterministically_prefer_the_most_recently_started(
         )
 
     rate = mariadb_client.read_current_product_rate(
-        PRODUCT_CODE, REGION, datetime(2026, 7, 22, tzinfo=timezone.utc)
+        PRODUCT_CODE, REGION, datetime(2026, 7, 22, tzinfo=UTC)
     )
 
     assert rate is not None
@@ -122,7 +122,7 @@ def test_returns_none_when_no_rate_covers_the_given_moment(
     mariadb_client: MariaDBClient,
 ) -> None:
     rate = mariadb_client.read_current_product_rate(
-        "NONEXISTENT", REGION, datetime(2026, 7, 22, tzinfo=timezone.utc)
+        "NONEXISTENT", REGION, datetime(2026, 7, 22, tzinfo=UTC)
     )
 
     assert rate is None

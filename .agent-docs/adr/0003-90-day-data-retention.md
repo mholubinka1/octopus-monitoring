@@ -9,17 +9,23 @@ Half-hourly consumption, cost, and product-rate data accumulates indefinitely if
 `retention_days` was briefly widened from 90 to 400 days as a stopgap, to keep raw data around long enough for a not-yet-built historical summarization pass to draw on. `feature/yearly-consumption-comparison` replaced that stopgap with a dedicated one-time 2-year backfill (`ConsumptionSummaryBackfill`) that fetches directly from Octopus's API into `daily_consumption_summary`, independent of `retention_days` — so `retention_days` reverted to 45 as part of that branch, without waiting for the pruning job itself.
 
 **The pruning job is now implemented** (`chore/consumption-data-pruning`).
-`DataPruner` (`app/data/pruning.py`) runs as the `prune_old_data` weekly job,
-registered on the same Monday 04:00 schedule as `update_consumption_summary`
-and run immediately after it in the same scheduling tick. It deletes
-`consumption` rows where `period_from` is older than `retention_days`, and
-`product_rate` rows where `valid_to` is older than that same cutoff — a
-still-valid or open-ended (`valid_to IS NULL`) rate is never pruned.
-`agreement` is never touched. Before running, it checks that the same
-cycle's `update_consumption_summary` job recorded a successful `job_run`; if
-not, pruning is skipped for that cycle (recorded as its own `job_run` with
-status `skipped`) so raw data is never deleted before it has been rolled
-into `daily_consumption_summary`.
+`DataPruner` (`app/data/pruning.py`) runs as the `prune_old_data` step,
+executed as a continuation of the `update_consumption_summary` job within
+the same Monday 04:00 scheduled job and the same background worker thread
+— not as a second, independently-scheduled job. That's deliberate: the
+summary job dispatches via a retry-with-backoff background thread that
+returns before the work completes, so a separately-scheduled prune job
+sharing the same time slot could race it, checking whichever `job_run` was
+most recently recorded (e.g. last week's) rather than this cycle's real
+outcome. Sequencing it as a continuation makes that race impossible.
+It deletes `consumption` rows where `period_from` is older than
+`retention_days`, and `product_rate` rows where `valid_to` is older than
+that same cutoff — a still-valid or open-ended (`valid_to IS NULL`) rate is
+never pruned. `agreement` is never touched. After summarization completes,
+it checks that this cycle's `update_consumption_summary` run recorded a
+successful `job_run`; if not, pruning is skipped for that cycle (recorded
+as its own `job_run` with status `skipped`) so raw data is never deleted
+before it has been rolled into `daily_consumption_summary`.
 
 ## Consequences
 

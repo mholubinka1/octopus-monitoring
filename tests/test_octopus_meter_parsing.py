@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 import pytest
 from common.exceptions import ArgumentError, NullValueError
 from data.octopus.account import (
@@ -18,8 +16,8 @@ VALID_AGREEMENT = AgreementInfo(
 
 
 def _electricity_meter_point(
-    meters: Optional[List[MeterSerialInfo]] = None,
-    agreements: Optional[List[AgreementInfo]] = None,
+    meters: list[MeterSerialInfo] | None = None,
+    agreements: list[AgreementInfo] | None = None,
     mpan: str = "1234567890123",
 ) -> ElectricityMeterPointInfo:
     return ElectricityMeterPointInfo(
@@ -34,8 +32,8 @@ def _electricity_meter_point(
 
 
 def _gas_meter_point(
-    meters: Optional[List[MeterSerialInfo]] = None,
-    agreements: Optional[List[AgreementInfo]] = None,
+    meters: list[MeterSerialInfo] | None = None,
+    agreements: list[AgreementInfo] | None = None,
     mprn: str = "9876543210987",
 ) -> GasMeterPointInfo:
     return GasMeterPointInfo(

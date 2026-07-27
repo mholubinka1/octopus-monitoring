@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import ClassVar
 
 import pytest
 from common.config import MariaDBSettings
@@ -19,7 +20,7 @@ _StrippedBase = declarative_base()
 
 class _StrippedConsumption(_StrippedBase):
     __tablename__ = "consumption"
-    __table_args__ = {"schema": "octopus"}
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
 
     id = Column(String, primary_key=True)
     energy = Column(String)
@@ -130,8 +131,8 @@ def test_consumption_values_round_trip_as_decimal_without_precision_loss(
         model.consumption(
             id="E20260101000000",
             energy="E",
-            period_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            period_to=datetime(2026, 1, 1, 0, 30, tzinfo=timezone.utc),
+            period_from=datetime(2026, 1, 1, tzinfo=UTC),
+            period_to=datetime(2026, 1, 1, 0, 30, tzinfo=UTC),
             raw_value=Decimal("0.12345"),
             unit="kWh",
             est_kwh=Decimal("0.12345"),

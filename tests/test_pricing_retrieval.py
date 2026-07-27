@@ -1,7 +1,6 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import List, Optional
 
 import pytest
 import responses
@@ -25,7 +24,7 @@ class _RealPricingSource:
         self,
         octopus: OctopusEnergyAPIClient,
         mariadb: MariaDBClient,
-        meters: List[Meter],
+        meters: list[Meter],
         region_code: str,
     ) -> None:
         self._octopus = octopus
@@ -36,10 +35,10 @@ class _RealPricingSource:
     def refresh_meters(self) -> None:
         pass
 
-    def persist_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
+    def persist_agreement(self, meter: Meter, agreements: list[Agreement]) -> None:
         self._mariadb.write_agreement(meter, agreements)
 
-    def fetch_products(self) -> List[Product]:
+    def fetch_products(self) -> list[Product]:
         return self._octopus.get_products()
 
     def is_product_available_in_region(self, product_code: str, region: str) -> bool:
@@ -52,9 +51,9 @@ class _RealPricingSource:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]:
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]:
         return self._octopus.get_electricity_rates(
             product_code, tariff_code, period_from, period_to
         )
@@ -63,19 +62,19 @@ class _RealPricingSource:
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]:
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]:
         return self._octopus.get_gas_rates(
             product_code, tariff_code, period_from, period_to
         )
 
-    def persist_rate(self, product_code: str, region: str, rates: List[Rate]) -> None:
+    def persist_rate(self, product_code: str, region: str, rates: list[Rate]) -> None:
         self._mariadb.write_product_rate(product_code, region, rates)
 
     def fetch_electricity_tariff_code(
         self, product_code: str, region: str
-    ) -> Optional[str]:
+    ) -> str | None:
         return self._octopus.get_electricity_tariff_code(product_code, region)
 
 
@@ -86,7 +85,7 @@ def _make_electricity_meter() -> Electricity:
         agreements=[
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],
@@ -100,8 +99,8 @@ def _make_electricity_meter_with_zero_width_agreement() -> Electricity:
         agreements=[
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-C",
-                valid_from=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
-                valid_to=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
+                valid_from=datetime(2025, 5, 23, 23, tzinfo=UTC),
+                valid_to=datetime(2025, 5, 23, 23, tzinfo=UTC),
             )
         ],
     )
@@ -114,7 +113,7 @@ def _make_gas_meter() -> Gas:
         agreements=[
             Agreement(
                 tariff_code="G-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],
@@ -128,15 +127,15 @@ def _make_gas_meter_with_zero_width_agreement() -> Gas:
         agreements=[
             Agreement(
                 tariff_code="G-1R-VAR-22-11-01-C",
-                valid_from=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
-                valid_to=datetime(2025, 5, 23, 23, tzinfo=timezone.utc),
+                valid_from=datetime(2025, 5, 23, 23, tzinfo=UTC),
+                valid_to=datetime(2025, 5, 23, 23, tzinfo=UTC),
             )
         ],
     )
 
 
 def _make_source(
-    mariadb_client: MariaDBClient, meters: List[Meter], region_code: str = "H"
+    mariadb_client: MariaDBClient, meters: list[Meter], region_code: str = "H"
 ) -> _RealPricingSource:
     octopus = OctopusEnergyAPIClient(
         OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")

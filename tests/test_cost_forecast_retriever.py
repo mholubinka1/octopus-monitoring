@@ -1,6 +1,5 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional
 
 import pytest
 import responses
@@ -39,7 +38,7 @@ class _RealCostForecastSource:
         mariadb: MariaDBClient,
         billing_period_client: BillingPeriodClient,
         agile_predict_client: AgilePredictClient,
-        meters: List[Meter],
+        meters: list[Meter],
         region_code: str,
     ) -> None:
         self._mariadb = mariadb
@@ -54,27 +53,27 @@ class _RealCostForecastSource:
     def get_current_billing_period(self) -> BillingPeriod:
         return self._billing_period_client.get_current_billing_period()
 
-    def fetch_agile_forecast(self, region: str) -> List[AgileForecastReading]:
+    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]:
         return self._agile_predict_client.get_forecast(region)
 
     def persist_agile_forecast(
         self,
         region: str,
-        readings: List[AgileForecastReading],
+        readings: list[AgileForecastReading],
         fetched_at: datetime,
     ) -> None:
         self._mariadb.write_agile_forecast(region, readings, fetched_at)
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
-    ) -> List[DailyCostSummary]:
+    ) -> list[DailyCostSummary]:
         return self._mariadb.read_elapsed_billing_period_costs(
             period_from, period_to, region
         )
 
     def read_current_product_rate(
         self, product_code: str, region: str, as_of: datetime
-    ) -> Optional[Rate]:
+    ) -> Rate | None:
         return self._mariadb.read_current_product_rate(product_code, region, as_of)
 
     def persist_cost_forecast(self, forecast: CostForecast) -> None:
@@ -83,9 +82,9 @@ class _RealCostForecastSource:
 
 def _make_electricity_meter(
     tariff_code: str = f"E-1R-{PRODUCT_CODE}-{REGION}",
-    valid_from: datetime = datetime(2022, 1, 1, tzinfo=timezone.utc),
-    valid_to: Optional[datetime] = None,
-    prior_agreements: Optional[List[Agreement]] = None,
+    valid_from: datetime = datetime(2022, 1, 1, tzinfo=UTC),
+    valid_to: datetime | None = None,
+    prior_agreements: list[Agreement] | None = None,
 ) -> Electricity:
     return Electricity(
         mpan="1234567890123",
@@ -100,7 +99,7 @@ def _make_electricity_meter(
 AGILE_PRODUCT_CODE = "AGILE-24-10-01"
 
 
-def _mock_agile_forecast(prices: List[dict]) -> None:
+def _mock_agile_forecast(prices: list[dict]) -> None:
     responses.add(
         responses.GET,
         AGILE_ENDPOINT,
@@ -115,10 +114,8 @@ def _mock_agile_forecast(prices: List[dict]) -> None:
     )
 
 
-def _flat_agile_prices(start_day: date, num_days: int, pred: str) -> List[dict]:
-    start = datetime(
-        start_day.year, start_day.month, start_day.day, tzinfo=timezone.utc
-    )
+def _flat_agile_prices(start_day: date, num_days: int, pred: str) -> list[dict]:
+    start = datetime(start_day.year, start_day.month, start_day.day, tzinfo=UTC)
     return [
         {
             "date_time": (start + timedelta(minutes=30 * slot)).isoformat(),
@@ -155,7 +152,7 @@ def _mock_billing_period(start: str, end: str, is_fixed: bool = True) -> None:
     )
 
 
-def _source(mariadb: MariaDBClient, meters: List[Meter]) -> _RealCostForecastSource:
+def _source(mariadb: MariaDBClient, meters: list[Meter]) -> _RealCostForecastSource:
     settings = OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
     return _RealCostForecastSource(
         mariadb,
@@ -179,7 +176,7 @@ def test_fixed_tariff_actual_cost_and_projection(
                 energy="E",
                 product_code=PRODUCT_CODE,
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -188,7 +185,7 @@ def test_fixed_tariff_actual_cost_and_projection(
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
@@ -199,8 +196,8 @@ def test_fixed_tariff_actual_cost_and_projection(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -210,7 +207,7 @@ def test_fixed_tariff_actual_cost_and_projection(
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         stored = session.query(model.cost_forecast).all()
@@ -256,7 +253,7 @@ def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_
                 energy="E",
                 product_code=PRODUCT_CODE,
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -265,7 +262,7 @@ def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
@@ -279,8 +276,8 @@ def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_
                 model.consumption(
                     id=f"E202607{day:02d}000000",
                     energy="E",
-                    period_from=datetime(2026, 7, day, 0, 0, tzinfo=timezone.utc),
-                    period_to=datetime(2026, 7, day, 0, 30, tzinfo=timezone.utc),
+                    period_from=datetime(2026, 7, day, 0, 0, tzinfo=UTC),
+                    period_to=datetime(2026, 7, day, 0, 30, tzinfo=UTC),
                     raw_value=Decimal("6.0"),
                     unit="kWh",
                     est_kwh=Decimal("6.0"),
@@ -290,7 +287,7 @@ def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 8, 4, 0, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 8, 4, 0, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -318,7 +315,7 @@ def _seed_agile_agreement_and_rate(
             energy="E",
             product_code=AGILE_PRODUCT_CODE,
             tariff_code=f"E-1R-{AGILE_PRODUCT_CODE}-{REGION}",
-            valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2022, 1, 1, tzinfo=UTC),
             valid_to=None,
         )
     )
@@ -327,7 +324,7 @@ def _seed_agile_agreement_and_rate(
             id=f"{AGILE_PRODUCT_CODE}_{REGION}_202607010000",
             product_code=AGILE_PRODUCT_CODE,
             region=REGION,
-            valid_from=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2026, 7, 1, tzinfo=UTC),
             valid_to=None,
             unit_rate=Decimal(unit_rate),
             standing_charge=Decimal(standing_charge),
@@ -367,8 +364,8 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("24.0"),
                 unit="kWh",
                 est_kwh=Decimal("24.0"),
@@ -385,7 +382,7 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
             ],
         )
     )
-    retriever.refresh(as_of=datetime(2026, 7, 6, 23, 0, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 6, 23, 0, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -423,8 +420,8 @@ def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -441,7 +438,7 @@ def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
             ],
         )
     )
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -468,8 +465,8 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -486,7 +483,7 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
             ],
         )
     )
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -524,8 +521,8 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -544,7 +541,7 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
     )
     # Should not raise despite the forecast running out before the billing
     # period ends -- tiling fills the remainder.
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -570,7 +567,7 @@ def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
                 energy="E",
                 product_code=PRODUCT_CODE,
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -579,7 +576,7 @@ def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
@@ -592,8 +589,8 @@ def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -603,7 +600,7 @@ def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 8, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 8, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -627,7 +624,7 @@ def test_no_electricity_meter_raises_a_clear_error(
     retriever = CostForecastRetriever(_source(mariadb_client, []))
 
     with pytest.raises(RuntimeError, match="[Nn]o electricity meter"):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
 
 @responses.activate
@@ -641,15 +638,15 @@ def test_no_current_agreement_raises_a_clear_error(
         agreements=[
             Agreement(
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2020, 1, 1, tzinfo=timezone.utc),
-                valid_to=datetime(2021, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2020, 1, 1, tzinfo=UTC),
+                valid_to=datetime(2021, 1, 1, tzinfo=UTC),
             )
         ],
     )
     retriever = CostForecastRetriever(_source(mariadb_client, [lapsed_meter]))
 
     with pytest.raises(RuntimeError, match="[Nn]o current .*agreement"):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
 
 def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
@@ -663,7 +660,7 @@ def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
             energy="E",
             product_code=PRODUCT_CODE,
             tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-            valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2022, 1, 1, tzinfo=UTC),
             valid_to=None,
         )
     )
@@ -672,7 +669,7 @@ def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
             id=f"{PRODUCT_CODE}_{REGION}_202601010000",
             product_code=PRODUCT_CODE,
             region=REGION,
-            valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
             valid_to=None,
             unit_rate=Decimal("20.00"),
             standing_charge=Decimal("48.00"),
@@ -682,8 +679,8 @@ def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
         model.consumption(
             id="E20260706000000",
             energy="E",
-            period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-            period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+            period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+            period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
             raw_value=Decimal("2.0"),
             unit="kWh",
             est_kwh=Decimal("2.0"),
@@ -706,18 +703,18 @@ def test_current_agreement_with_a_bounded_valid_to_still_matches(
         _seed_fixed_tariff_agreement_and_rate(s)
 
     electricity_meter = _make_electricity_meter(
-        valid_from=datetime(2026, 5, 24, tzinfo=timezone.utc),
-        valid_to=datetime(2027, 5, 24, tzinfo=timezone.utc),
+        valid_from=datetime(2026, 5, 24, tzinfo=UTC),
+        valid_to=datetime(2027, 5, 24, tzinfo=UTC),
         prior_agreements=[
             Agreement(
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2025, 5, 24, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 5, 24, tzinfo=timezone.utc),
+                valid_from=datetime(2025, 5, 24, tzinfo=UTC),
+                valid_to=datetime(2026, 5, 24, tzinfo=UTC),
             )
         ],
     )
     retriever = CostForecastRetriever(_source(mariadb_client, [electricity_meter]))
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         stored = session.query(model.cost_forecast).all()
@@ -731,14 +728,14 @@ def test_current_agreement_with_a_bounded_valid_to_still_matches(
     "valid_from, valid_to, should_match",
     [
         pytest.param(
-            datetime(2026, 7, 7, tzinfo=timezone.utc),
-            datetime(2027, 7, 7, tzinfo=timezone.utc),
+            datetime(2026, 7, 7, tzinfo=UTC),
+            datetime(2027, 7, 7, tzinfo=UTC),
             True,
             id="valid_from_boundary_is_inclusive",
         ),
         pytest.param(
-            datetime(2022, 1, 1, tzinfo=timezone.utc),
-            datetime(2026, 7, 7, tzinfo=timezone.utc),
+            datetime(2022, 1, 1, tzinfo=UTC),
+            datetime(2026, 7, 7, tzinfo=UTC),
             False,
             id="valid_to_boundary_is_exclusive",
         ),
@@ -753,7 +750,7 @@ def test_current_agreement_half_open_interval_boundaries(
     # valid_from is inclusive, valid_to is exclusive -- otherwise a renewal's
     # first instant would match both the expiring and incoming agreement.
     _mock_billing_period("2026-07-06", "2026-08-06")
-    as_of = datetime(2026, 7, 7, tzinfo=timezone.utc)
+    as_of = datetime(2026, 7, 7, tzinfo=UTC)
 
     with mariadb_client.session_write_scope() as s:
         _seed_fixed_tariff_agreement_and_rate(s)
@@ -785,7 +782,7 @@ def test_no_current_product_rate_raises_a_clear_error(
                 energy="E",
                 product_code=PRODUCT_CODE,
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -797,8 +794,8 @@ def test_no_current_product_rate_raises_a_clear_error(
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+                valid_to=datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
             )
@@ -807,8 +804,8 @@ def test_no_current_product_rate_raises_a_clear_error(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -820,7 +817,7 @@ def test_no_current_product_rate_raises_a_clear_error(
     )
 
     with pytest.raises(RuntimeError, match="[Nn]o product_rate found"):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
 
 @responses.activate
@@ -842,7 +839,7 @@ def test_no_product_rate_for_a_zero_consumption_elapsed_day_raises_and_writes_no
                 energy="E",
                 product_code=PRODUCT_CODE,
                 tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2022, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
                 valid_to=None,
             )
         )
@@ -856,8 +853,8 @@ def test_no_product_rate_for_a_zero_consumption_elapsed_day_raises_and_writes_no
                 id=f"{PRODUCT_CODE}_{REGION}_202601010000",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                valid_to=datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+                valid_to=datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
                 unit_rate=Decimal("20.00"),
                 standing_charge=Decimal("48.00"),
             )
@@ -867,7 +864,7 @@ def test_no_product_rate_for_a_zero_consumption_elapsed_day_raises_and_writes_no
                 id=f"{PRODUCT_CODE}_{REGION}_202607071300",
                 product_code=PRODUCT_CODE,
                 region=REGION,
-                valid_from=datetime(2026, 7, 7, 13, 0, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 7, 7, 13, 0, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("22.00"),
                 standing_charge=Decimal("48.00"),
@@ -877,8 +874,8 @@ def test_no_product_rate_for_a_zero_consumption_elapsed_day_raises_and_writes_no
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -890,7 +887,7 @@ def test_no_product_rate_for_a_zero_consumption_elapsed_day_raises_and_writes_no
     )
 
     with pytest.raises(RuntimeError, match="[Nn]o product_rate found"):
-        retriever.refresh(as_of=datetime(2026, 7, 8, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 8, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         assert session.query(model.cost_forecast).count() == 0
@@ -914,7 +911,7 @@ def test_kraken_unreachable_raises_and_writes_no_row(
     )
 
     with pytest.raises(APIError):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         assert session.query(model.cost_forecast).count() == 0
@@ -931,7 +928,7 @@ def test_kraken_unreachable_leaves_a_previous_row_unchanged(
         billing_period_end=date(2026, 7, 6),
         actual_cost_to_date=Decimal("10.00"),
         projected_total_cost=Decimal("20.00"),
-        computed_at=datetime(2026, 7, 6, tzinfo=timezone.utc),
+        computed_at=datetime(2026, 7, 6, tzinfo=UTC),
     )
     mariadb_client.write_cost_forecast(previous)
     responses.add(
@@ -945,7 +942,7 @@ def test_kraken_unreachable_leaves_a_previous_row_unchanged(
         _source(mariadb_client, [_make_electricity_meter()])
     )
     with pytest.raises(APIError):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         rows = session.query(model.cost_forecast).all()
@@ -973,8 +970,8 @@ def test_agile_predict_unreachable_raises_and_writes_no_row(
             model.consumption(
                 id="E20260706000000",
                 energy="E",
-                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc),
-                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=timezone.utc),
+                period_from=datetime(2026, 7, 6, 0, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 0, 30, tzinfo=UTC),
                 raw_value=Decimal("2.0"),
                 unit="kWh",
                 est_kwh=Decimal("2.0"),
@@ -992,7 +989,7 @@ def test_agile_predict_unreachable_raises_and_writes_no_row(
         )
     )
     with pytest.raises(APIError):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=timezone.utc))
+        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         assert session.query(model.cost_forecast).count() == 0

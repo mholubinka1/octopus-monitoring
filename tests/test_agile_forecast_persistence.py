@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from data.mysql import model
@@ -9,11 +9,11 @@ from data.octopus.model import AgileForecastReading
 def test_agile_forecast_readings_are_persisted_and_queryable(
     mariadb_client: MariaDBClient,
 ) -> None:
-    fetched_at = datetime(2026, 7, 22, 4, 15, tzinfo=timezone.utc)
+    fetched_at = datetime(2026, 7, 22, 4, 15, tzinfo=UTC)
     readings = [
         AgileForecastReading(
-            period_from=datetime(2026, 7, 22, 0, 0, tzinfo=timezone.utc),
-            period_to=datetime(2026, 7, 22, 0, 30, tzinfo=timezone.utc),
+            period_from=datetime(2026, 7, 22, 0, 0, tzinfo=UTC),
+            period_to=datetime(2026, 7, 22, 0, 30, tzinfo=UTC),
             unit_rate=Decimal("21.19"),
         )
     ]
@@ -34,18 +34,18 @@ def test_agile_forecast_readings_are_persisted_and_queryable(
 def test_refetching_the_same_period_updates_it_in_place_not_a_duplicate(
     mariadb_client: MariaDBClient,
 ) -> None:
-    period_from = datetime(2026, 7, 22, 0, 0, tzinfo=timezone.utc)
-    period_to = datetime(2026, 7, 22, 0, 30, tzinfo=timezone.utc)
+    period_from = datetime(2026, 7, 22, 0, 0, tzinfo=UTC)
+    period_to = datetime(2026, 7, 22, 0, 30, tzinfo=UTC)
     mariadb_client.write_agile_forecast(
         "H",
         [AgileForecastReading(period_from, period_to, Decimal("21.19"))],
-        datetime(2026, 7, 22, 4, 15, tzinfo=timezone.utc),
+        datetime(2026, 7, 22, 4, 15, tzinfo=UTC),
     )
 
     mariadb_client.write_agile_forecast(
         "H",
         [AgileForecastReading(period_from, period_to, Decimal("19.50"))],
-        datetime(2026, 7, 22, 10, 15, tzinfo=timezone.utc),
+        datetime(2026, 7, 22, 10, 15, tzinfo=UTC),
     )
 
     with mariadb_client.session_read_scope() as session:

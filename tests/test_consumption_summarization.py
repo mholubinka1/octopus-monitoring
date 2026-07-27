@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from data.consumption_summary import ConsumptionSummaryRetriever
@@ -15,7 +15,7 @@ def _make_electricity_meter() -> Electricity:
         agreements=[
             Agreement(
                 tariff_code="E-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],
@@ -29,7 +29,7 @@ def _make_gas_meter() -> Gas:
         agreements=[
             Agreement(
                 tariff_code="G-1R-VAR-22-11-01-A",
-                valid_from=datetime(2022, 11, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2022, 11, 1, tzinfo=UTC),
                 valid_to=None,
             )
         ],
@@ -51,7 +51,7 @@ def test_refresh_summarizes_raw_consumption_into_daily_totals_per_energy(
 ) -> None:
     electricity = _make_electricity_meter()
     gas = _make_gas_meter()
-    as_of = datetime.now(timezone.utc)
+    as_of = datetime.now(UTC)
 
     mariadb_client.write_consumption(
         electricity,
@@ -83,7 +83,7 @@ def test_refresh_corrects_a_stale_summary_when_raw_consumption_is_revised(
     mariadb_client: MariaDBClient,
 ) -> None:
     electricity = _make_electricity_meter()
-    as_of = datetime.now(timezone.utc)
+    as_of = datetime.now(UTC)
 
     mariadb_client.write_consumption(
         electricity,
@@ -110,7 +110,7 @@ def test_refresh_summarizes_a_gap_day_older_than_the_trailing_window(
     mariadb_client: MariaDBClient,
 ) -> None:
     electricity = _make_electricity_meter()
-    as_of = datetime.now(timezone.utc)
+    as_of = datetime.now(UTC)
     old_day = as_of - timedelta(days=20)
 
     mariadb_client.write_consumption(
@@ -132,7 +132,7 @@ def test_summarization_window_is_exactly_fourteen_trailing_days_inclusive_of_as_
     mariadb_client: MariaDBClient,
 ) -> None:
     electricity = _make_electricity_meter()
-    as_of = datetime(2026, 1, 15, tzinfo=timezone.utc)
+    as_of = datetime(2026, 1, 15, tzinfo=UTC)
     # The 15th day back from as_of -- must be excluded from a 14-day
     # trailing window that includes as_of itself (as_of, as_of-1, ...,
     # as_of-13 = 14 dates total).

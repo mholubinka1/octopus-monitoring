@@ -1,6 +1,5 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import List
 
 from data.cost_forecast import tile_forecast_beyond
 from data.octopus.model import AgileForecastReading
@@ -8,11 +7,11 @@ from data.octopus.model import AgileForecastReading
 DAY_1 = date(2026, 7, 22)
 
 
-def _fourteen_day_forecast() -> List[AgileForecastReading]:
+def _fourteen_day_forecast() -> list[AgileForecastReading]:
     readings = []
     for day_offset in range(14):
         day = DAY_1 + timedelta(days=day_offset)
-        period_from = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+        period_from = datetime(day.year, day.month, day.day, tzinfo=UTC)
         # unit_rate encodes the 1-indexed real day number (1..14) so tiled
         # copies can be traced back to their source day in assertions.
         readings.append(
@@ -65,7 +64,7 @@ def test_time_of_day_is_preserved_only_the_date_shifts() -> None:
 
     day_15 = DAY_1 + timedelta(days=14)
     reading = next(r for r in tiled if r.period_from.date() == day_15)
-    assert reading.period_from.time() == datetime(2000, 1, 1).time()
+    assert reading.period_from.time() == datetime(2000, 1, 1, tzinfo=UTC).time()
     assert reading.period_to == reading.period_from + timedelta(minutes=30)
 
 

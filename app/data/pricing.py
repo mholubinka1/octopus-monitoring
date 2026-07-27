@@ -1,7 +1,8 @@
 import logging.config
+from collections.abc import Iterator
 from datetime import datetime
 from logging import Logger, getLogger
-from typing import Iterator, List, Optional, Protocol, Tuple
+from typing import Protocol
 
 from common.logging import APP_LOGGER_NAME, config
 from data.model import Energy
@@ -14,9 +15,9 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 class PricingSource(MeterSource, Protocol):
     region_code: str
 
-    def persist_agreement(self, meter: Meter, agreements: List[Agreement]) -> None: ...
+    def persist_agreement(self, meter: Meter, agreements: list[Agreement]) -> None: ...
 
-    def fetch_products(self) -> List[Product]: ...
+    def fetch_products(self) -> list[Product]: ...
 
     def is_product_available_in_region(
         self, product_code: str, region: str
@@ -28,25 +29,25 @@ class PricingSource(MeterSource, Protocol):
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]: ...
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]: ...
 
     def fetch_gas_rates(
         self,
         product_code: str,
         tariff_code: str,
-        period_from: Optional[datetime],
-        period_to: Optional[datetime],
-    ) -> List[Rate]: ...
+        period_from: datetime | None,
+        period_to: datetime | None,
+    ) -> list[Rate]: ...
 
     def persist_rate(
-        self, product_code: str, region: str, rates: List[Rate]
+        self, product_code: str, region: str, rates: list[Rate]
     ) -> None: ...
 
     def fetch_electricity_tariff_code(
         self, product_code: str, region: str
-    ) -> Optional[str]: ...
+    ) -> str | None: ...
 
 
 class PricingRetriever:
@@ -67,7 +68,7 @@ class PricingRetriever:
         for meter in self._client.meters:
             self._client.persist_agreement(meter, meter.agreements)
 
-    def _sync_product_catalogue(self, products: List[Product]) -> None:
+    def _sync_product_catalogue(self, products: list[Product]) -> None:
         for product in products:
             if product.direction == Direction.EXPORT:
                 continue
@@ -77,7 +78,7 @@ class PricingRetriever:
                 continue
             self._client.persist_product(product)
 
-    def _meter_agreement_pairs(self) -> Iterator[Tuple[Meter, Agreement]]:
+    def _meter_agreement_pairs(self) -> Iterator[tuple[Meter, Agreement]]:
         for meter in self._client.meters:
             for agreement in meter.agreements:
                 yield meter, agreement
@@ -114,7 +115,7 @@ class PricingRetriever:
                     exc_info=True,
                 )
 
-    def _sync_comparison_rates(self, products: List[Product]) -> None:
+    def _sync_comparison_rates(self, products: list[Product]) -> None:
         own_product_codes = {
             agreement.product_code for _, agreement in self._meter_agreement_pairs()
         }

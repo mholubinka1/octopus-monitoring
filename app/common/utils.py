@@ -1,10 +1,8 @@
-from typing import Optional
-
 NULL_STRINGS = ["null"]
 
 
 def is_none_or_whitespace(
-    s: Optional[str],
+    s: str | None,
 ) -> bool:
     if not s:
         return True

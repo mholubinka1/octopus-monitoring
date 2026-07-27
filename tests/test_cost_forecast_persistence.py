@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from data.model import CostForecast
@@ -14,7 +14,7 @@ def test_a_cost_forecast_is_persisted_and_queryable(
         billing_period_end=date(2026, 8, 6),
         actual_cost_to_date=Decimal("42.50"),
         projected_total_cost=Decimal("110.00"),
-        computed_at=datetime(2026, 7, 22, 4, 0, tzinfo=timezone.utc),
+        computed_at=datetime(2026, 7, 22, 4, 0, tzinfo=UTC),
     )
 
     mariadb_client.write_cost_forecast(forecast)
@@ -37,14 +37,14 @@ def test_each_run_appends_a_new_row_rather_than_overwriting(
         billing_period_end=date(2026, 8, 6),
         actual_cost_to_date=Decimal("42.50"),
         projected_total_cost=Decimal("110.00"),
-        computed_at=datetime(2026, 7, 22, 4, 0, tzinfo=timezone.utc),
+        computed_at=datetime(2026, 7, 22, 4, 0, tzinfo=UTC),
     )
     second = CostForecast(
         billing_period_start=date(2026, 7, 6),
         billing_period_end=date(2026, 8, 6),
         actual_cost_to_date=Decimal("45.00"),
         projected_total_cost=Decimal("112.00"),
-        computed_at=datetime(2026, 7, 23, 4, 0, tzinfo=timezone.utc),
+        computed_at=datetime(2026, 7, 23, 4, 0, tzinfo=UTC),
     )
 
     mariadb_client.write_cost_forecast(first)

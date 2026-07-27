@@ -1,5 +1,4 @@
 import re
-from typing import List, Optional, Tuple
 
 from common.config import OctopusAPISettings
 from common.exceptions import APIError
@@ -16,19 +15,19 @@ class MeterSerialInfo(BaseModel):
 class AgreementInfo(BaseModel):
     tariff_code: str
     valid_from: str
-    valid_to: Optional[str] = None
+    valid_to: str | None = None
 
 
 class ElectricityMeterPointInfo(BaseModel):
     mpan: str
-    meters: List[MeterSerialInfo]
-    agreements: Optional[List[AgreementInfo]] = None
+    meters: list[MeterSerialInfo]
+    agreements: list[AgreementInfo] | None = None
 
 
 class GasMeterPointInfo(BaseModel):
     mprn: str
-    meters: List[MeterSerialInfo]
-    agreements: Optional[List[AgreementInfo]] = None
+    meters: list[MeterSerialInfo]
+    agreements: list[AgreementInfo] | None = None
 
 
 class PropertyInfo(BaseModel):
@@ -38,12 +37,12 @@ class PropertyInfo(BaseModel):
     address_line_3: str = ""
     town: str = ""
     county: str = ""
-    electricity_meter_points: List[ElectricityMeterPointInfo] = []
-    gas_meter_points: List[GasMeterPointInfo] = []
+    electricity_meter_points: list[ElectricityMeterPointInfo] = []
+    gas_meter_points: list[GasMeterPointInfo] = []
 
 
 class AccountMeterInformationResponse(BaseModel):
-    properties: List[PropertyInfo]
+    properties: list[PropertyInfo]
 
 
 class GridSupplyPoint(BaseModel):
@@ -51,7 +50,7 @@ class GridSupplyPoint(BaseModel):
 
 
 class GridSupplyPointsResponse(BaseModel):
-    results: List[GridSupplyPoint]
+    results: list[GridSupplyPoint]
 
 
 class AccountClient:
@@ -61,7 +60,7 @@ class AccountClient:
         self._account_number = settings.account_number
         self._transport = transport
 
-    def get_account_meter_information(self) -> Tuple[Account, List[Meter]]:
+    def get_account_meter_information(self) -> tuple[Account, list[Meter]]:
         url = self._transport.base_url + f"accounts/{self._account_number}"
         parsed = self._transport.get(
             url,
@@ -94,7 +93,7 @@ class AccountClient:
             postcode,
         )
 
-        meters: List[Meter] = []
+        meters: list[Meter] = []
         if properties.electricity_meter_points:
             meters.append(
                 Electricity.from_response(properties.electricity_meter_points)

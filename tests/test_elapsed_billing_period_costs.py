@@ -1,6 +1,5 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Optional
 
 from data.mysql import model
 from data.mysql.client import MariaDBClient
@@ -11,7 +10,7 @@ REGION = "H"
 
 
 def _seed_agreement(
-    s: Session, valid_from: datetime, valid_to: Optional[datetime] = None
+    s: Session, valid_from: datetime, valid_to: datetime | None = None
 ) -> None:
     s.add(
         model.agreement(
@@ -28,7 +27,7 @@ def _seed_agreement(
 def _seed_rate(
     s: Session,
     valid_from: datetime,
-    valid_to: Optional[datetime],
+    valid_to: datetime | None,
     unit_rate: str,
     standing_charge: str,
 ) -> None:
@@ -63,21 +62,21 @@ def test_two_elapsed_days_with_consumption_on_a_stable_rate(
     mariadb_client: MariaDBClient,
 ) -> None:
     with mariadb_client.session_write_scope() as s:
-        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=timezone.utc))
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
         _seed_rate(
             s,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             None,
             "20.00",
             "48.00",
         )
-        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc), "1.0")
-        _seed_consumption(s, datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc), "1.0")
-        _seed_consumption(s, datetime(2026, 7, 7, 0, 0, tzinfo=timezone.utc), "2.0")
+        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "1.0")
+        _seed_consumption(s, datetime(2026, 7, 6, 12, 0, tzinfo=UTC), "1.0")
+        _seed_consumption(s, datetime(2026, 7, 7, 0, 0, tzinfo=UTC), "2.0")
 
     results = mariadb_client.read_elapsed_billing_period_costs(
-        datetime(2026, 7, 6, tzinfo=timezone.utc),
-        datetime(2026, 7, 8, tzinfo=timezone.utc),
+        datetime(2026, 7, 6, tzinfo=UTC),
+        datetime(2026, 7, 8, tzinfo=UTC),
         REGION,
     )
 
@@ -99,10 +98,10 @@ def test_a_rate_for_another_region_is_not_double_matched(
     # would multiply-match every region sharing that product_code/window,
     # overcounting both kWh and cost.
     with mariadb_client.session_write_scope() as s:
-        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=timezone.utc))
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
         _seed_rate(
             s,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
             None,
             "20.00",
             "48.00",
@@ -114,17 +113,17 @@ def test_a_rate_for_another_region_is_not_double_matched(
                 id=f"{PRODUCT_CODE}_A_202601010000",
                 product_code=PRODUCT_CODE,
                 region="A",
-                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
                 valid_to=None,
                 unit_rate=Decimal("99.00"),
                 standing_charge=Decimal("99.00"),
             )
         )
-        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc), "2.0")
+        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "2.0")
 
     results = mariadb_client.read_elapsed_billing_period_costs(
-        datetime(2026, 7, 6, tzinfo=timezone.utc),
-        datetime(2026, 7, 7, tzinfo=timezone.utc),
+        datetime(2026, 7, 6, tzinfo=UTC),
+        datetime(2026, 7, 7, tzinfo=UTC),
         REGION,
     )
 
@@ -139,29 +138,29 @@ def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
     mariadb_client: MariaDBClient,
 ) -> None:
     with mariadb_client.session_write_scope() as s:
-        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=timezone.utc))
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
         # Old rate covers the first half of the day; a new rate takes over
         # at noon -- both apply to consumption on the same calendar day.
         _seed_rate(
             s,
-            datetime(2026, 1, 1, tzinfo=timezone.utc),
-            datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
             "20.00",
             "48.00",
         )
         _seed_rate(
             s,
-            datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc),
+            datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
             None,
             "30.00",
             "48.00",
         )
-        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=timezone.utc), "1.0")
-        _seed_consumption(s, datetime(2026, 7, 6, 12, 0, tzinfo=timezone.utc), "1.0")
+        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "1.0")
+        _seed_consumption(s, datetime(2026, 7, 6, 12, 0, tzinfo=UTC), "1.0")
 
     results = mariadb_client.read_elapsed_billing_period_costs(
-        datetime(2026, 7, 6, tzinfo=timezone.utc),
-        datetime(2026, 7, 7, tzinfo=timezone.utc),
+        datetime(2026, 7, 6, tzinfo=UTC),
+        datetime(2026, 7, 7, tzinfo=UTC),
         REGION,
     )
 

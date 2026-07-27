@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from logging import Logger, getLogger
-from typing import TYPE_CHECKING, Any, List, Optional, Protocol, Tuple
+from typing import TYPE_CHECKING, Any, Protocol
 
 from common.exceptions import ArgumentError, NullValueError
 from common.logging import APP_LOGGER_NAME, config
@@ -40,7 +40,7 @@ class BillingPeriod:
 
     @classmethod
     def from_billing_options(
-        cls, period_start: date, period_end: Optional[date], is_fixed: bool
+        cls, period_start: date, period_end: date | None, is_fixed: bool
     ) -> "BillingPeriod":
         if is_fixed:
             if period_end is None:
@@ -86,13 +86,13 @@ class Price:
     unit_rate: Decimal
     standing_charge: Decimal
     valid_from: datetime
-    valid_to: Optional[datetime]
+    valid_to: datetime | None
 
 
 @dataclass
 class Rate:
     valid_from: datetime
-    valid_to: Optional[datetime]
+    valid_to: datetime | None
     unit_rate: Decimal
     standing_charge: Decimal
 
@@ -128,11 +128,11 @@ class Agreement:
     tariff_code: str
     tariff_type: TariffType
     valid_from: datetime
-    valid_to: Optional[datetime]
-    price_history: List[Price]
+    valid_to: datetime | None
+    price_history: list[Price]
 
     def __init__(
-        self, tariff_code: str, valid_from: datetime, valid_to: Optional[datetime]
+        self, tariff_code: str, valid_from: datetime, valid_to: datetime | None
     ) -> None:
         self.tariff_code = tariff_code
         self.tariff_type = to_tariff_type(tariff_code)
@@ -143,7 +143,7 @@ class Agreement:
         self.product_code = product_code_match.groupdict()["product_code"]
         self.valid_from = valid_from
         self.valid_to = valid_to
-        self.price_history: List[Price] = []
+        self.price_history: list[Price] = []
 
     @classmethod
     def from_response(cls, info: "AgreementInfo") -> "Agreement":
@@ -160,15 +160,15 @@ class Agreement:
 class Meter(ABC):
     energy: Energy
     serial_number: str
-    agreements: List[Agreement]
+    agreements: list[Agreement]
 
     def start_date(self) -> datetime:
         return min(a.valid_from for a in self.agreements)
 
     @staticmethod
     def _single_meter_point_serial_number(
-        meter_points: List[Any], label: str
-    ) -> Tuple[Any, str]:
+        meter_points: list[Any], label: str
+    ) -> tuple[Any, str]:
         if len(meter_points) == 0:
             raise NullValueError(f"No {label} meter points found.")
         if len(meter_points) > 1:
@@ -185,7 +185,7 @@ class Meter(ABC):
         return meter_point, meter_point.meters[0].serial_number
 
     @staticmethod
-    def _require_agreements(agreements: List[Agreement]) -> None:
+    def _require_agreements(agreements: list[Agreement]) -> None:
         # Tracked in #387: should extract consumption data even without agreements.
         if len(agreements) == 0:
             raise ArgumentError(
@@ -197,7 +197,7 @@ class Electricity(Meter):
     mpan: str
 
     def __init__(
-        self, mpan: str, serial_number: str, agreements: List[Agreement]
+        self, mpan: str, serial_number: str, agreements: list[Agreement]
     ) -> None:
         self.energy = Energy.electricity
         self.mpan = mpan
@@ -207,7 +207,7 @@ class Electricity(Meter):
 
     @classmethod
     def from_response(
-        cls, meter_points: List["ElectricityMeterPointInfo"]
+        cls, meter_points: list["ElectricityMeterPointInfo"]
     ) -> "Electricity":
         meter_point, serial_number = Meter._single_meter_point_serial_number(
             meter_points, "MPAN"
@@ -224,7 +224,7 @@ class Gas(Meter):
     mprn: str
 
     def __init__(
-        self, mprn: str, serial_number: str, agreements: List[Agreement]
+        self, mprn: str, serial_number: str, agreements: list[Agreement]
     ) -> None:
         self.energy = Energy.gas
         self.mprn = mprn
@@ -233,7 +233,7 @@ class Gas(Meter):
         self.agreements = agreements
 
     @classmethod
-    def from_response(cls, meter_points: List["GasMeterPointInfo"]) -> "Gas":
+    def from_response(cls, meter_points: list["GasMeterPointInfo"]) -> "Gas":
         meter_point, serial_number = Meter._single_meter_point_serial_number(
             meter_points, "MPRN"
         )
@@ -246,6 +246,6 @@ class Gas(Meter):
 
 
 class MeterSource(Protocol):
-    meters: List[Meter]
+    meters: list[Meter]
 
     def refresh_meters(self) -> None: ...

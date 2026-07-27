@@ -1,8 +1,8 @@
 import logging.config
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from logging import Logger, getLogger
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Protocol
 
 from common.logging import APP_LOGGER_NAME, config
 from data.consumption import ConsumptionFetchSource
@@ -22,7 +22,7 @@ class ConsumptionSummaryRetriever:
         self._mariadb = mariadb
 
     def refresh(self) -> None:
-        as_of = datetime.now(timezone.utc).date()
+        as_of = datetime.now(UTC).date()
         summaries = self._mariadb.read_consumption_summarization_window(as_of)
         self._mariadb.write_consumption_summary(summaries)
         logger.info(f"Consumption summary refresh: {len(summaries)} day(s) summarized.")
@@ -30,7 +30,7 @@ class ConsumptionSummaryRetriever:
 
 class ConsumptionSummaryBackfillSource(ConsumptionFetchSource, Protocol):
     def persist_consumption_summary(
-        self, summaries: List[ConsumptionSummary]
+        self, summaries: list[ConsumptionSummary]
     ) -> None: ...
 
 
@@ -40,30 +40,28 @@ class ConsumptionSummaryBackfill:
     def __init__(self, client: ConsumptionSummaryBackfillSource) -> None:
         self._client = client
 
-    def run(self, as_of: Optional[datetime] = None) -> None:
+    def run(self, as_of: datetime | None = None) -> None:
         if as_of is None:
-            as_of = datetime.now(timezone.utc)
+            as_of = datetime.now(UTC)
         # Anchored to midnight UTC of the cutoff date, not as_of's exact
         # time-of-day -- otherwise Octopus omits intervals before that time
         # on the oldest backfilled day, producing a partial daily total.
         cutoff_date = (as_of - timedelta(days=BACKFILL_WINDOW_DAYS)).date()
         period_from = datetime(
-            cutoff_date.year, cutoff_date.month, cutoff_date.day, tzinfo=timezone.utc
+            cutoff_date.year, cutoff_date.month, cutoff_date.day, tzinfo=UTC
         )
 
         self._client.refresh_meters()
-        totals: Dict[Tuple[Energy, date], Decimal] = {}
+        totals: dict[tuple[Energy, date], Decimal] = {}
         for meter in self._client.meters:
-            (next_page, consumption) = self._client.fetch_consumption(
-                meter, period_from
-            )
+            next_page, consumption = self._client.fetch_consumption(meter, period_from)
             while True:
                 for point in consumption:
                     key = (meter.energy, point.start.date())
                     totals[key] = totals.get(key, Decimal(0)) + point.est_kwh
                 if next_page is None:
                     break
-                (next_page, consumption) = self._client.fetch_consumption_page(
+                next_page, consumption = self._client.fetch_consumption_page(
                     meter.energy, next_page
                 )
 
