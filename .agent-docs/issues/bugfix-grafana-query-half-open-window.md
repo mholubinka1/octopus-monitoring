@@ -2,6 +2,8 @@
 
 ## Fix double-counted cost from inclusive-both-ends BETWEEN joins
 
+> Work complete — PR ready to merge.
+
 **GitHub issue**: #434
 
 **Blocked by**: None
