@@ -19,13 +19,17 @@ lookback) and can land independently of the pruning job itself.
 
 ### Acceptance criteria
 
-- [ ] `config.yml.template`'s `retention_days` is `45`
-- [ ] README's Configuration section description matches the reverted value
+> Already shipped as part of `feature/yearly-consumption-comparison` (PR #416)
+> before this chore's branch existed; closed as a no-op duplicate. See
+> ADR-0003 for the shipped rationale.
+
+- [x] `config.yml.template`'s `retention_days` is `45`
+- [x] README's Configuration section description matches the reverted value
       and explains why (long-term history now lives in
       `daily_consumption_summary`, not raw data)
-- [ ] `tests/test_config_settings.py` still passes unchanged (it doesn't
+- [x] `tests/test_config_settings.py` still passes unchanged (it doesn't
       assert on the specific production default, only the parsing mechanism)
-- [ ] Existing test suite remains green
+- [x] Existing test suite remains green
 
 ---
 

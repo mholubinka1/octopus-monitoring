@@ -12,11 +12,13 @@ from data.cost_forecast import CostForecastRetriever
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
+from data.pruning import DataPruner
 from main import (
     register_consumption_summary_job,
     register_cost_forecast_refresh_job,
     register_jobs,
     register_pricing_job,
+    register_pruning_job,
     run_backfill_at_startup,
     run_initial_consumption_summary_sync,
     run_initial_cost_forecast_sync,
@@ -292,6 +294,69 @@ def test_a_failed_cost_forecast_run_is_recorded_as_a_failed_job_run(
 
     assert all(run.status == "failure" for run in runs)
     assert len(runs) > 0
+
+
+def test_pruning_job_is_registered_for_monday_at_0400(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+
+    job = register_pruning_job(scheduler, Mock(spec=DataPruner), mariadb_client)
+
+    assert job.unit == "weeks"
+    assert job.start_day == "monday"
+    assert str(job.at_time) == "04:00:00"
+
+
+def test_pruning_runs_and_records_success_when_the_summary_job_last_succeeded(
+    mariadb_client: MariaDBClient,
+) -> None:
+    mariadb_client.record_job_run("update_consumption_summary", "success")
+    scheduler = Scheduler()
+    pruner = Mock(spec=DataPruner)
+
+    job = register_pruning_job(scheduler, pruner, mariadb_client)
+    job.run().join()
+
+    pruner.run.assert_called_once()
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+    assert len(runs) == 1
+    assert runs[0].status == "success"
+
+
+def test_pruning_is_skipped_and_recorded_when_the_summary_job_has_not_succeeded(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    pruner = Mock(spec=DataPruner)
+
+    job = register_pruning_job(scheduler, pruner, mariadb_client)
+    job.run()
+
+    pruner.run.assert_not_called()
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+    assert len(runs) == 1
+    assert runs[0].status == "skipped"
+
+
+def test_pruning_is_skipped_when_the_summary_job_most_recently_failed(
+    mariadb_client: MariaDBClient,
+) -> None:
+    mariadb_client.record_job_run("update_consumption_summary", "success")
+    mariadb_client.record_job_run("update_consumption_summary", "failure", error="boom")
+    scheduler = Scheduler()
+    pruner = Mock(spec=DataPruner)
+
+    job = register_pruning_job(scheduler, pruner, mariadb_client)
+    job.run()
+
+    pruner.run.assert_not_called()
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).filter_by(job_name="prune_old_data").all()
+    assert len(runs) == 1
+    assert runs[0].status == "skipped"
 
 
 def test_backfill_runs_and_records_success_on_first_startup(

@@ -1,8 +1,9 @@
 import logging.config
+from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from logging import Logger, getLogger
-from typing import Any, Generator, List, Optional
+from typing import Any
 
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
@@ -54,8 +55,6 @@ def upsert(s: Session, record: Any) -> None:
             f"matched primary key {pk_filter}. The IntegrityError was likely caused "
             "by a non-primary-key constraint violation."
         ) from exc
-    except Exception as e:
-        raise e
 
 
 def _energy_scoped_id(energy_char: str, dt: datetime) -> str:
@@ -131,7 +130,7 @@ class MariaDBClient:
                     )
 
     @contextmanager
-    def session_read_scope(self) -> Generator[Session, None, None]:
+    def session_read_scope(self) -> Generator[Session]:
         session = self._session_builder.session()
         try:
             yield session
@@ -139,7 +138,7 @@ class MariaDBClient:
             session.close()
 
     @contextmanager
-    def session_write_scope(self) -> Generator[Session, None, None]:
+    def session_write_scope(self) -> Generator[Session]:
         session = self._session_builder.session()
         try:
             yield session
@@ -150,7 +149,7 @@ class MariaDBClient:
         finally:
             session.close()
 
-    def _write_all(self, records: List[Any], description: str) -> None:
+    def _write_all(self, records: list[Any], description: str) -> None:
         try:
             with self.session_write_scope() as s:
                 for record in records:
@@ -161,7 +160,7 @@ class MariaDBClient:
             logger.error(f"Failed to write {description}: {e}")
             raise MariaDBError(e) from e
 
-    def write_consumption(self, meter: Meter, consumption: List[Consumption]) -> None:
+    def write_consumption(self, meter: Meter, consumption: list[Consumption]) -> None:
         energy_char = as_energy_char(meter.energy)
         records = [
             model.consumption(
@@ -177,7 +176,7 @@ class MariaDBClient:
         ]
         self._write_all(records, "Consumption data")
 
-    def write_agreement(self, meter: Meter, agreements: List[Agreement]) -> None:
+    def write_agreement(self, meter: Meter, agreements: list[Agreement]) -> None:
         energy_char = as_energy_char(meter.energy)
         records = [
             model.agreement(
@@ -201,7 +200,7 @@ class MariaDBClient:
         self._write_all([record], "Product data")
 
     def write_product_rate(
-        self, product_code: str, region: str, rates: List[Rate]
+        self, product_code: str, region: str, rates: list[Rate]
     ) -> None:
         records = [
             model.product_rate(
@@ -220,7 +219,7 @@ class MariaDBClient:
     def write_agile_forecast(
         self,
         region: str,
-        readings: List[AgileForecastReading],
+        readings: list[AgileForecastReading],
         fetched_at: datetime,
     ) -> None:
         records = [
@@ -248,7 +247,7 @@ class MariaDBClient:
 
     def read_current_product_rate(
         self, product_code: str, region: str, as_of: datetime
-    ) -> Optional[Rate]:
+    ) -> Rate | None:
         pr = model.product_rate
         with self.session_read_scope() as session:
             row = (
@@ -278,7 +277,7 @@ class MariaDBClient:
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
-    ) -> List[DailyCostSummary]:
+    ) -> list[DailyCostSummary]:
         # Joins each half-hourly consumption row to whichever agreement and
         # product_rate actually applied at that moment (not just the
         # current one), so a mid-period rate change is naturally reflected
@@ -346,13 +345,14 @@ class MariaDBClient:
 
     def read_consumption_summarization_window(
         self, as_of: date
-    ) -> List[ConsumptionSummary]:
+    ) -> list[ConsumptionSummary]:
         # Deliberately no lower bound on the raw `consumption` scan below:
         # gap detection (a day outside the trailing window with no existing
         # summary row) requires seeing all of history, not just the recent
-        # cutoff. Table growth is bounded by the raw retention window once
-        # pruning ships (chore/consumption-data-pruning); until then this
-        # scales with total raw row count, same as the rest of the app.
+        # cutoff. Table growth is bounded by the raw retention window via
+        # the weekly prune_old_data job (see DataPruner), which always runs
+        # after this summarization job in the same scheduling tick -- so by
+        # the time pruning deletes anything, it has already been summarized.
         # `- 1` because the window is inclusive of as_of itself: 14 trailing
         # days means as_of, as_of-1, ..., as_of-13 (14 dates), not 15.
         cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS - 1)
@@ -395,7 +395,7 @@ class MariaDBClient:
             for row in rows
         ]
 
-    def write_consumption_summary(self, summaries: List[ConsumptionSummary]) -> None:
+    def write_consumption_summary(self, summaries: list[ConsumptionSummary]) -> None:
         records = [
             model.daily_consumption_summary(
                 energy=as_energy_char(summary.energy),
@@ -415,15 +415,25 @@ class MariaDBClient:
                 is not None
             )
 
+    def latest_job_run_is_successful(self, job_name: str) -> bool:
+        with self.session_read_scope() as session:
+            latest = (
+                session.query(model.job_run)
+                .filter_by(job_name=job_name)
+                .order_by(model.job_run.ran_at.desc(), model.job_run.id.desc())
+                .first()
+            )
+            return latest is not None and latest.status == "success"
+
     def record_job_run(
-        self, job_name: str, status: str, error: Optional[str] = None
+        self, job_name: str, status: str, error: str | None = None
     ) -> None:
         try:
             with self.session_write_scope() as s:
                 record = model.job_run(
                     job_name=job_name,
                     status=status,
-                    ran_at=datetime.now(timezone.utc),
+                    ran_at=datetime.now(UTC),
                     error_message=error,
                 )
                 s.add(record)
@@ -431,4 +441,39 @@ class MariaDBClient:
                 return
         except Exception as e:
             logger.error(f"Failed to record job run for {job_name}: {e}")
+            raise MariaDBError(e) from e
+
+    def prune_consumption_older_than(self, cutoff: datetime) -> int:
+        try:
+            with self.session_write_scope() as session:
+                deleted = (
+                    session.query(model.consumption)
+                    .filter(model.consumption.period_from < cutoff)
+                    .delete(synchronize_session=False)
+                )
+                logger.debug(
+                    f"Pruned {deleted} consumption row(s) older than {cutoff}."
+                )
+                return deleted
+        except Exception as e:
+            logger.error(f"Failed to prune consumption data: {e}")
+            raise MariaDBError(e) from e
+
+    def prune_product_rates_older_than(self, cutoff: datetime) -> int:
+        try:
+            with self.session_write_scope() as session:
+                deleted = (
+                    session.query(model.product_rate)
+                    .filter(
+                        model.product_rate.valid_to.isnot(None),
+                        model.product_rate.valid_to < cutoff,
+                    )
+                    .delete(synchronize_session=False)
+                )
+                logger.debug(
+                    f"Pruned {deleted} product_rate row(s) older than {cutoff}."
+                )
+                return deleted
+        except Exception as e:
+            logger.error(f"Failed to prune product rate data: {e}")
             raise MariaDBError(e) from e

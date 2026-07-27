@@ -8,18 +8,23 @@ Half-hourly consumption, cost, and product-rate data accumulates indefinitely if
 
 `retention_days` was briefly widened from 90 to 400 days as a stopgap, to keep raw data around long enough for a not-yet-built historical summarization pass to draw on. `feature/yearly-consumption-comparison` replaced that stopgap with a dedicated one-time 2-year backfill (`ConsumptionSummaryBackfill`) that fetches directly from Octopus's API into `daily_consumption_summary`, independent of `retention_days` — so `retention_days` reverted to 45 as part of that branch, without waiting for the pruning job itself.
 
-**The pruning job is not yet implemented.** As of this revision, nothing in
-the codebase actually deletes old rows — data grows unbounded today. The
-45-day number is, for now, only the value `config.yml`'s `retention_days`
-uses to bound the startup historical backfill (see
-`app/main.py`'s `startup()` and `RefreshSettings.retention`); the pruning
-job described above (`chore/consumption-data-pruning`) is separate, future
-work.
+**The pruning job is now implemented** (`chore/consumption-data-pruning`).
+`DataPruner` (`app/data/pruning.py`) runs as the `prune_old_data` weekly job,
+registered on the same Monday 04:00 schedule as `update_consumption_summary`
+and run immediately after it in the same scheduling tick. It deletes
+`consumption` rows where `period_from` is older than `retention_days`, and
+`product_rate` rows where `valid_to` is older than that same cutoff — a
+still-valid or open-ended (`valid_to IS NULL`) rate is never pruned.
+`agreement` is never touched. Before running, it checks that the same
+cycle's `update_consumption_summary` job recorded a successful `job_run`; if
+not, pruning is skipped for that cycle (recorded as its own `job_run` with
+status `skipped`) so raw data is never deleted before it has been rolled
+into `daily_consumption_summary`.
 
 ## Consequences
 
-- Once the pruning job is built, no month-over-month comparison of raw data
-  beyond 45 days back — `daily_consumption_summary` (populated independently
-  of raw-data retention) is the source of truth for anything longer-range.
-- Until the pruning job exists, `retention_days` only governs how far back
-  the startup backfill reaches — it does not yet bound storage growth.
+- No month-over-month comparison of raw data beyond 45 days back —
+  `daily_consumption_summary` (populated independently of raw-data
+  retention) is the source of truth for anything longer-range.
+- `retention_days` now bounds both the startup backfill's lookback and
+  ongoing storage growth, since the weekly pruning job enforces it.
