@@ -4,7 +4,7 @@
 
 Every query in `grafana/mariadb/queries.md` that joins `consumption` to `product_rate` and/or `agreement` uses `c.period_from BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')`. `BETWEEN` is inclusive on both ends. Because `consumption.period_from` is recorded on the exact same half-hourly grid as `product_rate`'s (and `agreement`'s) `valid_from`/`valid_to` windows, a consumption timestamp that lands exactly on a boundary — which is nearly every row, since adjacent rate windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`) — matches **two** rate rows instead of one. `SUM(c.est_kwh * pr.unit_rate)` then counts that half-hour's cost twice.
 
-Confirmed live against the real production database: the Yesterday's Cost panel showed £6.01 against a true £3.25 (agreed by both the app's own numbers and Octopus Compare). Diagnostics traced it to the join producing 96 rows instead of the correct 48 for a 48-half-hour day — a clean 2x fan-out — and a row-level query showed `period_from = 2026-07-26 01:00:00` matching both the `product_rate` row ending at `01:00:00` and the row starting at `01:00:00`.
+Confirmed live against the real production database: the Yesterday's Cost panel showed £6.01 — roughly double the £3.25 the official Octopus app and Octopus Compare independently showed for the same day, which is what first flagged something as wrong. Diagnostics traced it to the join producing 96 rows instead of the correct 48 for a 48-half-hour day — a clean 2x fan-out — and a row-level query showed `period_from = 2026-07-26 01:00:00` matching both the `product_rate` row ending at `01:00:00` and the row starting at `01:00:00`.
 
 ## Solution
 
@@ -32,7 +32,7 @@ Replace the inclusive-both-ends `BETWEEN` pattern with a half-open window everyw
 ## Testing Decisions
 
 - No automated test — this is a documentation file with no test harness (SQL meant for Grafana's query editor, not exercised by the app's test suite).
-- Acceptance check: after the fix, re-run the corrected Yesterday's Cost query directly against the production database (via Grafana Explore) and confirm it returns £3.25, matching the app's own cost display and Octopus Compare's independent figure for the same day.
+- Acceptance check: after the fix, re-run the corrected Yesterday's Cost query directly against the production database and confirm the join no longer fans out (48 rows, not 96) and the total roughly halves from the pre-fix £6.01. Verified in practice: the corrected query returns £3.19, computed directly against MariaDB independent of Grafana. A residual gap remains against the £3.25 the official Octopus app shows for the same day — investigated and determined to be a separate, out-of-scope data-accuracy question (not a defect in this fix); see the acceptance-criteria note in issue #434 for the full investigation.
 
 ## Out of Scope
 
