@@ -24,6 +24,8 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 `agile_forecast` caches the raw half-hourly AgilePredict response (real 14-day forecast only) for charting. `cost_forecast` is the billing-period-level summary the app computes once daily (actual cost so far + full-period projection, using tiled forecast data internally beyond day 14 — that tiling isn't persisted point-by-point, only the summary is).
 
+**Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND valid_to` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: this doubled the Yesterday's Cost panel's real production value from £3.25 to £6.01 before the fix.
+
 ---
 
 ## Row 1 — Cost Summary
@@ -38,11 +40,13 @@ SELECT
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
- AND c.period_from BETWEEN a.valid_from AND COALESCE(a.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
   ON pr.product_code = a.product_code
  AND pr.region = '${region}'
- AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
   AND c.period_from >= CURDATE() - INTERVAL 1 DAY
   AND c.period_from < CURDATE();
@@ -128,11 +132,13 @@ SELECT
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
- AND c.period_from BETWEEN a.valid_from AND COALESCE(a.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
   ON pr.product_code = a.product_code
  AND pr.region = '${region}'
- AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 ORDER BY c.period_from;
@@ -149,11 +155,13 @@ SELECT
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
- AND c.period_from BETWEEN a.valid_from AND COALESCE(a.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
   ON pr.product_code = a.product_code
  AND pr.region = '${region}'
- AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
   AND c.period_from >= NOW() - INTERVAL 90 DAY
 GROUP BY DATE(c.period_from)
@@ -253,11 +261,13 @@ FROM (
   FROM consumption c
   JOIN agreement a
     ON a.energy = c.energy
-   AND c.period_from BETWEEN a.valid_from AND COALESCE(a.valid_to, '9999-12-31 23:59:59')
+   AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
   JOIN product_rate pr
     ON pr.product_code = a.product_code
    AND pr.region = '${region}'
-   AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+   AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(c.period_from)
@@ -291,11 +301,13 @@ SELECT
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
- AND c.period_from BETWEEN a.valid_from AND COALESCE(a.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
   ON pr.product_code = a.product_code
  AND pr.region = '${region}'
- AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(c.period_from)
@@ -330,11 +342,13 @@ SELECT
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
- AND c.period_from BETWEEN a.valid_from AND COALESCE(a.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
   ON pr.product_code = a.product_code
  AND pr.region = '${region}'
- AND c.period_from BETWEEN pr.valid_from AND COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+ AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(c.period_from)
