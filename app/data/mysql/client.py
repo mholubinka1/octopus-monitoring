@@ -1,13 +1,16 @@
 import logging.config
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Any
 
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
+from data import local_day
 from data.model import (
     Consumption,
     ConsumptionSummary,
@@ -20,7 +23,7 @@ from data.model import (
 from data.mysql import model
 from data.mysql.model import SQLBase
 from data.octopus.model import AgileForecastReading, Agreement, Meter, Product, Rate
-from sqlalchemy import Date, and_, create_engine, func, inspect, or_, text
+from sqlalchemy import and_, create_engine, inspect, or_, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -30,6 +33,14 @@ SUMMARIZATION_WINDOW_DAYS = 14
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
+
+
+@dataclass
+class _DailyAccumulator:
+    total_kwh: Decimal = Decimal(0)
+    variable_cost: Decimal = Decimal(0)
+    standing_charge: Decimal = Decimal(0)
+    row_count: int = 0
 
 
 def upsert(s: Session, record: Any) -> None:
@@ -289,10 +300,9 @@ class MariaDBClient:
         pr = model.product_rate
 
         with self.session_read_scope() as session:
-            day_col = func.date(c.period_from, type_=Date).label("date")
-            joined = (
+            rows = (
                 session.query(
-                    day_col,
+                    c.period_from,
                     c.est_kwh.label("est_kwh"),
                     pr.unit_rate.label("unit_rate"),
                     pr.standing_charge.label("standing_charge"),
@@ -319,42 +329,41 @@ class MariaDBClient:
                     c.period_from >= period_from,
                     c.period_from < period_to,
                 )
-                .subquery()
-            )
-            # Octopus's consumption API has a real settlement lag -- a day
-            # can still be missing rows more than 24 hours after it ends.
-            # A strictly-past day must have all 48 half-hourly rows to be
-            # treated as final; the current/most-recent day (period_to's
-            # date) is exempt since it's expected to be partial by
-            # definition ("cost so far"). An incomplete past day drops out
-            # entirely here, same as a day with zero consumption rows
-            # already does, and is picked up by the caller's gap-fill.
-            today = period_to.date()
-            # func.count is a dynamically-generated SQLAlchemy function
-            # pylint's stubs don't model -- func.sum/func.max above are
-            # unaffected, this is isolated to count().
-            row_count = func.count(joined.c.date)  # pylint: disable=not-callable
-            rows = (
-                session.query(
-                    joined.c.date,
-                    func.sum(joined.c.est_kwh).label("total_kwh"),
-                    func.sum(joined.c.est_kwh * joined.c.unit_rate).label(
-                        "variable_cost"
-                    ),
-                    func.max(joined.c.standing_charge).label("standing_charge"),
-                )
-                .group_by(joined.c.date)
-                .having(or_(joined.c.date == today, row_count == 48))
                 .all()
             )
 
+        # Grouped in Python by Europe/London local calendar day, not the raw
+        # UTC date -- Octopus's own daily reporting (and the "day" a UK user
+        # means by "cost for 26 July") is local time. See ADR-0010 for why
+        # this is Python/zoneinfo-based rather than SQL CONVERT_TZ.
+        daily: dict[date, _DailyAccumulator] = {}
+        for row in rows:
+            day = local_day.to_local_date(row.period_from)
+            bucket = daily.setdefault(day, _DailyAccumulator())
+            bucket.total_kwh += row.est_kwh
+            bucket.variable_cost += row.est_kwh * row.unit_rate
+            bucket.standing_charge = max(bucket.standing_charge, row.standing_charge)
+            bucket.row_count += 1
+
+        # Octopus's consumption API has a real settlement lag -- a day can
+        # still be missing rows more than 24 hours after it ends. A
+        # strictly-past day must have all of that local day's expected
+        # half-hourly rows (48 normally, 46/50 on a UK clock-change date) to
+        # be treated as final; the current/most-recent day (period_to's
+        # local date) is exempt since it's expected to be partial by
+        # definition ("cost so far"). An incomplete past day drops out
+        # entirely here, same as a day with zero consumption rows already
+        # does, and is picked up by the caller's gap-fill.
+        today = local_day.to_local_date(period_to)
         return [
             DailyCostSummary(
-                date=row.date,
-                total_kwh=row.total_kwh,
-                day_cost_gbp=(row.variable_cost + row.standing_charge) / 100,
+                date=day,
+                total_kwh=bucket.total_kwh,
+                day_cost_gbp=(bucket.variable_cost + bucket.standing_charge) / 100,
             )
-            for row in rows
+            for day, bucket in daily.items()
+            if day == today
+            or bucket.row_count == local_day.expected_half_hour_count(day)
         ]
 
     def read_consumption_summarization_window(
@@ -371,42 +380,49 @@ class MariaDBClient:
         # days means as_of, as_of-1, ..., as_of-13 (14 dates), not 15.
         cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS - 1)
         with self.session_read_scope() as session:
-            consumption_date = func.date(
-                model.consumption.period_from, type_=Date
-            ).label("date")
-            daily_totals = (
-                session.query(
-                    model.consumption.energy.label("energy"),
-                    consumption_date,
-                    func.sum(model.consumption.est_kwh).label("total_kwh"),
-                )
-                .group_by(model.consumption.energy, consumption_date)
-                .subquery()
-            )
-            rows = (
-                session.query(
-                    daily_totals.c.energy,
-                    daily_totals.c.date,
-                    daily_totals.c.total_kwh,
-                )
-                .outerjoin(
-                    model.daily_consumption_summary,
-                    (model.daily_consumption_summary.energy == daily_totals.c.energy)
-                    & (model.daily_consumption_summary.date == daily_totals.c.date),
-                )
-                .filter(
-                    (daily_totals.c.date >= cutoff)
-                    | (model.daily_consumption_summary.energy.is_(None))
-                )
-                .all()
-            )
+            raw_rows = session.query(
+                model.consumption.energy,
+                model.consumption.period_from,
+                model.consumption.est_kwh,
+            ).all()
+
+            # Grouped in Python by Europe/London local calendar day, not the
+            # raw UTC date -- keeps this job's day boundaries consistent
+            # with ConsumptionSummaryBackfill, which already buckets by
+            # local day (it reads the still-locally-offset Octopus response
+            # directly, before any DB round-trip).
+            daily_totals: dict[tuple[str, date], Decimal] = {}
+            for row in raw_rows:
+                day = local_day.to_local_date(row.period_from)
+                key = (row.energy, day)
+                daily_totals[key] = daily_totals.get(key, Decimal(0)) + row.est_kwh
+
+            # `daily_consumption_summary` is exempt from raw-data pruning
+            # (kept for long-running yearly comparisons), so it grows
+            # unbounded over years -- restricted to just the dates present
+            # in daily_totals (bounded by raw retention) rather than
+            # fetching the whole table.
+            candidate_days = {day for _, day in daily_totals}
+            existing_summary_days: set[tuple[str, date]] = set()
+            if candidate_days:
+                existing_summary_days = {
+                    (row.energy, row.date)
+                    for row in session.query(
+                        model.daily_consumption_summary.energy,
+                        model.daily_consumption_summary.date,
+                    )
+                    .filter(model.daily_consumption_summary.date.in_(candidate_days))
+                    .all()
+                }
+
         return [
             ConsumptionSummary(
-                energy=energy_from_char(row.energy),
-                date=row.date,
-                total_kwh=row.total_kwh,
+                energy=energy_from_char(energy_char),
+                date=day,
+                total_kwh=total_kwh,
             )
-            for row in rows
+            for (energy_char, day), total_kwh in daily_totals.items()
+            if day >= cutoff or (energy_char, day) not in existing_summary_days
         ]
 
     def write_consumption_summary(self, summaries: list[ConsumptionSummary]) -> None:

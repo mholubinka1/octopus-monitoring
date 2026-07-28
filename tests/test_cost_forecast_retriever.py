@@ -6,6 +6,7 @@ import responses
 from common.config import OctopusAPISettings
 from common.exceptions import APIError
 from data.cost_forecast import CostForecastRetriever
+from data.local_day import start_of_local_day
 from data.model import CostForecast, DailyCostSummary
 from data.mysql import model
 from data.mysql.client import MariaDBClient
@@ -83,10 +84,10 @@ class _RealCostForecastSource:
 def _seed_complete_day(
     s: Session, day: date, est_kwh_per_slot: str, energy: str = "E"
 ) -> None:
-    # A full 48-slot day -- the completeness guard requires this for any
-    # strictly-past elapsed day to count as real, priced consumption
+    # A full 48-slot local day -- the completeness guard requires this for
+    # any strictly-past elapsed day to count as real, priced consumption
     # rather than falling through to the zero-consumption gap-fill.
-    start = datetime(day.year, day.month, day.day, tzinfo=UTC)
+    start = start_of_local_day(day)
     for slot in range(48):
         slot_start = start + timedelta(minutes=30 * slot)
         s.add(
@@ -137,7 +138,7 @@ def _mock_agile_forecast(prices: list[dict]) -> None:
 
 
 def _flat_agile_prices(start_day: date, num_days: int, pred: str) -> list[dict]:
-    start = datetime(start_day.year, start_day.month, start_day.day, tzinfo=UTC)
+    start = start_of_local_day(start_day)
     return [
         {
             "date_time": (start + timedelta(minutes=30 * slot)).isoformat(),
@@ -219,7 +220,9 @@ def test_fixed_tariff_actual_cost_and_projection(
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
+    # Exactly local midnight starting 2026-07-07 -- that day hasn't begun
+    # yet, so only 2026-07-06 counts as elapsed.
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
     with mariadb_client.session_read_scope() as session:
         stored = session.query(model.cost_forecast).all()
@@ -303,7 +306,9 @@ def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 8, 4, 0, tzinfo=UTC))
+    # Local 04:00 on 2026-07-08 (BST), not UTC 04:00 -- the latter would be
+    # local 05:00, an hour later than this test's scenario intends.
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 8)) + timedelta(hours=4))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -355,18 +360,20 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
     # A flat per-slot rate can't distinguish true per-slot costing from a
     # flat-average shortcut -- this fixture uses two different rates across
     # the only two remaining slots so an incorrect averaged implementation
-    # would produce a visibly different total.
+    # would produce a visibly different total. UTC 22:00/22:30 on 2026-07-06
+    # are the last two half-hourly slots of *local* (BST) 6 July -- local
+    # 23:00-00:00.
     _mock_billing_period("2026-07-06", "2026-07-07")
     _mock_agile_forecast(
         [
             {
-                "date_time": "2026-07-06T23:00:00+00:00",
+                "date_time": "2026-07-06T22:00:00+00:00",
                 "agile_pred": "10.00",
                 "agile_low": "10.00",
                 "agile_high": "10.00",
             },
             {
-                "date_time": "2026-07-06T23:30:00+00:00",
+                "date_time": "2026-07-06T22:30:00+00:00",
                 "agile_pred": "30.00",
                 "agile_low": "30.00",
                 "agile_high": "30.00",
@@ -398,7 +405,9 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
             ],
         )
     )
-    retriever.refresh(as_of=datetime(2026, 7, 6, 23, 0, tzinfo=UTC))
+    # Local 23:00 on 2026-07-06 (BST) is UTC 22:00 -- still within local day
+    # 6 July, at or before both mocked forecast entries.
+    retriever.refresh(as_of=datetime(2026, 7, 6, 22, 0, tzinfo=UTC))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -406,8 +415,8 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
     # actual: (24.0 kWh @ 25.00p) + 50.00p standing = 650.00p -> £6.50
     assert row.actual_cost_to_date == Decimal("6.50")
     # future_daily_kwh = 24.0 (one elapsed day); per_slot_kwh = 24.0/48 = 0.5.
-    # The remaining window spans the rest of Jul6 (23:00, 23:30 -- the only
-    # two real forecast entries) *and* all of Jul7 (the inclusive billing
+    # The remaining window spans the rest of local Jul6 (the only two real
+    # forecast entries) *and* all of local Jul7 (the inclusive billing
     # period end), which tiling fills by repeating those same two entries
     # (only one real source day exists to tile from) -- 4 slots total:
     # 2 * (0.5*10.00 + 0.5*30.00) = 40.00p variable; standing = 1 remaining
@@ -446,7 +455,7 @@ def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
             ],
         )
     )
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -483,7 +492,7 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
             ],
         )
     )
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -533,7 +542,7 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
     )
     # Should not raise despite the forecast running out before the billing
     # period ends -- tiling fills the remainder.
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -583,7 +592,7 @@ def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 8, tzinfo=UTC))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 8)))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()
@@ -638,7 +647,7 @@ def test_a_lag_incomplete_elapsed_day_gets_the_same_gap_fill_as_a_true_zero_day(
         # Only 10 of 48 slots have arrived for Jul7 -- each a large 5.0 kWh,
         # so an incorrect implementation that let this leak into the
         # average would produce a visibly inflated projection.
-        jul7_start = datetime(2026, 7, 7, tzinfo=UTC)
+        jul7_start = start_of_local_day(date(2026, 7, 7))
         for slot in range(10):
             s.add(
                 model.consumption(
@@ -655,7 +664,7 @@ def test_a_lag_incomplete_elapsed_day_gets_the_same_gap_fill_as_a_true_zero_day(
     retriever = CostForecastRetriever(
         _source(mariadb_client, [_make_electricity_meter()])
     )
-    retriever.refresh(as_of=datetime(2026, 7, 8, tzinfo=UTC))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 8)))
 
     with mariadb_client.session_read_scope() as session:
         row = session.query(model.cost_forecast).one()

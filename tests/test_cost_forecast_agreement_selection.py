@@ -5,6 +5,7 @@ import pytest
 import responses
 from common.config import OctopusAPISettings
 from data.cost_forecast import CostForecastRetriever
+from data.local_day import start_of_local_day
 from data.model import CostForecast, DailyCostSummary
 from data.mysql import model
 from data.mysql.client import MariaDBClient
@@ -81,10 +82,10 @@ class _RealCostForecastSource:
 def _seed_complete_day(
     s: Session, day: date, est_kwh_per_slot: str, energy: str = "E"
 ) -> None:
-    # A full 48-slot day -- the completeness guard requires this for any
-    # strictly-past elapsed day to count as real, priced consumption
+    # A full 48-slot local day -- the completeness guard requires this for
+    # any strictly-past elapsed day to count as real, priced consumption
     # rather than falling through to the zero-consumption gap-fill.
-    start = datetime(day.year, day.month, day.day, tzinfo=UTC)
+    start = start_of_local_day(day)
     for slot in range(48):
         slot_start = start + timedelta(minutes=30 * slot)
         s.add(
@@ -242,7 +243,7 @@ def test_current_agreement_with_a_bounded_valid_to_still_matches(
         ],
     )
     retriever = CostForecastRetriever(_source(mariadb_client, [electricity_meter]))
-    retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
     with mariadb_client.session_read_scope() as session:
         stored = session.query(model.cost_forecast).all()

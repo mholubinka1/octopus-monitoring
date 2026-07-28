@@ -6,6 +6,7 @@ from logging import Logger, getLogger
 from typing import Protocol
 
 from common.logging import APP_LOGGER_NAME, config
+from data import local_day
 from data.model import CostForecast, DailyCostSummary, Energy
 from data.octopus.model import (
     AgileForecastReading,
@@ -21,10 +22,6 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 
 TILE_SOURCE_WINDOW_DAYS = 7
 HALF_HOURS_PER_DAY = 48
-
-
-def _midnight_utc(d: date) -> datetime:
-    return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
 def project_daily_average_consumption(daily_totals_kwh: list[Decimal]) -> Decimal:
@@ -45,7 +42,7 @@ def tile_forecast_beyond(
         day: list(readings)
         for day, readings in groupby(
             sorted(forecast, key=lambda r: r.period_from),
-            key=lambda r: r.period_from.date(),
+            key=lambda r: local_day.to_local_date(r.period_from),
         )
     }
     real_days = sorted(by_day.keys())
@@ -109,7 +106,7 @@ class CostForecastRetriever:
             as_of = datetime.now(UTC)
 
         billing_period = self._client.get_current_billing_period()
-        elapsed_start = _midnight_utc(billing_period.start)
+        elapsed_start = local_day.start_of_local_day(billing_period.start)
 
         # Assumes as_of falls within [billing_period.start, billing_period.
         # end] -- true whenever Kraken's "current" period genuinely contains
@@ -198,9 +195,9 @@ class CostForecastRetriever:
         present_days = {d.date for d in daily_costs}
         filled = list(daily_costs)
         day = billing_period_start
-        while _midnight_utc(day) < as_of:
+        while local_day.start_of_local_day(day) < as_of:
             if day not in present_days:
-                midday = _midnight_utc(day) + timedelta(hours=12)
+                midday = local_day.start_of_local_day(day) + timedelta(hours=12)
                 rate = self._client.read_current_product_rate(
                     agreement.product_code, self._client.region_code, midday
                 )
@@ -254,7 +251,9 @@ class CostForecastRetriever:
         # not-yet-metered remaining hours would otherwise be silently
         # dropped every single day, since Octopus consumption data lags and
         # "today" frequently has no rows yet by the time the job runs.
-        period_end_boundary = _midnight_utc(billing_period.end) + timedelta(days=1)
+        period_end_boundary = local_day.start_of_local_day(
+            billing_period.end + timedelta(days=1)
+        )
         remaining_seconds = (period_end_boundary - as_of).total_seconds()
         if remaining_seconds <= 0:
             return Decimal(0)
@@ -315,7 +314,9 @@ class CostForecastRetriever:
         # stop at its midnight boundary (which would exclude the entire
         # final day from the variable-cost sum while still charging its
         # standing fee via remaining_days).
-        end_datetime = _midnight_utc(billing_period_end) + timedelta(days=1)
+        end_datetime = local_day.start_of_local_day(
+            billing_period_end + timedelta(days=1)
+        )
         tiled = tile_forecast_beyond(forecast_readings, billing_period_end)
         remaining_readings = [
             r

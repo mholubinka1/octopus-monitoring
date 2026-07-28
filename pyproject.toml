@@ -13,6 +13,7 @@ dependencies = [
     "pymysql>=1.1.2",
     "schedule>=1.2.2",
     "pydantic>=2.13.4",
+    "tzdata>=2026.3",
 ]
 
 [tool.uv]

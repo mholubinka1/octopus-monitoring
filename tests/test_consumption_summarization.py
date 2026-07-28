@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from data.consumption_summary import ConsumptionSummaryRetriever
@@ -77,6 +77,33 @@ def test_refresh_summarizes_raw_consumption_into_daily_totals_per_energy(
 
     assert stored[("E", as_of.date())] == Decimal("4.00000")
     assert stored[("G", as_of.date())] == Decimal("0.75000")
+
+
+def test_a_utc_midnight_crossing_reading_is_summarized_under_its_local_calendar_day(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # 2026-07-20 23:30 UTC is 2026-07-21 00:30 in Europe/London during BST --
+    # must be summarized under the local day (21st), not the UTC day (20th),
+    # to stay consistent with ConsumptionSummaryBackfill's day attribution
+    # (which reads the still-local-offset Octopus response directly).
+    electricity = _make_electricity_meter()
+
+    mariadb_client.write_consumption(
+        electricity,
+        [_half_hour(datetime(2026, 7, 20, 23, 30, tzinfo=UTC), Decimal("2.0"))],
+    )
+
+    ConsumptionSummaryRetriever(mariadb_client).refresh()
+
+    with mariadb_client.session_read_scope() as session:
+        stored = {
+            (row.energy, row.date): row.total_kwh
+            for row in session.query(model.daily_consumption_summary).all()
+        }
+
+    assert ("E", date(2026, 7, 21)) in stored
+    assert ("E", date(2026, 7, 20)) not in stored
+    assert stored[("E", date(2026, 7, 21))] == Decimal("2.00000")
 
 
 def test_refresh_corrects_a_stale_summary_when_raw_consumption_is_revised(
@@ -158,3 +185,14 @@ def test_summarization_window_is_exactly_fourteen_trailing_days_inclusive_of_as_
 
     windowed_days = {(s.energy, s.date) for s in window}
     assert (Energy.electricity, fifteenth_day_back.date()) not in windowed_days
+
+
+def test_an_empty_consumption_table_produces_no_summaries(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # No raw consumption at all -- the candidate-days-restricted summary
+    # lookup must not query with an empty IN (...) list, and the window
+    # must come back empty rather than erroring.
+    window = mariadb_client.read_consumption_summarization_window(date(2026, 7, 20))
+
+    assert window == []
