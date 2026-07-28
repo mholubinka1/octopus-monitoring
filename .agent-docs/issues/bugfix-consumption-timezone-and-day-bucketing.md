@@ -75,9 +75,9 @@ Fix `ConsumptionClient.get_consumption_directly_from_endpoint` (`app/data/octopu
 
 ### Acceptance criteria
 
-- [ ] Raw consumption is grouped into the summarization window by Europe/London local calendar day, not UTC date
-- [ ] A case with consumption spanning a UTC-midnight boundary that is not a local-midnight boundary produces the same day attribution the one-time `ConsumptionSummaryBackfill` would produce for the same underlying readings
-- [ ] All existing tests in `tests/test_consumption_summarization.py` continue to pass (daily totals per energy, stale-summary correction, gap-day summarization, 14-day trailing window boundary)
+- [x] Raw consumption is grouped into the summarization window by Europe/London local calendar day, not UTC date
+- [x] A case with consumption spanning a UTC-midnight boundary that is not a local-midnight boundary produces the same day attribution the one-time `ConsumptionSummaryBackfill` would produce for the same underlying readings
+- [x] All existing tests in `tests/test_consumption_summarization.py` continue to pass (daily totals per energy, stale-summary correction, gap-day summarization, 14-day trailing window boundary)
 
 ---
 
@@ -93,10 +93,10 @@ In `grafana/mariadb/queries.md`, wrap every grouping/labeling expression that cu
 
 ### Acceptance criteria
 
-- [ ] Every panel that currently groups or labels by `period_from`'s raw date (Yesterday's Cost, p/kWh Efficiency, Daily Average Cost, Daily Average Usage, Day-of-Week Average, Standing Charge split, Gas Consumption, Gas Cost) uses `CONVERT_TZ(period_from, 'UTC', 'Europe/London')` for that grouping/labeling
-- [ ] The Hour×Day-of-Week heatmap's `HOUR(...)` grouping uses local time
-- [ ] Queries that don't group by day or hour (Price Curve, Half-hourly Consumption, Half-hourly Cost, Cheapest N-Hour Window, the Health row, the Yearly Comparison panels reading from `daily_consumption_summary`) are untouched
-- [ ] A standing note documents the local-time convention for future panels added to this file
-- [ ] After the app-side fix is deployed and the raw `consumption` table is wiped and repopulated, re-running the corrected Yesterday's Cost query against production matches Octopus's official value for a known day
+- [x] Every panel that currently groups or labels by `period_from`'s raw date (Yesterday's Cost, p/kWh Efficiency, Daily Average Cost, Daily Average Usage, Day-of-Week Average, Standing Charge split, Gas Consumption, Gas Cost) uses `CONVERT_TZ(period_from, 'UTC', 'Europe/London')` for that grouping/labeling
+- [x] The Hour×Day-of-Week heatmap's `HOUR(...)` grouping uses local time
+- [x] Queries that don't group by day or hour (Price Curve, Half-hourly Consumption, Half-hourly Cost, Cheapest N-Hour Window, the Health row, the Yearly Comparison panels reading from `daily_consumption_summary`) are untouched
+- [x] A standing note documents the local-time convention for future panels added to this file
+- [ ] After the app-side fix is deployed and the raw `consumption` table is wiped and repopulated, re-running the corrected Yesterday's Cost query against production matches Octopus's official value for a known day — pending your manual DB wipe + redeploy; mechanically verified live (bucketing genuinely shifts vs. the old UTC-date grouping) but full agreement requires the deploy step
 
 ---
