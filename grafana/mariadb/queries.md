@@ -421,39 +421,43 @@ ORDER BY time;
 
 Reads from `daily_consumption_summary`, not raw `consumption` — populated by `feature/yearly-consumption-comparison`'s weekly `update_consumption_summary` job (and a one-time startup backfill), and exempt from the raw-data retention window, so these panels stay correct after `chore/consumption-data-pruning` starts deleting `consumption` rows older than 45 days.
 
-### Monthly Total Consumption — Last 12 Months, Electricity (bar/time series)
+### Monthly Total Consumption — Last 12 Months, Electricity (time series, bar draw style)
 
-Anchored to the first of the month 11 months ago, not `CURDATE() - INTERVAL 12 MONTH` — that would yield a partial *oldest* month instead of 12 full calendar-month buckets.
+Anchored to the first of the month 11 months ago, not `CURDATE() - INTERVAL 12 MONTH` — that would yield a partial *oldest* month instead of 12 full calendar-month buckets. Returns a real date (`time`, first of the month) rather than a formatted string, so Grafana's native time axis handles tick labels/zoom — matching the convention every other time-series panel in this file uses.
 
 ```sql
 SELECT
-  DATE_FORMAT(date, '%b %Y') AS month,
+  DATE_FORMAT(date, '%Y-%m-01') AS time,
   SUM(total_kwh) AS monthly_kwh
 FROM daily_consumption_summary
 WHERE energy = 'E'
   AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
 GROUP BY DATE_FORMAT(date, '%Y-%m')
-ORDER BY MIN(date);
+ORDER BY time;
 
 ```
 
-### Monthly Total Consumption — Last 12 Months, Gas (bar/time series)
+### Monthly Total Consumption — Last 12 Months, Gas (time series, bar draw style)
+
+Same real-date `time` convention as the electricity panel above — see its description for the rationale.
 
 ```sql
 SELECT
-  DATE_FORMAT(date, '%b %Y') AS month,
+  DATE_FORMAT(date, '%Y-%m-01') AS time,
   SUM(total_kwh) AS monthly_kwh
 FROM daily_consumption_summary
 WHERE energy = 'G'
   AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
 GROUP BY DATE_FORMAT(date, '%Y-%m')
-ORDER BY MIN(date);
+ORDER BY time;
 
 ```
 
 ### Weekly Year-on-Year Change — Last 52/53 Weeks, Electricity (time series)
 
 Groups by `YEARWEEK(date, 3)` (ISO week numbering, mode 3) rather than `YEAR(date)` paired separately with `WEEK(date, 3)` — the latter can misattribute early-January/late-December boundary dates to the wrong week-year, exactly what ISO week numbering exists to avoid. Each week is compared against the same ISO week number one year prior (`yearweek - 100`, e.g. `202630 - 100 = 202530` — subtracting 100 shifts back exactly one week-year while preserving the week number). Both the raw % change and a 4-week trailing moving average of it are returned as separate columns for the same panel.
+
+The panel's displayed x-axis is a real date (`time`, the Monday that ISO week begins on), not the bare `yearweek` integer, so Grafana's time axis works — `yearweek` itself stays internal to the CTEs for the join/arithmetic. Converted via `STR_TO_DATE(CONCAT(yearweek, ' Monday'), '%x%v %W')` — note the **lowercase** `%x%v` (Monday-based ISO week-year), not uppercase `%X%V` (Sunday-based, mode 2): pairing `YEARWEEK(date, 3)` with uppercase specifiers silently round-trips to the wrong date. Confirmed via round-trip (`YEARWEEK(STR_TO_DATE(...), 3) = yearweek`) against production data, including a real week-53 year and a December/January boundary week.
 
 `weekly` only keeps weeks with all 7 days present (`HAVING COUNT(*) = 7`) — the current, still-in-progress ISO week never has 7 days yet, and the oldest weeks near the one-time 2-year backfill's boundary can also be short since that cutoff isn't week-aligned. Filtering incomplete weeks out of `weekly` before `target` and the comparator join both read from it means: an incomplete current week never becomes a target row (nothing sensible to plot for a week that isn't over), and an incomplete comparator week naturally produces a `NULL` `yoy_pct_change` via the `LEFT JOIN` (target week still shown, just no % for that point) instead of dividing against a partial total.
 
@@ -487,7 +491,7 @@ target AS (
   WHERE yearweek >= YEARWEEK(CURDATE() - INTERVAL 52 WEEK, 3)
 )
 SELECT
-  t.yearweek,
+  STR_TO_DATE(CONCAT(t.yearweek, ' Monday'), '%x%v %W') AS time,
   ROUND((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100, 2) AS yoy_pct_change,
   ROUND(
     AVG((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100)
@@ -502,7 +506,7 @@ ORDER BY t.yearweek;
 
 ### Weekly Year-on-Year Change — Last 52/53 Weeks, Gas (time series)
 
-Same completeness guard as the electricity panel above — see its description for the rationale.
+Same completeness guard, and same `time` (Monday-of-ISO-week, lowercase `%x%v`) conversion, as the electricity panel above — see its description for the rationale.
 
 ```sql
 WITH weekly AS (
@@ -528,7 +532,7 @@ target AS (
   WHERE yearweek >= YEARWEEK(CURDATE() - INTERVAL 52 WEEK, 3)
 )
 SELECT
-  t.yearweek,
+  STR_TO_DATE(CONCAT(t.yearweek, ' Monday'), '%x%v %W') AS time,
   ROUND((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100, 2) AS yoy_pct_change,
   ROUND(
     AVG((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100)
