@@ -12,11 +12,11 @@ A new small, pure module (`app/data/local_day.py`) providing the shared definiti
 
 ### Acceptance criteria
 
-- [ ] Converting a UTC instant to its local date returns the correct Europe/London calendar day, including for instants that cross the UTC-midnight boundary without crossing the local-midnight boundary (and vice versa)
-- [ ] The expected-slot-count function returns 48 for an ordinary day
-- [ ] The expected-slot-count function returns 46 for the UK spring-forward date and 50 for the UK fall-back date, correctly identifying those dates for any given year via `zoneinfo`, not a hardcoded table
-- [ ] The days immediately before and after each clock-change date still return 48
-- [ ] No changes to any other module — this is a standalone addition
+- [x] Converting a UTC instant to its local date returns the correct Europe/London calendar day, including for instants that cross the UTC-midnight boundary without crossing the local-midnight boundary (and vice versa)
+- [x] The expected-slot-count function returns 48 for an ordinary day
+- [x] The expected-slot-count function returns 46 for the UK spring-forward date and 50 for the UK fall-back date, correctly identifying those dates for any given year via `zoneinfo`, not a hardcoded table
+- [x] The days immediately before and after each clock-change date still return 48
+- [x] No changes to any other module — this is a standalone addition (also added `start_of_local_day` and the `tzdata` dependency, needed by later issues)
 
 ---
 
@@ -32,10 +32,10 @@ Fix `ConsumptionClient.get_consumption_directly_from_endpoint` (`app/data/octopu
 
 ### Acceptance criteria
 
-- [ ] A consumption reading with a `+01:00`-offset `interval_start`/`interval_end` (BST) is persisted with `period_from`/`period_to` shifted back by one hour to the correct UTC instant
-- [ ] A consumption reading with a `+00:00`-offset `interval_start`/`interval_end` (GMT) is persisted unchanged (this case must continue to pass — it's already correct today)
-- [ ] The derived consumption row `id` reflects the corrected UTC instant, not the raw offset-carrying value
-- [ ] No change to gas consumption's unit conversion (`to_estimated_kwh`) or any other field
+- [x] A consumption reading with a `+01:00`-offset `interval_start`/`interval_end` (BST) is persisted with `period_from`/`period_to` shifted back by one hour to the correct UTC instant
+- [x] A consumption reading with a `+00:00`-offset `interval_start`/`interval_end` (GMT) is persisted unchanged (this case must continue to pass — it's already correct today)
+- [x] The derived consumption row `id` reflects the corrected UTC instant, not the raw offset-carrying value
+- [x] No change to gas consumption's unit conversion (`to_estimated_kwh`) or any other field
 
 ---
 
@@ -49,14 +49,17 @@ Fix `ConsumptionClient.get_consumption_directly_from_endpoint` (`app/data/octopu
 
 `MariaDBClient.read_elapsed_billing_period_costs` currently groups the consumption/rate join by `func.date(period_from)` (UTC date) in SQL, and guards day-completeness with a hardcoded `COUNT(*) == 48`. Change it to fetch the joined half-hourly rows and group them into daily totals in Python using the shared local-day helper, applying the completeness guard against that day's expected slot count (48/46/50) instead of a fixed 48. The current, still-in-progress day (matching `period_to`'s local date) remains exempt from the guard, as today.
 
+**Scope expanded during implementation**: `cost_forecast.py`'s own day-boundary arithmetic (`_midnight_utc`, the gap-fill day loop, the remaining-days window, and the Agile forecast tiling's day-grouping) had the same UTC-day assumption baked in and was fixed in the same commit — left alone, the first day of every billing period would have been wrongly miscounted as incomplete under BST. See issue comment for detail.
+
 ### Acceptance criteria
 
-- [ ] A billing period's daily costs are grouped by Europe/London local calendar day, not UTC date
-- [ ] A case where consumption spans a UTC-midnight boundary that is not a local-midnight boundary (e.g. late-evening BST consumption sitting just before UTC midnight but on the same local day) is grouped into the correct single local day, not split across two
-- [ ] A strictly-past day on the UK spring-forward date with exactly 46 half-hourly rows is treated as complete (previously would have been wrongly excluded under a hardcoded 48 check)
-- [ ] A strictly-past day on the UK fall-back date with exactly 50 half-hourly rows is treated as complete
-- [ ] Days immediately either side of a clock-change date still require 48 rows to count as complete
-- [ ] All existing tests in `tests/test_elapsed_billing_period_costs.py` continue to pass (region scoping, mid-period rate changes, incomplete-day exclusion, current-day exemption)
+- [x] A billing period's daily costs are grouped by Europe/London local calendar day, not UTC date
+- [x] A case where consumption spans a UTC-midnight boundary that is not a local-midnight boundary (e.g. late-evening BST consumption sitting just before UTC midnight but on the same local day) is grouped into the correct single local day, not split across two
+- [x] A strictly-past day on the UK spring-forward date with exactly 46 half-hourly rows is treated as complete (previously would have been wrongly excluded under a hardcoded 48 check)
+- [x] A strictly-past day on the UK fall-back date with exactly 50 half-hourly rows is treated as complete
+- [x] Days immediately either side of a clock-change date still require 48 rows to count as complete
+- [x] All existing tests in `tests/test_elapsed_billing_period_costs.py` continue to pass (region scoping, mid-period rate changes, incomplete-day exclusion, current-day exemption)
+- [x] (Added) `cost_forecast.py`'s day-boundary arithmetic uses the same local-day helpers; all of `test_cost_forecast_retriever.py` and `test_cost_forecast_agreement_selection.py` continue to pass
 
 ---
 
