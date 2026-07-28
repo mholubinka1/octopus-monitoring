@@ -30,7 +30,8 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 **Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
 
-- Cost/rate columns (anything in pounds — `*_cost_gbp`, `*_cost`, `actual_cost_to_date`, `projected_total_cost`, `unit_rate`/`standing_charge` once divided by 100) → Grafana's currency (GBP, £) unit.
+- Cost columns already converted to pounds (`*_cost_gbp`, `*_cost`, `actual_cost_to_date`, `projected_total_cost`) → Grafana's currency (GBP, £) unit.
+- Rate columns still in pence/kWh (`rate_pence_per_kwh`, `rate`, `your_avg_rate`, `day_avg_rate`, `unit_rate`) → a custom unit of `p/kWh` — these are deliberately *not* divided by 100, unlike the cost columns above, so don't apply the GBP unit to them.
 - Energy columns (`*_kwh`, `est_kwh`, `total_kwh`) → a custom unit of `kWh`.
 - Percentage-change columns (`yoy_pct_change`, `yoy_pct_change_4wk_avg`) → Grafana's percent unit.
 
@@ -109,7 +110,7 @@ LIMIT 1;
 
 `product_rate` has no `period_from` column — for the half-hourly Agile product each row's own `valid_from` *is* the half-hour slot, so that's what stands in for the series' time value here (confirmed against the live schema; `DESCRIBE product_rate` has no `period_from`/`period_to`).
 
-Finds the current agreement via `valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())`, not `valid_to IS NULL` — Agile agreements are pre-populated with a fixed one-year end date rather than left open-ended, so a `valid_to IS NULL` filter finds no "current" electricity agreement at all once one exists. Confirmed live: production's active electricity agreement (`AGILE-24-10-01`, valid `2026-05-24`–`2027-05-24`) has a set `valid_to`, so the old filter silently returned an empty panel.
+Finds the current agreement via the same half-open test as the **Join convention** above (`NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')`), not `valid_to IS NULL` — Agile agreements are pre-populated with a fixed one-year end date rather than left open-ended, so a `valid_to IS NULL` filter finds no "current" electricity agreement at all once one exists. Confirmed live: production's active electricity agreement (`AGILE-24-10-01`, valid `2026-05-24`–`2027-05-24`) has a set `valid_to`, so the old filter silently returned an empty panel.
 
 Render the `forecast` series with a dashed line (and/or a muted colour) distinct from `actual`'s solid line, so a predicted price is never mistaken for a confirmed one.
 
@@ -120,7 +121,7 @@ WHERE product_code = (
   SELECT product_code FROM agreement
   WHERE energy = 'E'
     AND valid_from <= NOW()
-    AND (valid_to IS NULL OR valid_to > NOW())
+    AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')
   ORDER BY valid_from DESC LIMIT 1
 )
 AND region = '${region}'
@@ -214,7 +215,7 @@ Assumes no gaps in half-hourly `product_rate` rows within the queried range — 
 
 One row per window size (`window_size | start | rate`) rather than one row with 12 paired columns — a single-row table forces horizontal scrolling and pairing columns by eye; this reads top-to-bottom instead. Built as a `UNION ALL` of six single-row `SELECT`s, matching the style the Price Curve panel above already uses. No overall `ORDER BY` on the union: each parenthesized branch contributes exactly one row, and `UNION ALL` preserves branch order, so the six rows come out shortest-to-longest window without needing an extra sort column.
 
-`product_rate` has no `period_from` column, and the current agreement is found via `valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())` — see the Price Curve panel's notes above for both.
+`product_rate` has no `period_from` column, and the current agreement is found via the same half-open test as the **Join convention** — see the Price Curve panel's notes above for both.
 
 ```sql
 WITH rates AS (
@@ -224,7 +225,7 @@ WITH rates AS (
     SELECT product_code FROM agreement
     WHERE energy = 'E'
       AND valid_from <= NOW()
-      AND (valid_to IS NULL OR valid_to > NOW())
+      AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')
     ORDER BY valid_from DESC LIMIT 1
   )
   AND region = '${region}'
@@ -435,13 +436,13 @@ ORDER BY time;
 
 Reads from `daily_consumption_summary`, not raw `consumption` — populated by `feature/yearly-consumption-comparison`'s weekly `update_consumption_summary` job (and a one-time startup backfill), and exempt from the raw-data retention window, so these panels stay correct after `chore/consumption-data-pruning` starts deleting `consumption` rows older than 45 days.
 
-### Monthly Total Consumption — Last 12 Months, Electricity (time series, bar draw style)
+### Monthly Total Consumption — Last 12 Months, Electricity (time series)
 
-Anchored to the first of the month 11 months ago, not `CURDATE() - INTERVAL 12 MONTH` — that would yield a partial *oldest* month instead of 12 full calendar-month buckets. Returns a real date (`time`, first of the month) rather than a formatted string, so Grafana's native time axis handles tick labels/zoom — matching the convention every other time-series panel in this file uses.
+Anchored to the first of the month 11 months ago, not `CURDATE() - INTERVAL 12 MONTH` — that would yield a partial *oldest* month instead of 12 full calendar-month buckets. Returns a real `DATE`-typed `time` column rather than a formatted string, so Grafana's native time axis handles tick labels/zoom — matching the convention every other time-series panel in this file uses. Built via `DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`, not `DATE_FORMAT(date, '%Y-%m-01')` — `DATE_FORMAT()` always returns a string in MariaDB regardless of the format mask used, even one that looks like a date, so it wouldn't actually fix the original "not a real time axis" defect; date arithmetic on the `DATE`-typed `date` column preserves its type.
 
 ```sql
 SELECT
-  DATE_FORMAT(date, '%Y-%m-01') AS time,
+  DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY) AS time,
   SUM(total_kwh) AS monthly_kwh
 FROM daily_consumption_summary
 WHERE energy = 'E'
@@ -451,13 +452,13 @@ ORDER BY time;
 
 ```
 
-### Monthly Total Consumption — Last 12 Months, Gas (time series, bar draw style)
+### Monthly Total Consumption — Last 12 Months, Gas (time series)
 
 Same real-date `time` convention as the electricity panel above — see its description for the rationale.
 
 ```sql
 SELECT
-  DATE_FORMAT(date, '%Y-%m-01') AS time,
+  DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY) AS time,
   SUM(total_kwh) AS monthly_kwh
 FROM daily_consumption_summary
 WHERE energy = 'G'
