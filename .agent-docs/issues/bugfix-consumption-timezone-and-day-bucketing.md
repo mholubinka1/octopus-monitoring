@@ -1,5 +1,7 @@
 # Issues: bugfix-consumption-timezone-and-day-bucketing
 
+> Work complete — PR ready to merge. One item remains unchecked by design: it's a manual post-merge step (DB wipe + redeploy) for you to perform, not part of this PR's implementation.
+
 ## Shared local-day/DST helper module (#440)
 
 **Blocked by**: None
