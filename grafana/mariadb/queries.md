@@ -24,7 +24,9 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 `agile_forecast` caches the raw half-hourly AgilePredict response (real 14-day forecast only) for charting. `cost_forecast` is the billing-period-level summary the app computes once daily (actual cost so far + full-period projection, using tiled forecast data internally beyond day 14 — that tiling isn't persisted point-by-point, only the summary is).
 
-**Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: before the fix, the Yesterday's Cost panel showed £6.01 — roughly double the £3.19 the corrected query returns for the same day (the official Octopus app showed £3.25 for that day; that residual gap is a separate, unreconciled data-accuracy question, not evidence against the join fix itself — see the acceptance-criteria note in issue #434).
+**Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: before the fix, the Yesterday's Cost panel showed £6.01 — roughly double the £3.19 the corrected query returns for the same day (the official Octopus app showed £3.25 for that day; that residual gap turned out to be a second, distinct bug — see the local-time convention below and issue #434 for the join-doubling investigation).
+
+**Local-time convention — group and label by Europe/London, not raw UTC.** `period_from` is stored as true UTC. Any query that groups or labels by calendar day (`DATE(...)`) or hour-of-day (`HOUR(...)`, `DAYNAME(...)`) must first convert to local time: `CONVERT_TZ(period_from, 'UTC', 'Europe/London')`. During BST this shifts the effective day/hour boundary back by an hour from raw UTC — the difference between a UTC calendar day and the local calendar day Octopus's own app (and a UK user) means by "26 July." Confirmed live: this was the second half of the £3.19-vs-£3.25 residual gap above — the corrected join still bucketed by UTC date, one hour off from the local day boundary. `CONVERT_TZ` requires MariaDB's named-timezone tables to be loaded (confirmed present on the production instance); queries that don't group or label by day/hour (e.g. `Half-hourly Cost`, the `Price Curve`) don't need it, since every timestamp comparison in this file is otherwise a plain UTC-to-UTC instant comparison.
 
 ---
 
@@ -39,7 +41,7 @@ Not actually always "yesterday" — Octopus's settlement lag means yesterday can
 ```sql
 WITH daily_costs AS (
   SELECT
-    DATE(c.period_from) AS date,
+    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS date,
     ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
   FROM consumption c
   JOIN agreement a
@@ -54,7 +56,7 @@ WITH daily_costs AS (
   WHERE c.energy = 'E'
     AND c.period_from >= CURDATE() - INTERVAL 7 DAY
     AND c.period_from < CURDATE()
-  GROUP BY DATE(c.period_from)
+  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
   HAVING COUNT(*) = 48
 )
 SELECT date, cost_gbp AS yesterday_cost_gbp
@@ -160,7 +162,7 @@ ORDER BY c.period_from;
 
 ```sql
 SELECT
-  DATE(c.period_from) AS day,
+  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS day,
   ROUND(SUM(c.est_kwh * pr.unit_rate) / NULLIF(SUM(c.est_kwh), 0), 4) AS your_avg_rate,
   ROUND(AVG(pr.unit_rate), 4) AS day_avg_rate
 FROM consumption c
@@ -175,7 +177,7 @@ JOIN product_rate pr
  AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
   AND c.period_from >= NOW() - INTERVAL 90 DAY
-GROUP BY DATE(c.period_from)
+GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: Octopus's settlement lag means a day can still be
 -- missing rows more than 24 hours after it ends -- exclude it rather than
 -- show a misleadingly low/high rate computed from a partial day.
@@ -235,11 +237,11 @@ SELECT
   DAYNAME(d) AS day_of_week,
   ROUND(AVG(daily_kwh), 3) AS avg_kwh
 FROM (
-  SELECT DATE(period_from) AS d, SUM(est_kwh) AS daily_kwh
+  SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh
   FROM consumption
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 84 DAY
-  GROUP BY DATE(period_from)
+  GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = 48
 ) daily
@@ -255,11 +257,11 @@ SELECT
   d AS time,
   ROUND(AVG(daily_kwh) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 3) AS rolling_avg_kwh
 FROM (
-  SELECT DATE(period_from) AS d, SUM(est_kwh) AS daily_kwh
+  SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh
   FROM consumption
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 84 DAY
-  GROUP BY DATE(period_from)
+  GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = 48
 ) daily
@@ -275,7 +277,7 @@ SELECT
   ROUND(AVG(daily_cost) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS rolling_avg_cost_gbp
 FROM (
   SELECT
-    DATE(c.period_from) AS d,
+    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS d,
     (SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100 AS daily_cost
   FROM consumption c
   JOIN agreement a
@@ -289,7 +291,7 @@ FROM (
    AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 84 DAY
-  GROUP BY DATE(c.period_from)
+  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = 48
 ) daily
@@ -301,14 +303,14 @@ ORDER BY d;
 
 ```sql
 SELECT
-  DAYNAME(period_from) AS day_of_week,
-  HOUR(period_from) AS hour_of_day,
+  DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS day_of_week,
+  HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS hour_of_day,
   ROUND(AVG(est_kwh), 4) AS avg_kwh
 FROM consumption
 WHERE energy = 'E'
   AND period_from >= NOW() - INTERVAL 90 DAY
-GROUP BY DAYNAME(period_from), HOUR(period_from)
-ORDER BY FIELD(DAYNAME(period_from), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), hour_of_day;
+GROUP BY DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')), HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
+ORDER BY FIELD(DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), hour_of_day;
 
 ```
 
@@ -316,7 +318,7 @@ ORDER BY FIELD(DAYNAME(period_from), 'Monday','Tuesday','Wednesday','Thursday','
 
 ```sql
 SELECT
-  DATE(c.period_from) AS time,
+  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
   ROUND(SUM(c.est_kwh * pr.unit_rate) / 100, 2) AS unit_rate_cost_gbp,
   ROUND(MAX(pr.standing_charge) / 100, 2) AS standing_charge_cost_gbp
 FROM consumption c
@@ -331,7 +333,7 @@ JOIN product_rate pr
  AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
-GROUP BY DATE(c.period_from)
+GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
 HAVING COUNT(*) = 48
 ORDER BY time;
@@ -346,12 +348,12 @@ ORDER BY time;
 
 ```sql
 SELECT
-  DATE(period_from) AS time,
+  DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS time,
   ROUND(SUM(est_kwh), 3) AS gas_kwh
 FROM consumption
 WHERE energy = 'G'
   AND $__timeFilter(period_from)
-GROUP BY DATE(period_from)
+GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
 HAVING COUNT(*) = 48
 ORDER BY time;
@@ -362,7 +364,7 @@ ORDER BY time;
 
 ```sql
 SELECT
-  DATE(c.period_from) AS time,
+  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
   ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS gas_cost_gbp
 FROM consumption c
 JOIN agreement a
@@ -376,7 +378,7 @@ JOIN product_rate pr
  AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
 WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
-GROUP BY DATE(c.period_from)
+GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
 HAVING COUNT(*) = 48
 ORDER BY time;
