@@ -91,7 +91,7 @@ LIMIT 1;
 
 ```
 
-### Current Billing Period (stat/table)
+### Current Billing Period (table)
 
 Context for the two panels above — shows the dates they're computed against.
 
@@ -572,7 +572,7 @@ ORDER BY job_name;
 
 ```
 
-### AgilePredict/Kraken Reachability (stat)
+### AgilePredict/Kraken Reachability (table)
 
 ```sql
 SELECT
