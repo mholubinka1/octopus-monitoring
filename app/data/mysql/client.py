@@ -385,24 +385,35 @@ class MariaDBClient:
                 model.consumption.period_from,
                 model.consumption.est_kwh,
             ).all()
-            existing_summary_days = {
-                (row.energy, row.date)
-                for row in session.query(
-                    model.daily_consumption_summary.energy,
-                    model.daily_consumption_summary.date,
-                ).all()
-            }
 
-        # Grouped in Python by Europe/London local calendar day, not the raw
-        # UTC date -- keeps this job's day boundaries consistent with
-        # ConsumptionSummaryBackfill, which already buckets by local day
-        # (it reads the still-locally-offset Octopus response directly,
-        # before any DB round-trip).
-        daily_totals: dict[tuple[str, date], Decimal] = {}
-        for row in raw_rows:
-            day = local_day.to_local_date(row.period_from)
-            key = (row.energy, day)
-            daily_totals[key] = daily_totals.get(key, Decimal(0)) + row.est_kwh
+            # Grouped in Python by Europe/London local calendar day, not the
+            # raw UTC date -- keeps this job's day boundaries consistent
+            # with ConsumptionSummaryBackfill, which already buckets by
+            # local day (it reads the still-locally-offset Octopus response
+            # directly, before any DB round-trip).
+            daily_totals: dict[tuple[str, date], Decimal] = {}
+            for row in raw_rows:
+                day = local_day.to_local_date(row.period_from)
+                key = (row.energy, day)
+                daily_totals[key] = daily_totals.get(key, Decimal(0)) + row.est_kwh
+
+            # `daily_consumption_summary` is exempt from raw-data pruning
+            # (kept for long-running yearly comparisons), so it grows
+            # unbounded over years -- restricted to just the dates present
+            # in daily_totals (bounded by raw retention) rather than
+            # fetching the whole table.
+            candidate_days = {day for _, day in daily_totals}
+            existing_summary_days: set[tuple[str, date]] = set()
+            if candidate_days:
+                existing_summary_days = {
+                    (row.energy, row.date)
+                    for row in session.query(
+                        model.daily_consumption_summary.energy,
+                        model.daily_consumption_summary.date,
+                    )
+                    .filter(model.daily_consumption_summary.date.in_(candidate_days))
+                    .all()
+                }
 
         return [
             ConsumptionSummary(

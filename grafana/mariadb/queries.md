@@ -57,7 +57,12 @@ WITH daily_costs AS (
     AND c.period_from >= CURDATE() - INTERVAL 7 DAY
     AND c.period_from < CURDATE()
   GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
-  HAVING COUNT(*) = 48
+  -- Completeness guard: see p/kWh Efficiency panel below for the rationale
+  -- and why this isn't a fixed 48.
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(date AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(date + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
 )
 SELECT date, cost_gbp AS yesterday_cost_gbp
 FROM daily_costs
@@ -180,8 +185,15 @@ WHERE c.energy = 'E'
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: Octopus's settlement lag means a day can still be
 -- missing rows more than 24 hours after it ends -- exclude it rather than
--- show a misleadingly low/high rate computed from a partial day.
-HAVING COUNT(*) = 48
+-- show a misleadingly low/high rate computed from a partial day. The
+-- expected count is 48 on an ordinary day, but only 46/50 on the UK
+-- spring-forward/fall-back dates (a 23- or 25-hour local day) -- computed
+-- here rather than hardcoded, since `day` is already the local calendar
+-- date after the CONVERT_TZ above.
+HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+  CONVERT_TZ(CAST(day AS DATETIME), 'Europe/London', 'UTC'),
+  CONVERT_TZ(CAST(day + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+) / 30
 ORDER BY day;
 
 ```
@@ -243,7 +255,10 @@ FROM (
     AND period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-  HAVING COUNT(*) = 48
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
 ) daily
 GROUP BY DAYNAME(d)
 ORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday');
@@ -263,7 +278,10 @@ FROM (
     AND period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-  HAVING COUNT(*) = 48
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
 ) daily
 ORDER BY d;
 
@@ -293,7 +311,10 @@ FROM (
     AND c.period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-  HAVING COUNT(*) = 48
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
 ) daily
 ORDER BY d;
 
@@ -335,7 +356,10 @@ WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-HAVING COUNT(*) = 48
+HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+) / 30
 ORDER BY time;
 
 ```
@@ -355,7 +379,10 @@ WHERE energy = 'G'
   AND $__timeFilter(period_from)
 GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-HAVING COUNT(*) = 48
+HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+) / 30
 ORDER BY time;
 
 ```
@@ -380,7 +407,10 @@ WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-HAVING COUNT(*) = 48
+HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+) / 30
 ORDER BY time;
 
 ```

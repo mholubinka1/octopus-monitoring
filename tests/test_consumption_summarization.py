@@ -185,3 +185,14 @@ def test_summarization_window_is_exactly_fourteen_trailing_days_inclusive_of_as_
 
     windowed_days = {(s.energy, s.date) for s in window}
     assert (Energy.electricity, fifteenth_day_back.date()) not in windowed_days
+
+
+def test_an_empty_consumption_table_produces_no_summaries(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # No raw consumption at all -- the candidate-days-restricted summary
+    # lookup must not query with an empty IN (...) list, and the window
+    # must come back empty rather than erroring.
+    window = mariadb_client.read_consumption_summarization_window(date(2026, 7, 20))
+
+    assert window == []
