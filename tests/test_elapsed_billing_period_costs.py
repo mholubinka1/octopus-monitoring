@@ -354,3 +354,29 @@ def test_a_mid_day_standing_charge_change_uses_the_higher_of_the_two(
     by_date = {r.date: r for r in results}
     # (4.8 kWh @ 20.00p) + 55.00p (the higher standing charge) = 151.00p
     assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.51")
+
+
+def test_a_mid_day_standing_charge_change_uses_the_higher_regardless_of_row_order(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Complements the test above with the seeding order reversed (higher
+    # charge on the *afternoon* rate, inserted second) -- the result must
+    # be the same higher charge either way, proving the selection is
+    # order-independent rather than incidentally correct for one
+    # particular row-return order.
+    local_noon = datetime(2026, 7, 6, 12, 0, tzinfo=LONDON).astimezone(UTC)
+    with mariadb_client.session_write_scope() as s:
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
+        _seed_rate(s, datetime(2026, 1, 1, tzinfo=UTC), local_noon, "20.00", "40.00")
+        _seed_rate(s, local_noon, None, "20.00", "55.00")
+        _seed_complete_day(s, date(2026, 7, 6), "0.1")
+
+    results = mariadb_client.read_elapsed_billing_period_costs(
+        _local_midnight(date(2026, 7, 6)),
+        _local_midnight(date(2026, 7, 7)),
+        REGION,
+    )
+
+    by_date = {r.date: r for r in results}
+    # (4.8 kWh @ 20.00p) + 55.00p (the higher standing charge) = 151.00p
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.51")

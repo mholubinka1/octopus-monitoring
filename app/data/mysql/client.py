@@ -1,7 +1,7 @@
 import logging.config
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from logging import Logger, getLogger
@@ -37,9 +37,9 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 
 @dataclass
 class _DailyAccumulator:
-    total_kwh: Decimal = field(default_factory=lambda: Decimal(0))
-    variable_cost: Decimal = field(default_factory=lambda: Decimal(0))
-    standing_charge: Decimal = field(default_factory=lambda: Decimal(0))
+    total_kwh: Decimal = Decimal(0)
+    variable_cost: Decimal = Decimal(0)
+    standing_charge: Decimal = Decimal(0)
     row_count: int = 0
 
 
