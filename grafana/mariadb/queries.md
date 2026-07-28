@@ -28,6 +28,12 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 **Local-time convention — group and label by Europe/London, not raw UTC.** `period_from` is stored as true UTC. Any query that groups or labels by calendar day (`DATE(...)`) or hour-of-day (`HOUR(...)`, `DAYNAME(...)`) must first convert to local time: `CONVERT_TZ(period_from, 'UTC', 'Europe/London')`. During BST this shifts the effective day/hour boundary back by an hour from raw UTC — the difference between a UTC calendar day and the local calendar day Octopus's own app (and a UK user) means by "26 July." Confirmed live: this was the second half of the £3.19-vs-£3.25 residual gap above — the corrected join still bucketed by UTC date, one hour off from the local day boundary. `CONVERT_TZ` requires MariaDB's named-timezone tables to be loaded (confirmed present on the production instance); queries that don't group or label by day/hour (e.g. `Half-hourly Cost`, the `Price Curve`) don't need it, since every timestamp comparison in this file is otherwise a plain UTC-to-UTC instant comparison.
 
+**Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
+
+- Cost/rate columns (anything in pounds — `*_cost_gbp`, `*_cost`, `actual_cost_to_date`, `projected_total_cost`, `unit_rate`/`standing_charge` once divided by 100) → Grafana's currency (GBP, £) unit.
+- Energy columns (`*_kwh`, `est_kwh`, `total_kwh`) → a custom unit of `kWh`.
+- Percentage-change columns (`yoy_pct_change`, `yoy_pct_change_4wk_avg`) → Grafana's percent unit.
+
 ---
 
 ## Row 1 — Cost Summary
@@ -113,6 +119,8 @@ LIMIT 1;
 
 Finds the current agreement via `valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())`, not `valid_to IS NULL` — Agile agreements are pre-populated with a fixed one-year end date rather than left open-ended, so a `valid_to IS NULL` filter finds no "current" electricity agreement at all once one exists. Confirmed live: production's active electricity agreement (`AGILE-24-10-01`, valid `2026-05-24`–`2027-05-24`) has a set `valid_to`, so the old filter silently returned an empty panel.
 
+Render the `forecast` series with a dashed line (and/or a muted colour) distinct from `actual`'s solid line, so a predicted price is never mistaken for a confirmed one.
+
 ```sql
 SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
 FROM product_rate
@@ -136,7 +144,9 @@ ORDER BY time;
 
 ```
 
-### Half-hourly Consumption (time series)
+### Half-hourly Consumption (time series, bar draw style)
+
+Each row is a discrete 30-minute reading, not a continuous signal — use the time series panel's bar draw style rather than the default line, so consecutive intervals aren't visually interpolated into a slope that doesn't exist.
 
 ```sql
 SELECT period_from AS time, est_kwh
@@ -147,7 +157,9 @@ ORDER BY period_from;
 
 ```
 
-### Half-hourly Cost (time series)
+### Half-hourly Cost (time series, bar draw style)
+
+Same reasoning as Half-hourly Consumption above — discrete per-interval values, bar draw style rather than line.
 
 ```sql
 SELECT
@@ -173,7 +185,7 @@ ORDER BY c.period_from;
 
 ```sql
 SELECT
-  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS day,
+  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
   ROUND(SUM(c.est_kwh * pr.unit_rate) / NULLIF(SUM(c.est_kwh), 0), 4) AS your_avg_rate,
   ROUND(AVG(pr.unit_rate), 4) AS day_avg_rate
 FROM consumption c
@@ -194,13 +206,13 @@ GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- show a misleadingly low/high rate computed from a partial day. The
 -- expected count is 48 on an ordinary day, but only 46/50 on the UK
 -- spring-forward/fall-back dates (a 23- or 25-hour local day) -- computed
--- here rather than hardcoded, since `day` is already the local calendar
+-- here rather than hardcoded, since `time` is already the local calendar
 -- date after the CONVERT_TZ above.
 HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-  CONVERT_TZ(CAST(day AS DATETIME), 'Europe/London', 'UTC'),
-  CONVERT_TZ(CAST(day + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
 ) / 30
-ORDER BY day;
+ORDER BY time;
 
 ```
 
