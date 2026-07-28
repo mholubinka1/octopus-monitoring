@@ -25,6 +25,8 @@ In `grafana/mariadb/queries.md`, fix the four panels currently labeled "time ser
 
 **User stories**: 3
 
+**Bonus fixes found via verification** (not in the original spec, approved mid-implementation): `product_rate` has no `period_from` column (only `valid_from`/`valid_to`) — this query and the Price Curve panel above it both referenced it and would have errored in Grafana. Also, both panels' "current agreement" lookup used `valid_to IS NULL`, which returns zero rows for electricity today since this account's E agreements always carry a fixed end date (only gas happens to be open-ended) — replaced with the half-open "active right now" test (`valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())`) already used elsewhere in the file. Both fixes applied to Price Curve and Cheapest N-Hour Window together, verified against production.
+
 ### What to build
 
 Rewrite the "Cheapest N-Hour Window Today/Tomorrow" query in `grafana/mariadb/queries.md` from a single wide `SELECT` returning 12 paired columns (6 window sizes × start + rate) into a `UNION ALL` of six `SELECT`s — one per window size (30min, 1h, 2h, 3h, 4h, 6h) — each returning `window_size | start | rate`, ordered by window size ascending. Matches the `UNION ALL` style the Price Curve panel already uses in this file. Table panel type unchanged.

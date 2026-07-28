@@ -109,16 +109,22 @@ LIMIT 1;
 
 ### Price Curve — Today/Tomorrow Actual + Forecast (time series)
 
+`product_rate` has no `period_from` column — for the half-hourly Agile product each row's own `valid_from` *is* the half-hour slot, so that's what stands in for the series' time value here (confirmed against the live schema; `DESCRIBE product_rate` has no `period_from`/`period_to`).
+
+Finds the current agreement via `valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())`, not `valid_to IS NULL` — Agile agreements are pre-populated with a fixed one-year end date rather than left open-ended, so a `valid_to IS NULL` filter finds no "current" electricity agreement at all once one exists. Confirmed live: production's active electricity agreement (`AGILE-24-10-01`, valid `2026-05-24`–`2027-05-24`) has a set `valid_to`, so the old filter silently returned an empty panel.
+
 ```sql
-SELECT period_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
+SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
 FROM product_rate
 WHERE product_code = (
   SELECT product_code FROM agreement
-  WHERE energy = 'E' AND valid_to IS NULL
+  WHERE energy = 'E'
+    AND valid_from <= NOW()
+    AND (valid_to IS NULL OR valid_to > NOW())
   ORDER BY valid_from DESC LIMIT 1
 )
 AND region = '${region}'
-AND period_from >= CURDATE()
+AND valid_from >= CURDATE()
 
 UNION ALL
 
@@ -202,43 +208,47 @@ ORDER BY day;
 
 Assumes no gaps in half-hourly `product_rate` rows within the queried range — a missing slot shifts the rolling window incorrectly.
 
+One row per window size (`window_size | start | rate`) rather than one row with 12 paired columns — a single-row table forces horizontal scrolling and pairing columns by eye; this reads top-to-bottom instead. Built as a `UNION ALL` of six single-row `SELECT`s, matching the style the Price Curve panel above already uses. No overall `ORDER BY` on the union: each parenthesized branch contributes exactly one row, and `UNION ALL` preserves branch order, so the six rows come out shortest-to-longest window without needing an extra sort column.
+
+`product_rate` has no `period_from` column, and the current agreement is found via `valid_from <= NOW() AND (valid_to IS NULL OR valid_to > NOW())` — see the Price Curve panel's notes above for both.
+
 ```sql
 WITH rates AS (
-  SELECT period_from, unit_rate
+  SELECT valid_from, unit_rate
   FROM product_rate
   WHERE product_code = (
     SELECT product_code FROM agreement
-    WHERE energy = 'E' AND valid_to IS NULL
+    WHERE energy = 'E'
+      AND valid_from <= NOW()
+      AND (valid_to IS NULL OR valid_to > NOW())
     ORDER BY valid_from DESC LIMIT 1
   )
   AND region = '${region}'
-  AND period_from >= CURDATE()
-  AND period_from < CURDATE() + INTERVAL 2 DAY
+  AND valid_from >= CURDATE()
+  AND valid_from < CURDATE() + INTERVAL 2 DAY
 ),
 windows AS (
   SELECT
-    period_from AS window_start,
-    AVG(unit_rate) OVER (ORDER BY period_from ROWS BETWEEN CURRENT ROW AND 0  FOLLOWING) AS avg_30min,
-    AVG(unit_rate) OVER (ORDER BY period_from ROWS BETWEEN CURRENT ROW AND 1  FOLLOWING) AS avg_1h,
-    AVG(unit_rate) OVER (ORDER BY period_from ROWS BETWEEN CURRENT ROW AND 3  FOLLOWING) AS avg_2h,
-    AVG(unit_rate) OVER (ORDER BY period_from ROWS BETWEEN CURRENT ROW AND 5  FOLLOWING) AS avg_3h,
-    AVG(unit_rate) OVER (ORDER BY period_from ROWS BETWEEN CURRENT ROW AND 7  FOLLOWING) AS avg_4h,
-    AVG(unit_rate) OVER (ORDER BY period_from ROWS BETWEEN CURRENT ROW AND 11 FOLLOWING) AS avg_6h
+    valid_from AS window_start,
+    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 0  FOLLOWING) AS avg_30min,
+    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 1  FOLLOWING) AS avg_1h,
+    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 3  FOLLOWING) AS avg_2h,
+    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 5  FOLLOWING) AS avg_3h,
+    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 7  FOLLOWING) AS avg_4h,
+    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 11 FOLLOWING) AS avg_6h
   FROM rates
 )
-SELECT
-  (SELECT window_start FROM windows ORDER BY avg_30min ASC LIMIT 1) AS cheapest_30min_start,
-  (SELECT MIN(avg_30min) FROM windows)                              AS cheapest_30min_rate,
-  (SELECT window_start FROM windows ORDER BY avg_1h ASC LIMIT 1)    AS cheapest_1h_start,
-  (SELECT MIN(avg_1h) FROM windows)                                 AS cheapest_1h_rate,
-  (SELECT window_start FROM windows ORDER BY avg_2h ASC LIMIT 1)    AS cheapest_2h_start,
-  (SELECT MIN(avg_2h) FROM windows)                                 AS cheapest_2h_rate,
-  (SELECT window_start FROM windows ORDER BY avg_3h ASC LIMIT 1)    AS cheapest_3h_start,
-  (SELECT MIN(avg_3h) FROM windows)                                 AS cheapest_3h_rate,
-  (SELECT window_start FROM windows ORDER BY avg_4h ASC LIMIT 1)    AS cheapest_4h_start,
-  (SELECT MIN(avg_4h) FROM windows)                                 AS cheapest_4h_rate,
-  (SELECT window_start FROM windows ORDER BY avg_6h ASC LIMIT 1)    AS cheapest_6h_start,
-  (SELECT MIN(avg_6h) FROM windows)                                 AS cheapest_6h_rate;
+(SELECT '30 min'  AS window_size, window_start AS start, avg_30min AS rate FROM windows ORDER BY avg_30min ASC LIMIT 1)
+UNION ALL
+(SELECT '1 hour'  AS window_size, window_start AS start, avg_1h   AS rate FROM windows ORDER BY avg_1h   ASC LIMIT 1)
+UNION ALL
+(SELECT '2 hours' AS window_size, window_start AS start, avg_2h   AS rate FROM windows ORDER BY avg_2h   ASC LIMIT 1)
+UNION ALL
+(SELECT '3 hours' AS window_size, window_start AS start, avg_3h   AS rate FROM windows ORDER BY avg_3h   ASC LIMIT 1)
+UNION ALL
+(SELECT '4 hours' AS window_size, window_start AS start, avg_4h   AS rate FROM windows ORDER BY avg_4h   ASC LIMIT 1)
+UNION ALL
+(SELECT '6 hours' AS window_size, window_start AS start, avg_6h   AS rate FROM windows ORDER BY avg_6h   ASC LIMIT 1);
 
 ```
 
