@@ -135,3 +135,7 @@ _Avoid_: annual comparison, YoY chart
 **Cheap Window**:
 The cheapest contiguous block of a given duration (30min/1h/2h/3h/4h/6h) within today's or tomorrow's Agile half-hourly rates, computed live at query time rather than stored.
 _Avoid_: best time to use power, price dip
+
+**Day Completeness**:
+A calendar day has 48 half-hourly `consumption` rows once Octopus's settlement lag has fully caught up — confirmed to take more than 24 hours in practice (a day can sit at 2/48 or 0/48 rows a full day after it ends). Any query grouping by calendar day must guard on `COUNT(*) = 48` for strictly past days before treating that day's total as final, to avoid presenting a lag-truncated day as a genuinely low-cost/low-usage one. The current, still-in-progress day is exempt from this guard — it's expected to be partial. See [ADR-0009](adr/0009-day-completeness-guard-standing-charge-fallback.md).
+_Avoid_: data lag, settlement delay (when referring to the guard itself, not the underlying cause)

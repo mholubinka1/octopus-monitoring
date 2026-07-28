@@ -30,26 +30,37 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 ## Row 1 — Cost Summary
 
-### Yesterday's Cost (stat)
+### Yesterday's Cost (stat, two fields: date + cost)
 
 No dependency on billing period — pure join against data already fully populated by the existing pipeline. `unit_rate`/`standing_charge` are stored in pence/kWh and pence/day respectively (Octopus's own convention, never converted on ingest) — divide by 100 to get GBP.
 
+Not actually always "yesterday" — Octopus's settlement lag means yesterday can still be incomplete, so this searches back up to 7 days for the most recent complete (48-row) day and returns its date alongside its cost, rather than silently mislabeling an older day as "yesterday." If no day within the last 7 days is complete, the panel returns no data.
+
 ```sql
-SELECT
-  ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS yesterday_cost_gbp
-FROM consumption c
-JOIN agreement a
-  ON a.energy = c.energy
- AND c.period_from >= a.valid_from
- AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
-WHERE c.energy = 'E'
-  AND c.period_from >= CURDATE() - INTERVAL 1 DAY
-  AND c.period_from < CURDATE();
+WITH daily_costs AS (
+  SELECT
+    DATE(c.period_from) AS date,
+    ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
+  FROM consumption c
+  JOIN agreement a
+    ON a.energy = c.energy
+   AND c.period_from >= a.valid_from
+   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+  JOIN product_rate pr
+    ON pr.product_code = a.product_code
+   AND pr.region = '${region}'
+   AND c.period_from >= pr.valid_from
+   AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  WHERE c.energy = 'E'
+    AND c.period_from >= CURDATE() - INTERVAL 7 DAY
+    AND c.period_from < CURDATE()
+  GROUP BY DATE(c.period_from)
+  HAVING COUNT(*) = 48
+)
+SELECT date, cost_gbp AS yesterday_cost_gbp
+FROM daily_costs
+ORDER BY date DESC
+LIMIT 1;
 
 ```
 
@@ -165,6 +176,10 @@ JOIN product_rate pr
 WHERE c.energy = 'E'
   AND c.period_from >= NOW() - INTERVAL 90 DAY
 GROUP BY DATE(c.period_from)
+-- Completeness guard: Octopus's settlement lag means a day can still be
+-- missing rows more than 24 hours after it ends -- exclude it rather than
+-- show a misleadingly low/high rate computed from a partial day.
+HAVING COUNT(*) = 48
 ORDER BY day;
 
 ```
@@ -225,6 +240,8 @@ FROM (
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(period_from)
+  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+  HAVING COUNT(*) = 48
 ) daily
 GROUP BY DAYNAME(d)
 ORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday');
@@ -243,6 +260,8 @@ FROM (
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(period_from)
+  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+  HAVING COUNT(*) = 48
 ) daily
 ORDER BY d;
 
@@ -271,6 +290,8 @@ FROM (
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(c.period_from)
+  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+  HAVING COUNT(*) = 48
 ) daily
 ORDER BY d;
 
@@ -311,6 +332,8 @@ JOIN product_rate pr
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(c.period_from)
+-- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+HAVING COUNT(*) = 48
 ORDER BY time;
 
 ```
@@ -329,6 +352,8 @@ FROM consumption
 WHERE energy = 'G'
   AND $__timeFilter(period_from)
 GROUP BY DATE(period_from)
+-- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+HAVING COUNT(*) = 48
 ORDER BY time;
 
 ```
@@ -352,6 +377,8 @@ JOIN product_rate pr
 WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(c.period_from)
+-- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+HAVING COUNT(*) = 48
 ORDER BY time;
 
 ```

@@ -321,6 +321,19 @@ class MariaDBClient:
                 )
                 .subquery()
             )
+            # Octopus's consumption API has a real settlement lag -- a day
+            # can still be missing rows more than 24 hours after it ends.
+            # A strictly-past day must have all 48 half-hourly rows to be
+            # treated as final; the current/most-recent day (period_to's
+            # date) is exempt since it's expected to be partial by
+            # definition ("cost so far"). An incomplete past day drops out
+            # entirely here, same as a day with zero consumption rows
+            # already does, and is picked up by the caller's gap-fill.
+            today = period_to.date()
+            # func.count is a dynamically-generated SQLAlchemy function
+            # pylint's stubs don't model -- func.sum/func.max above are
+            # unaffected, this is isolated to count().
+            row_count = func.count(joined.c.date)  # pylint: disable=not-callable
             rows = (
                 session.query(
                     joined.c.date,
@@ -331,6 +344,7 @@ class MariaDBClient:
                     func.max(joined.c.standing_charge).label("standing_charge"),
                 )
                 .group_by(joined.c.date)
+                .having(or_(joined.c.date == today, row_count == 48))
                 .all()
             )
 
