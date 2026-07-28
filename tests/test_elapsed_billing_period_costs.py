@@ -325,3 +325,32 @@ def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
     by_date = {r.date: r for r in results}
     # (2.4 kWh @ 20.00p) + (2.4 kWh @ 30.00p) + 48.00p standing = 168.00p
     assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.68")
+
+
+def test_a_mid_day_standing_charge_change_uses_the_higher_of_the_two(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # A rate change mid-day can carry a different standing charge too --
+    # the day's cost must deterministically pick the higher one (matching
+    # this file's prior MAX-based behaviour), not whichever row a DB engine
+    # happens to return last from an unordered result set. The higher
+    # charge (55.00) is seeded on the *morning* rate and consumption rows,
+    # inserted first -- an implementation that just overwrites with the
+    # last-seen row (rather than taking a max) would wrongly end up with
+    # the lower afternoon charge (40.00) instead.
+    local_noon = datetime(2026, 7, 6, 12, 0, tzinfo=LONDON).astimezone(UTC)
+    with mariadb_client.session_write_scope() as s:
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
+        _seed_rate(s, datetime(2026, 1, 1, tzinfo=UTC), local_noon, "20.00", "55.00")
+        _seed_rate(s, local_noon, None, "20.00", "40.00")
+        _seed_complete_day(s, date(2026, 7, 6), "0.1")
+
+    results = mariadb_client.read_elapsed_billing_period_costs(
+        _local_midnight(date(2026, 7, 6)),
+        _local_midnight(date(2026, 7, 7)),
+        REGION,
+    )
+
+    by_date = {r.date: r for r in results}
+    # (4.8 kWh @ 20.00p) + 55.00p (the higher standing charge) = 151.00p
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.51")

@@ -342,7 +342,7 @@ class MariaDBClient:
             bucket = daily.setdefault(day, _DailyAccumulator())
             bucket.total_kwh += row.est_kwh
             bucket.variable_cost += row.est_kwh * row.unit_rate
-            bucket.standing_charge = row.standing_charge
+            bucket.standing_charge = max(bucket.standing_charge, row.standing_charge)
             bucket.row_count += 1
 
         # Octopus's consumption API has a real settlement lag -- a day can
