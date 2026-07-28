@@ -77,20 +77,12 @@ LIMIT 1;
 
 ```
 
-### This Billing Period's Cost So Far (stat)
+### Billing Period Spend Progress (bar gauge)
+
+Replaces two separate stat panels ("This Billing Period's Cost So Far" and "Total Expected Cost This Billing Period") with a single Bar Gauge: `actual_cost_to_date` as the gauge's value, `projected_total_cost` as its max/threshold, so spend-to-date reads directly as progress toward the full-period projection instead of two disconnected numbers.
 
 ```sql
-SELECT actual_cost_to_date AS billing_period_cost_gbp
-FROM cost_forecast
-ORDER BY computed_at DESC
-LIMIT 1;
-
-```
-
-### Total Expected Cost This Billing Period (stat)
-
-```sql
-SELECT projected_total_cost AS projected_cost_gbp
+SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp
 FROM cost_forecast
 ORDER BY computed_at DESC
 LIMIT 1;
@@ -99,7 +91,7 @@ LIMIT 1;
 
 ### Current Billing Period (table)
 
-Context for the two panels above — shows the dates they're computed against.
+Context for the panel above — shows the dates it's computed against.
 
 ```sql
 SELECT billing_period_start, billing_period_end, computed_at
