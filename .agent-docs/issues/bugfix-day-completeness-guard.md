@@ -1,5 +1,7 @@
 # Issues: bugfix-day-completeness-guard
 
+> Work complete — PR ready to merge.
+
 ## Completeness guard for the billing-period cost forecast pipeline
 
 **Issue**: #436
@@ -14,12 +16,12 @@
 
 ### Acceptance criteria
 
-- [ ] A past day with fewer than 48 stored rows is excluded from `read_elapsed_billing_period_costs`'s result.
-- [ ] A past day with exactly 48 stored rows is included as normal.
-- [ ] The current/most-recent day (`period_to`'s date) is included regardless of row count.
-- [ ] `CostForecastRetriever.refresh()`, run end to end against a real (SQLite-backed) `MariaDBClient`, shows a past day with partial rows contributing standing-charge-only to `actual_cost_to_date` (same treatment as the existing zero-consumption-day test).
-- [ ] In that same scenario, the partial day is excluded from the daily-average input driving the remaining-cost projection — the projection is not dragged down by the partial day's near-zero recorded consumption.
-- [ ] Existing tests in `test_future_consumption_projection.py` and `test_cost_forecast_retriever.py` continue to pass unchanged.
+- [x] A past day with fewer than 48 stored rows is excluded from `read_elapsed_billing_period_costs`'s result.
+- [x] A past day with exactly 48 stored rows is included as normal.
+- [x] The current/most-recent day (`period_to`'s date) is included regardless of row count.
+- [x] `CostForecastRetriever.refresh()`, run end to end against a real (SQLite-backed) `MariaDBClient`, shows a past day with partial rows contributing standing-charge-only to `actual_cost_to_date` (same treatment as the existing zero-consumption-day test).
+- [x] In that same scenario, the partial day is excluded from the daily-average input driving the remaining-cost projection — the projection is not dragged down by the partial day's near-zero recorded consumption.
+- [x] Existing tests in `test_future_consumption_projection.py` and `test_cost_forecast_retriever.py` continue to pass unchanged.
 
 ---
 
@@ -39,9 +41,9 @@ Corrected from the original scope during implementation: Half-hourly Cost is per
 
 ### Acceptance criteria
 
-- [ ] Each of the seven queries excludes any calendar day with fewer than 48 `consumption` rows for the relevant energy type from its day-level aggregation.
-- [ ] A fully-populated day (48 rows) is unaffected and still appears exactly as before.
-- [ ] Changes validated manually against the live/dev database (direct SQL, same technique used for the prior half-open-window join fix) — before/after row counts confirmed for at least one currently-incomplete day and one complete day.
+- [x] Each of the seven queries excludes any calendar day with fewer than 48 `consumption` rows for the relevant energy type from its day-level aggregation.
+- [x] A fully-populated day (48 rows) is unaffected and still appears exactly as before.
+- [x] Changes validated manually against the live/dev database (direct SQL, same technique used for the prior half-open-window join fix) — before/after row counts confirmed for at least one currently-incomplete day and one complete day.
 
 ---
 
@@ -59,10 +61,10 @@ Redesign the Yesterday's Cost query so that, instead of assuming `CURDATE() - IN
 
 ### Acceptance criteria
 
-- [ ] When yesterday is complete (48 rows), the panel shows yesterday's cost and yesterday's date, matching current behavior.
-- [ ] When yesterday is incomplete, the query returns the most recent day within the last 7 days that is complete, along with its cost.
-- [ ] If no day within the last 7 days is complete, the panel shows no data rather than a misleading partial figure.
-- [ ] The panel's displayed date always matches the day the displayed cost actually covers.
-- [ ] Changes validated manually against the live/dev database, using the currently-incomplete day (07-27) observed this session as a live test case.
+- [x] When yesterday is complete (48 rows), the panel shows yesterday's cost and yesterday's date, matching current behavior.
+- [x] When yesterday is incomplete, the query returns the most recent day within the last 7 days that is complete, along with its cost.
+- [x] If no day within the last 7 days is complete, the panel shows no data rather than a misleading partial figure.
+- [x] The panel's displayed date always matches the day the displayed cost actually covers.
+- [x] Changes validated manually against the live/dev database, using the currently-incomplete day (07-27) observed this session as a live test case.
 
 ---
