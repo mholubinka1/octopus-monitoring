@@ -33,11 +33,13 @@
 
 ### What to build
 
-Add a `HAVING COUNT(*) = 48` completeness guard (per calendar day) to every remaining day-grouped query in `grafana/mariadb/queries.md` that isn't Yesterday's Cost: Half-hourly Cost, p/kWh Efficiency, Standing Charge split, Daily Average Cost rolling, Gas Cost, and Gas Consumption. A day that doesn't meet the guard is simply omitted from that panel's results — no bar/point plotted for a still-arriving day — mirroring the existing week-completeness idiom already used for the Yearly Comparison panels.
+Add a `HAVING COUNT(*) = 48` completeness guard (per calendar day) to every remaining day-grouped query in `grafana/mariadb/queries.md` that isn't Yesterday's Cost: p/kWh Efficiency, Standing Charge split, Daily Average Cost rolling, Gas Cost, Gas Consumption, Day-of-Week Average Consumption, and Daily Average Usage (7-Day Rolling Average). A day that doesn't meet the guard is simply omitted from that panel's results — no bar/point plotted for a still-arriving day — mirroring the existing week-completeness idiom already used for the Yearly Comparison panels.
+
+Corrected from the original scope during implementation: Half-hourly Cost is per-half-hour, not day-grouped, and doesn't need this guard — dropped. Day-of-Week Average Consumption and Daily Average Usage both have an internal per-day `GROUP BY` that can show an artificially low still-arriving day just like the cost panels — added.
 
 ### Acceptance criteria
 
-- [ ] Each of the six queries excludes any calendar day with fewer than 48 `consumption` rows for the relevant energy type from its results.
+- [ ] Each of the seven queries excludes any calendar day with fewer than 48 `consumption` rows for the relevant energy type from its day-level aggregation.
 - [ ] A fully-populated day (48 rows) is unaffected and still appears exactly as before.
 - [ ] Changes validated manually against the live/dev database (direct SQL, same technique used for the prior half-open-window join fix) — before/after row counts confirmed for at least one currently-incomplete day and one complete day.
 

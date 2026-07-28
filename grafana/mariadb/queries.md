@@ -165,6 +165,10 @@ JOIN product_rate pr
 WHERE c.energy = 'E'
   AND c.period_from >= NOW() - INTERVAL 90 DAY
 GROUP BY DATE(c.period_from)
+-- Completeness guard: Octopus's settlement lag means a day can still be
+-- missing rows more than 24 hours after it ends -- exclude it rather than
+-- show a misleadingly low/high rate computed from a partial day.
+HAVING COUNT(*) = 48
 ORDER BY day;
 
 ```
@@ -225,6 +229,8 @@ FROM (
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(period_from)
+  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+  HAVING COUNT(*) = 48
 ) daily
 GROUP BY DAYNAME(d)
 ORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday');
@@ -243,6 +249,8 @@ FROM (
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(period_from)
+  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+  HAVING COUNT(*) = 48
 ) daily
 ORDER BY d;
 
@@ -271,6 +279,8 @@ FROM (
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(c.period_from)
+  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+  HAVING COUNT(*) = 48
 ) daily
 ORDER BY d;
 
@@ -311,6 +321,8 @@ JOIN product_rate pr
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(c.period_from)
+-- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+HAVING COUNT(*) = 48
 ORDER BY time;
 
 ```
@@ -329,6 +341,8 @@ FROM consumption
 WHERE energy = 'G'
   AND $__timeFilter(period_from)
 GROUP BY DATE(period_from)
+-- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+HAVING COUNT(*) = 48
 ORDER BY time;
 
 ```
@@ -352,6 +366,8 @@ JOIN product_rate pr
 WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(c.period_from)
+-- Completeness guard: see p/kWh Efficiency panel above for the rationale.
+HAVING COUNT(*) = 48
 ORDER BY time;
 
 ```
