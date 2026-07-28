@@ -216,6 +216,7 @@ class CostForecastRetriever:
                         date=day,
                         total_kwh=Decimal(0),
                         day_cost_gbp=rate.standing_charge / 100,
+                        is_gap_filled=True,
                     )
                 )
             day += timedelta(days=1)
@@ -263,8 +264,13 @@ class CostForecastRetriever:
         # persistence boundary today, but this is a money calculation.
         remaining_hours = Decimal(str(remaining_seconds)) / Decimal(3600)
 
+        # Gap-filled days (zero-consumption or a still-arriving, incomplete
+        # day) don't represent real observed usage -- letting them count as
+        # zero-kWh days here would drag the projection down every time a
+        # recent day hasn't fully settled yet, which per the observed
+        # settlement lag is common, not rare.
         future_daily_kwh = project_daily_average_consumption(
-            [d.total_kwh for d in daily_costs]
+            [d.total_kwh for d in daily_costs if not d.is_gap_filled]
         )
         current_rate = self._client.read_current_product_rate(
             agreement.product_code, self._client.region_code, as_of

@@ -57,6 +57,7 @@ class DailyCostSummary:
     date: date
     total_kwh: Decimal
     day_cost_gbp: Decimal
+    is_gap_filled: bool = False
 
 
 @dataclass

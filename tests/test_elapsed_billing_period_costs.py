@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from data.mysql import model
@@ -58,6 +58,57 @@ def _seed_consumption(s: Session, period_from: datetime, est_kwh: str) -> None:
     )
 
 
+def _seed_complete_day(s: Session, day: date, est_kwh_per_slot: str = "0.1") -> None:
+    start = datetime(day.year, day.month, day.day, tzinfo=UTC)
+    for slot in range(48):
+        _seed_consumption(s, start + timedelta(minutes=30 * slot), est_kwh_per_slot)
+
+
+def test_an_incomplete_past_day_is_excluded_from_the_result(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Octopus's settlement lag means a day can still be missing rows more
+    # than 24 hours after it ended -- only 30 of the day's 48 half-hourly
+    # slots have arrived so far.
+    with mariadb_client.session_write_scope() as s:
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
+        _seed_rate(s, datetime(2026, 1, 1, tzinfo=UTC), None, "20.00", "48.00")
+        start = datetime(2026, 7, 6, tzinfo=UTC)
+        for slot in range(30):
+            _seed_consumption(s, start + timedelta(minutes=30 * slot), "1.0")
+
+    results = mariadb_client.read_elapsed_billing_period_costs(
+        datetime(2026, 7, 6, tzinfo=UTC),
+        datetime(2026, 7, 7, tzinfo=UTC),
+        REGION,
+    )
+
+    assert results == []
+
+
+def test_the_current_in_progress_day_is_included_regardless_of_row_count(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # period_to's date is the current/most-recent day -- it's expected to
+    # be partial by definition ("cost so far"), so it's exempt from the
+    # completeness guard that applies to strictly-past days.
+    with mariadb_client.session_write_scope() as s:
+        _seed_agreement(s, datetime(2026, 1, 1, tzinfo=UTC))
+        _seed_rate(s, datetime(2026, 1, 1, tzinfo=UTC), None, "20.00", "48.00")
+        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "1.0")
+
+    results = mariadb_client.read_elapsed_billing_period_costs(
+        datetime(2026, 7, 6, tzinfo=UTC),
+        datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
+        REGION,
+    )
+
+    by_date = {r.date: r for r in results}
+    assert by_date[date(2026, 7, 6)].total_kwh == Decimal("1.0")
+    # (1.0 kWh @ 20.00p) + 48.00p standing charge = 68.00p -> /100 = 0.68 GBP
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("0.68")
+
+
 def test_two_elapsed_days_with_consumption_on_a_stable_rate(
     mariadb_client: MariaDBClient,
 ) -> None:
@@ -70,9 +121,10 @@ def test_two_elapsed_days_with_consumption_on_a_stable_rate(
             "20.00",
             "48.00",
         )
-        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "1.0")
-        _seed_consumption(s, datetime(2026, 7, 6, 12, 0, tzinfo=UTC), "1.0")
-        _seed_consumption(s, datetime(2026, 7, 7, 0, 0, tzinfo=UTC), "2.0")
+        # Full 48-slot days -- both are strictly before period_to's date
+        # (2026-07-08), so both must be complete to count.
+        _seed_complete_day(s, date(2026, 7, 6), "0.1")
+        _seed_complete_day(s, date(2026, 7, 7), "0.1")
 
     results = mariadb_client.read_elapsed_billing_period_costs(
         datetime(2026, 7, 6, tzinfo=UTC),
@@ -81,11 +133,11 @@ def test_two_elapsed_days_with_consumption_on_a_stable_rate(
     )
 
     by_date = {r.date: r for r in results}
-    assert by_date[date(2026, 7, 6)].total_kwh == Decimal("2.0")
-    # (2.0 kWh @ 20.00p) + 48.00p standing charge = 88.00p -> /100 = 0.88 GBP
-    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("0.88")
-    assert by_date[date(2026, 7, 7)].total_kwh == Decimal("2.0")
-    assert by_date[date(2026, 7, 7)].day_cost_gbp == Decimal("0.88")
+    assert by_date[date(2026, 7, 6)].total_kwh == Decimal("4.8")
+    # (4.8 kWh @ 20.00p) + 48.00p standing charge = 144.00p -> /100 = 1.44 GBP
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.44")
+    assert by_date[date(2026, 7, 7)].total_kwh == Decimal("4.8")
+    assert by_date[date(2026, 7, 7)].day_cost_gbp == Decimal("1.44")
 
 
 def test_a_rate_for_another_region_is_not_double_matched(
@@ -119,7 +171,8 @@ def test_a_rate_for_another_region_is_not_double_matched(
                 standing_charge=Decimal("99.00"),
             )
         )
-        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "2.0")
+        # Full 48-slot day -- strictly before period_to's date (2026-07-07).
+        _seed_complete_day(s, date(2026, 7, 6), "0.1")
 
     results = mariadb_client.read_elapsed_billing_period_costs(
         datetime(2026, 7, 6, tzinfo=UTC),
@@ -128,10 +181,10 @@ def test_a_rate_for_another_region_is_not_double_matched(
     )
 
     by_date = {r.date: r for r in results}
-    assert by_date[date(2026, 7, 6)].total_kwh == Decimal("2.0")
+    assert by_date[date(2026, 7, 6)].total_kwh == Decimal("4.8")
     # If the region-A row were incorrectly matched too, total_kwh would be
-    # doubled (4.0) and day_cost_gbp would include the 99.00p rate as well.
-    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("0.88")
+    # doubled (9.6) and day_cost_gbp would include the 99.00p rate as well.
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.44")
 
 
 def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
@@ -155,8 +208,14 @@ def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
             "30.00",
             "48.00",
         )
-        _seed_consumption(s, datetime(2026, 7, 6, 0, 0, tzinfo=UTC), "1.0")
-        _seed_consumption(s, datetime(2026, 7, 6, 12, 0, tzinfo=UTC), "1.0")
+        # Full 48-slot day, split across the noon rate change: 24 slots at
+        # the old rate, 24 at the new one.
+        morning_start = datetime(2026, 7, 6, 0, 0, tzinfo=UTC)
+        for slot in range(24):
+            _seed_consumption(s, morning_start + timedelta(minutes=30 * slot), "0.1")
+        afternoon_start = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
+        for slot in range(24):
+            _seed_consumption(s, afternoon_start + timedelta(minutes=30 * slot), "0.1")
 
     results = mariadb_client.read_elapsed_billing_period_costs(
         datetime(2026, 7, 6, tzinfo=UTC),
@@ -165,5 +224,5 @@ def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
     )
 
     by_date = {r.date: r for r in results}
-    # (1.0 kWh @ 20.00p) + (1.0 kWh @ 30.00p) + 48.00p standing = 98.00p
-    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("0.98")
+    # (2.4 kWh @ 20.00p) + (2.4 kWh @ 30.00p) + 48.00p standing = 168.00p
+    assert by_date[date(2026, 7, 6)].day_cost_gbp == Decimal("1.68")
