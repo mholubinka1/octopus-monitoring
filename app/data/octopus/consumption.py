@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -101,8 +101,12 @@ class ConsumptionClient:
                 raw=reading.consumption,
                 est_kwh=to_estimated_kwh(energy, reading.consumption),
                 unit=get_raw_unit(energy),
-                start=reading.interval_start,
-                end=reading.interval_end,
+                # Octopus returns interval_start/interval_end in local British
+                # time (e.g. +01:00 during BST), not UTC -- converting here
+                # keeps storage correct year-round rather than relying on
+                # whatever offset happens to be in effect at fetch time.
+                start=reading.interval_start.astimezone(UTC),
+                end=reading.interval_end.astimezone(UTC),
             )
             for reading in parsed.results
         ]
