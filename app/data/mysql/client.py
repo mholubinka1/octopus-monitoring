@@ -23,7 +23,7 @@ from data.model import (
 from data.mysql import model
 from data.mysql.model import SQLBase
 from data.octopus.model import AgileForecastReading, Agreement, Meter, Product, Rate
-from sqlalchemy import Date, and_, create_engine, func, inspect, or_, text
+from sqlalchemy import and_, create_engine, inspect, or_, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -380,42 +380,38 @@ class MariaDBClient:
         # days means as_of, as_of-1, ..., as_of-13 (14 dates), not 15.
         cutoff = as_of - timedelta(days=SUMMARIZATION_WINDOW_DAYS - 1)
         with self.session_read_scope() as session:
-            consumption_date = func.date(
-                model.consumption.period_from, type_=Date
-            ).label("date")
-            daily_totals = (
-                session.query(
-                    model.consumption.energy.label("energy"),
-                    consumption_date,
-                    func.sum(model.consumption.est_kwh).label("total_kwh"),
-                )
-                .group_by(model.consumption.energy, consumption_date)
-                .subquery()
-            )
-            rows = (
-                session.query(
-                    daily_totals.c.energy,
-                    daily_totals.c.date,
-                    daily_totals.c.total_kwh,
-                )
-                .outerjoin(
-                    model.daily_consumption_summary,
-                    (model.daily_consumption_summary.energy == daily_totals.c.energy)
-                    & (model.daily_consumption_summary.date == daily_totals.c.date),
-                )
-                .filter(
-                    (daily_totals.c.date >= cutoff)
-                    | (model.daily_consumption_summary.energy.is_(None))
-                )
-                .all()
-            )
+            raw_rows = session.query(
+                model.consumption.energy,
+                model.consumption.period_from,
+                model.consumption.est_kwh,
+            ).all()
+            existing_summary_days = {
+                (row.energy, row.date)
+                for row in session.query(
+                    model.daily_consumption_summary.energy,
+                    model.daily_consumption_summary.date,
+                ).all()
+            }
+
+        # Grouped in Python by Europe/London local calendar day, not the raw
+        # UTC date -- keeps this job's day boundaries consistent with
+        # ConsumptionSummaryBackfill, which already buckets by local day
+        # (it reads the still-locally-offset Octopus response directly,
+        # before any DB round-trip).
+        daily_totals: dict[tuple[str, date], Decimal] = {}
+        for row in raw_rows:
+            day = local_day.to_local_date(row.period_from)
+            key = (row.energy, day)
+            daily_totals[key] = daily_totals.get(key, Decimal(0)) + row.est_kwh
+
         return [
             ConsumptionSummary(
-                energy=energy_from_char(row.energy),
-                date=row.date,
-                total_kwh=row.total_kwh,
+                energy=energy_from_char(energy_char),
+                date=day,
+                total_kwh=total_kwh,
             )
-            for row in rows
+            for (energy_char, day), total_kwh in daily_totals.items()
+            if day >= cutoff or (energy_char, day) not in existing_summary_days
         ]
 
     def write_consumption_summary(self, summaries: list[ConsumptionSummary]) -> None:
