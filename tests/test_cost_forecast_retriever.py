@@ -673,6 +673,61 @@ def test_a_lag_incomplete_elapsed_day_gets_the_same_gap_fill_as_a_true_zero_day(
 
 
 @responses.activate
+def test_the_only_elapsed_day_being_gap_filled_still_produces_a_forecast(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Day 1 of a billing period, run early (04:00) before that day's own
+    # consumption has arrived at all -- the only elapsed day is gap-filled
+    # (zero real kWh), so filtering gap-filled days out of the projection
+    # average would otherwise leave nothing to average, raising instead of
+    # producing a (admittedly rough) forecast.
+    _mock_billing_period("2026-07-06", "2026-08-06")
+
+    with mariadb_client.session_write_scope() as s:
+        s.add(
+            model.agreement(
+                id="E20220101000000",
+                energy="E",
+                product_code=PRODUCT_CODE,
+                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
+                valid_from=datetime(2022, 1, 1, tzinfo=UTC),
+                valid_to=None,
+            )
+        )
+        s.add(
+            model.product_rate(
+                id=f"{PRODUCT_CODE}_{REGION}_202601010000",
+                product_code=PRODUCT_CODE,
+                region=REGION,
+                valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+                valid_to=None,
+                unit_rate=Decimal("20.00"),
+                standing_charge=Decimal("48.00"),
+            )
+        )
+        # No consumption at all for Jul 6.
+
+    retriever = CostForecastRetriever(
+        _source(mariadb_client, [_make_electricity_meter()])
+    )
+    retriever.refresh(as_of=datetime(2026, 7, 6, 4, 0, tzinfo=UTC))
+
+    with mariadb_client.session_read_scope() as session:
+        row = session.query(model.cost_forecast).one()
+
+    # Jul6 (zero kWh, gap-filled): 48.00/100 = 0.48.
+    assert row.actual_cost_to_date == Decimal("0.48")
+    # No real day to average -- falls back to the gap-filled day itself
+    # (0 kWh) rather than raising, matching pre-guard behavior for this
+    # bootstrapping case.
+    remaining_days = 31
+    expected_remaining = (
+        remaining_days * (Decimal(0) * Decimal("20.00") + Decimal("48.00")) / 100
+    )
+    assert row.projected_total_cost == Decimal("0.48") + expected_remaining
+
+
+@responses.activate
 def test_no_current_product_rate_raises_a_clear_error(
     mariadb_client: MariaDBClient,
 ) -> None:
