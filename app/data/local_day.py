@@ -11,10 +11,14 @@ def to_local_date(instant: datetime) -> date:
     return instant.astimezone(LONDON).date()
 
 
-def expected_half_hour_count(local_date: date) -> int:
-    start_of_day = datetime(
+def start_of_local_day(local_date: date) -> datetime:
+    return datetime(
         local_date.year, local_date.month, local_date.day, tzinfo=LONDON
-    )
-    start_of_next_day = start_of_day + timedelta(days=1)
-    duration = start_of_next_day.astimezone(UTC) - start_of_day.astimezone(UTC)
+    ).astimezone(UTC)
+
+
+def expected_half_hour_count(local_date: date) -> int:
+    start_of_day = start_of_local_day(local_date)
+    start_of_next_day = start_of_local_day(local_date + timedelta(days=1))
+    duration = start_of_next_day - start_of_day
     return duration // HALF_HOUR

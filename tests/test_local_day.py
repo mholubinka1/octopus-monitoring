@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from data.local_day import expected_half_hour_count, to_local_date
+from data.local_day import expected_half_hour_count, start_of_local_day, to_local_date
 
 
 def test_a_late_evening_bst_instant_before_utc_midnight_falls_on_the_next_local_day() -> (
@@ -45,3 +45,17 @@ def test_days_either_side_of_a_clock_change_are_still_ordinary_forty_eight_slot_
     assert expected_half_hour_count(date(2026, 3, 30)) == 48
     assert expected_half_hour_count(date(2026, 10, 24)) == 48
     assert expected_half_hour_count(date(2026, 10, 26)) == 48
+
+
+def test_the_start_of_a_bst_local_day_is_one_hour_before_utc_midnight() -> None:
+    # Local midnight on 2026-07-06 (BST, UTC+1) is UTC 2026-07-05 23:00.
+    assert start_of_local_day(date(2026, 7, 6)) == datetime(
+        2026, 7, 5, 23, 0, tzinfo=UTC
+    )
+
+
+def test_the_start_of_a_gmt_local_day_is_utc_midnight() -> None:
+    # Outside BST (GMT, UTC+0), local midnight is UTC midnight.
+    assert start_of_local_day(date(2026, 1, 6)) == datetime(
+        2026, 1, 6, 0, 0, tzinfo=UTC
+    )

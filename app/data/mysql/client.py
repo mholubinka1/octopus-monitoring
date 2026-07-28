@@ -1,13 +1,16 @@
 import logging.config
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Any
 
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.logging import APP_LOGGER_NAME, config
+from data import local_day
 from data.model import (
     Consumption,
     ConsumptionSummary,
@@ -30,6 +33,14 @@ SUMMARIZATION_WINDOW_DAYS = 14
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
+
+
+@dataclass
+class _DailyAccumulator:
+    total_kwh: Decimal = field(default_factory=lambda: Decimal(0))
+    variable_cost: Decimal = field(default_factory=lambda: Decimal(0))
+    standing_charge: Decimal = field(default_factory=lambda: Decimal(0))
+    row_count: int = 0
 
 
 def upsert(s: Session, record: Any) -> None:
@@ -289,10 +300,9 @@ class MariaDBClient:
         pr = model.product_rate
 
         with self.session_read_scope() as session:
-            day_col = func.date(c.period_from, type_=Date).label("date")
-            joined = (
+            rows = (
                 session.query(
-                    day_col,
+                    c.period_from,
                     c.est_kwh.label("est_kwh"),
                     pr.unit_rate.label("unit_rate"),
                     pr.standing_charge.label("standing_charge"),
@@ -319,42 +329,41 @@ class MariaDBClient:
                     c.period_from >= period_from,
                     c.period_from < period_to,
                 )
-                .subquery()
-            )
-            # Octopus's consumption API has a real settlement lag -- a day
-            # can still be missing rows more than 24 hours after it ends.
-            # A strictly-past day must have all 48 half-hourly rows to be
-            # treated as final; the current/most-recent day (period_to's
-            # date) is exempt since it's expected to be partial by
-            # definition ("cost so far"). An incomplete past day drops out
-            # entirely here, same as a day with zero consumption rows
-            # already does, and is picked up by the caller's gap-fill.
-            today = period_to.date()
-            # func.count is a dynamically-generated SQLAlchemy function
-            # pylint's stubs don't model -- func.sum/func.max above are
-            # unaffected, this is isolated to count().
-            row_count = func.count(joined.c.date)  # pylint: disable=not-callable
-            rows = (
-                session.query(
-                    joined.c.date,
-                    func.sum(joined.c.est_kwh).label("total_kwh"),
-                    func.sum(joined.c.est_kwh * joined.c.unit_rate).label(
-                        "variable_cost"
-                    ),
-                    func.max(joined.c.standing_charge).label("standing_charge"),
-                )
-                .group_by(joined.c.date)
-                .having(or_(joined.c.date == today, row_count == 48))
                 .all()
             )
 
+        # Grouped in Python by Europe/London local calendar day, not the raw
+        # UTC date -- Octopus's own daily reporting (and the "day" a UK user
+        # means by "cost for 26 July") is local time. See ADR-0010 for why
+        # this is Python/zoneinfo-based rather than SQL CONVERT_TZ.
+        daily: dict[date, _DailyAccumulator] = {}
+        for row in rows:
+            day = local_day.to_local_date(row.period_from)
+            bucket = daily.setdefault(day, _DailyAccumulator())
+            bucket.total_kwh += row.est_kwh
+            bucket.variable_cost += row.est_kwh * row.unit_rate
+            bucket.standing_charge = row.standing_charge
+            bucket.row_count += 1
+
+        # Octopus's consumption API has a real settlement lag -- a day can
+        # still be missing rows more than 24 hours after it ends. A
+        # strictly-past day must have all of that local day's expected
+        # half-hourly rows (48 normally, 46/50 on a UK clock-change date) to
+        # be treated as final; the current/most-recent day (period_to's
+        # local date) is exempt since it's expected to be partial by
+        # definition ("cost so far"). An incomplete past day drops out
+        # entirely here, same as a day with zero consumption rows already
+        # does, and is picked up by the caller's gap-fill.
+        today = local_day.to_local_date(period_to)
         return [
             DailyCostSummary(
-                date=row.date,
-                total_kwh=row.total_kwh,
-                day_cost_gbp=(row.variable_cost + row.standing_charge) / 100,
+                date=day,
+                total_kwh=bucket.total_kwh,
+                day_cost_gbp=(bucket.variable_cost + bucket.standing_charge) / 100,
             )
-            for row in rows
+            for day, bucket in daily.items()
+            if day == today
+            or bucket.row_count == local_day.expected_half_hour_count(day)
         ]
 
     def read_consumption_summarization_window(
