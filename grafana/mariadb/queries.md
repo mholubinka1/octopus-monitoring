@@ -30,7 +30,7 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 **Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
 
-- Cost columns already converted to pounds (`*_cost_gbp`, `*_cost`, `actual_cost_to_date`, `projected_total_cost`) → Grafana's currency (GBP, £) unit.
+- Cost columns already converted to pounds (`*_cost_gbp`) → Grafana's currency (GBP, £) unit.
 - Rate columns still in pence/kWh (`rate_pence_per_kwh`, `rate`, `your_avg_rate`, `day_avg_rate`) → a custom unit of `p/kWh` — these are deliberately *not* divided by 100, unlike the cost columns above, so don't apply the GBP unit to them.
 - Energy columns (`*_kwh`, `est_kwh`, `total_kwh`) → a custom unit of `kWh`.
 - Percentage-change columns (`yoy_pct_change`, `yoy_pct_change_4wk_avg`) → Grafana's percent unit.
@@ -447,7 +447,7 @@ SELECT
 FROM daily_consumption_summary
 WHERE energy = 'E'
   AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
-GROUP BY DATE_FORMAT(date, '%Y-%m')
+GROUP BY DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)
 ORDER BY time;
 
 ```
@@ -463,7 +463,7 @@ SELECT
 FROM daily_consumption_summary
 WHERE energy = 'G'
   AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
-GROUP BY DATE_FORMAT(date, '%Y-%m')
+GROUP BY DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)
 ORDER BY time;
 
 ```
@@ -578,6 +578,8 @@ ORDER BY job_name;
 ```
 
 ### AgilePredict/Kraken Reachability (table)
+
+Three heterogeneous columns (status, timestamp, error text) in one row — a poor fit for a single-value Stat panel, hence Table.
 
 ```sql
 SELECT
