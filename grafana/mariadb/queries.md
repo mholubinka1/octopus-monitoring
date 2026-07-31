@@ -213,7 +213,7 @@ ORDER BY time;
 
 Assumes no gaps in half-hourly `product_rate` rows within the queried range — a missing slot shifts the rolling window incorrectly.
 
-One row per window size (`window_size | start | rate`) rather than one row with 12 paired columns — a single-row table forces horizontal scrolling and pairing columns by eye; this reads top-to-bottom instead. Built as a `UNION ALL` of six single-row `SELECT`s, matching the style the Price Curve panel above already uses. No overall `ORDER BY` on the union: each parenthesized branch contributes exactly one row, and `UNION ALL` preserves branch order, so the six rows come out shortest-to-longest window without needing an extra sort column.
+One row per window size (`window_size | start | rate`) rather than one row with 12 paired columns — a single-row table forces horizontal scrolling and pairing columns by eye; this reads top-to-bottom instead. Built as a `UNION ALL` of six single-row `SELECT`s, matching the style the Price Curve panel above already uses. Ordered explicitly via `ORDER BY FIELD(window_size, ...)` rather than relying on `UNION ALL` branch order — every other multi-row panel in this file ends with an explicit `ORDER BY`, and branch order isn't a documented ordering guarantee to lean on.
 
 `product_rate` has no `period_from` column, and the current agreement is found via the same half-open test as the **Join convention** — see the Price Curve panel's notes above for both.
 
@@ -253,7 +253,8 @@ UNION ALL
 UNION ALL
 (SELECT '4 hours' AS window_size, window_start AS start, avg_4h   AS rate FROM windows ORDER BY avg_4h   ASC LIMIT 1)
 UNION ALL
-(SELECT '6 hours' AS window_size, window_start AS start, avg_6h   AS rate FROM windows ORDER BY avg_6h   ASC LIMIT 1);
+(SELECT '6 hours' AS window_size, window_start AS start, avg_6h   AS rate FROM windows ORDER BY avg_6h   ASC LIMIT 1)
+ORDER BY FIELD(window_size, '30 min', '1 hour', '2 hours', '3 hours', '4 hours', '6 hours');
 
 ```
 
