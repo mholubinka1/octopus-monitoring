@@ -13,7 +13,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from sqlalchemy.schema import CreateTable
+from sqlalchemy.schema import CreateIndex, CreateTable
 
 _StrippedBase = declarative_base()
 
@@ -86,6 +86,9 @@ def test_a_database_with_every_table_already_present_is_left_untouched(
         columns = {column["name"] for column in inspector.get_columns(table.name)}
         assert columns == {column.name for column in table.columns}
 
+        index_names = {index["name"] for index in inspector.get_indexes(table.name)}
+        assert index_names == {index.name for index in table.indexes}
+
 
 def test_a_column_missing_from_an_existing_table_is_added_on_startup(
     monkeypatch: pytest.MonkeyPatch,
@@ -107,9 +110,35 @@ def test_a_column_missing_from_an_existing_table_is_added_on_startup(
     }
 
 
+def test_an_index_missing_from_an_existing_table_is_created_on_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _sqlite_engine()
+    _StrippedBase.metadata.create_all(engine)
+
+    _sync_against(engine, monkeypatch)
+
+    index_names = {
+        index["name"] for index in inspect(engine).get_indexes("consumption")
+    }
+    assert "ix_consumption_energy_period_from" in index_names
+
+
 def test_every_declared_table_compiles_as_valid_mariadb_ddl() -> None:
     for table in SQLBase.metadata.tables.values():
         CreateTable(table).compile(dialect=mysql.dialect())
+
+
+def test_every_declared_index_compiles_as_valid_mariadb_ddl() -> None:
+    for table in SQLBase.metadata.tables.values():
+        for index in table.indexes:
+            # The pre-commit mypy hook's `sqlalchemy-stubs` dependency predates
+            # SQLAlchemy 2.0's native types and misdeclares CreateIndex's
+            # parameter as `str`; the real runtime signature (and SQLAlchemy's
+            # own 2.0 stubs) correctly type it as `Index`.
+            CreateIndex(index).compile(  # type: ignore[arg-type]
+                dialect=mysql.dialect()
+            )
 
 
 def test_consumption_quantities_reject_negative_values_on_mariadb() -> None:

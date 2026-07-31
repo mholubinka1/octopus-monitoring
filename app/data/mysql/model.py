@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from sqlalchemy import Column, Date, DateTime, Integer, Numeric, String
+from sqlalchemy import Column, Date, DateTime, Index, Integer, Numeric, String
 from sqlalchemy.dialects.mysql import DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -9,7 +9,10 @@ SQLBase = declarative_base()
 
 class consumption(SQLBase):
     __tablename__ = "consumption"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+    __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
+        Index("ix_consumption_energy_period_from", "energy", "period_from"),
+        {"schema": "octopus"},
+    )
 
     id = Column(String(50), primary_key=True)
     energy = Column(String(1))
@@ -22,7 +25,15 @@ class consumption(SQLBase):
 
 class agreement(SQLBase):
     __tablename__ = "agreement"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+    __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
+        Index(
+            "ix_agreement_energy_valid_from_valid_to",
+            "energy",
+            "valid_from",
+            "valid_to",
+        ),
+        {"schema": "octopus"},
+    )
 
     id = Column(String(50), primary_key=True)
     energy = Column(String(1), nullable=False)
@@ -43,7 +54,16 @@ class product(SQLBase):
 
 class product_rate(SQLBase):
     __tablename__ = "product_rate"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+    __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
+        Index(
+            "ix_product_rate_product_code_region_valid_from_valid_to",
+            "product_code",
+            "region",
+            "valid_from",
+            "valid_to",
+        ),
+        {"schema": "octopus"},
+    )
 
     id = Column(String(70), primary_key=True)
     product_code = Column(String(50), nullable=False)
@@ -65,7 +85,10 @@ class daily_consumption_summary(SQLBase):
 
 class agile_forecast(SQLBase):
     __tablename__ = "agile_forecast"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+    __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
+        Index("ix_agile_forecast_region_period_from", "region", "period_from"),
+        {"schema": "octopus"},
+    )
 
     id = Column(String(70), primary_key=True)
     region = Column(String(1), nullable=False)
@@ -89,7 +112,10 @@ class cost_forecast(SQLBase):
 
 class job_run(SQLBase):
     __tablename__ = "job_run"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+    __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
+        Index("ix_job_run_job_name_ran_at", "job_name", "ran_at"),
+        {"schema": "octopus"},
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_name = Column(String(100), nullable=False)

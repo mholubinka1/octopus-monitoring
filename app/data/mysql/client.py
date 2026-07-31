@@ -140,6 +140,30 @@ class MariaDBClient:
                         text(f"ALTER TABLE {qualified_name} ADD COLUMN {column_ddl}")
                     )
 
+            self._sync_missing_indexes(connection, inspector)
+
+    def _sync_missing_indexes(self, connection: Any, inspector: Any) -> None:
+        for table in SQLBase.metadata.tables.values():
+            schema = connection.schema_for_object(table)
+            existing_index_names = {
+                index["name"]
+                for index in inspector.get_indexes(table.name, schema=schema)
+            }
+            missing_indexes = [
+                index
+                for index in table.indexes
+                if index.name not in existing_index_names
+            ]
+            if not missing_indexes:
+                continue
+
+            logger.info(
+                f"Schema sync: creating missing indexes on {table.name}: "
+                f"{[index.name for index in missing_indexes]}"
+            )
+            for index in missing_indexes:
+                index.create(bind=connection)
+
     @contextmanager
     def session_read_scope(self) -> Generator[Session]:
         session = self._session_builder.session()
