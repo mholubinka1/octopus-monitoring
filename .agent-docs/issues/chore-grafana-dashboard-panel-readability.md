@@ -1,5 +1,7 @@
 # Issues: chore-grafana-dashboard-panel-readability
 
+> Work complete — PR ready to merge.
+
 ## Monthly/Weekly panels get a real time axis (#446)
 
 **Blocked by**: None
@@ -12,10 +14,10 @@ In `grafana/mariadb/queries.md`, fix the four panels currently labeled "time ser
 
 ### Acceptance criteria
 
-- [ ] All four panels' queries return a `time` column of a real date type, not a string or integer.
-- [ ] Weekly YoY panels' `time` value is the Monday of that ISO week.
-- [ ] Existing week-53 fallback and completeness-guard (`HAVING COUNT(*) = 7`) logic is preserved unchanged.
-- [ ] Each of the four queries executed read-only against production MariaDB and returns rows without error, ordered correctly by `time`.
+- [x] All four panels' queries return a `time` column of a real date type, not a string or integer.
+- [x] Weekly YoY panels' `time` value is the Monday of that ISO week.
+- [x] Existing week-53 fallback and completeness-guard (`HAVING COUNT(*) = 7`) logic is preserved unchanged.
+- [x] Each of the four queries executed read-only against production MariaDB and returns rows without error, ordered correctly by `time`.
 
 ---
 
@@ -33,10 +35,10 @@ Rewrite the "Cheapest N-Hour Window Today/Tomorrow" query in `grafana/mariadb/qu
 
 ### Acceptance criteria
 
-- [ ] Query returns exactly one row per window size (6 rows), columns `window_size`, `start`, `rate`.
-- [ ] Rows are ordered from shortest to longest window.
-- [ ] Same underlying window-average logic (rolling `AVG(unit_rate)` over the correct row spans) preserved from the original query.
-- [ ] Executed read-only against production MariaDB and returns 6 rows without error.
+- [x] Query returns exactly one row per window size (6 rows), columns `window_size`, `start`, `rate`.
+- [x] Rows are ordered from shortest to longest window.
+- [x] Same underlying window-average logic (rolling `AVG(unit_rate)` over the correct row spans) preserved from the original query.
+- [x] Executed read-only against production MariaDB and returns 6 rows without error.
 
 ---
 
@@ -52,8 +54,8 @@ In `grafana/mariadb/queries.md`, correct the panel-type heading for "Current Bil
 
 ### Acceptance criteria
 
-- [ ] Both panel headings read "(table)" instead of "(stat)"/"(stat/table)".
-- [ ] SQL for both queries is byte-for-byte unchanged.
+- [x] Both panel headings read "(table)" instead of "(stat)"/"(stat/table)".
+- [x] SQL for both queries is byte-for-byte unchanged.
 
 ---
 
@@ -74,11 +76,11 @@ Four small additive/consistency fixes in `grafana/mariadb/queries.md`:
 
 ### Acceptance criteria
 
-- [ ] p/kWh Efficiency query's column and all references renamed `day` → `time`; query still executes and returns correctly ordered rows.
+- [x] p/kWh Efficiency query's column and all references renamed `day` → `time`; query still executes and returns correctly ordered rows.
 - [x] Field-formatting convention callout present, covering cost/rate(p-per-kWh)/kWh/percent columns, in the same style as existing convention notes.
-- [ ] Bar-draw-style note present under both half-hourly panels.
-- [ ] Actual-vs-forecast styling note present under Price Curve.
-- [ ] p/kWh Efficiency query executed read-only against production MariaDB and returns rows without error.
+- [x] Bar-draw-style note present under both half-hourly panels.
+- [x] Actual-vs-forecast styling note present under Price Curve.
+- [x] p/kWh Efficiency query executed read-only against production MariaDB and returns rows without error.
 
 ---
 
@@ -94,9 +96,9 @@ Merge "This Billing Period's Cost So Far" and "Total Expected Cost This Billing 
 
 ### Acceptance criteria
 
-- [ ] Single query returns both `actual_cost_to_date` and `projected_total_cost` from the same (latest `computed_at`) row.
-- [ ] Panel heading/type updated to reflect a single Bar Gauge panel replacing the two former stat panels.
-- [ ] "Current Billing Period" panel and query left unchanged.
-- [ ] Query executed read-only against production MariaDB and returns one row with both values populated.
+- [x] Single query returns both `actual_cost_to_date` and `projected_total_cost` from the same (latest `computed_at`) row.
+- [x] Panel heading/type updated to reflect a single Bar Gauge panel replacing the two former stat panels.
+- [x] "Current Billing Period" panel and query left unchanged.
+- [x] Query executed read-only against production MariaDB and returns one row with both values populated.
 
 ---
