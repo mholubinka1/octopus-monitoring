@@ -24,7 +24,8 @@ from data.mysql import model
 from data.mysql.model import SQLBase
 from data.octopus.model import AgileForecastReading, Agreement, Meter, Product, Rate
 from sqlalchemy import and_, create_engine, inspect, or_, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
@@ -114,35 +115,41 @@ class MariaDBClient:
         # doesn't make the ADD COLUMN loop atomic — it's just a connection
         # scope. Idempotent regardless: a re-run picks up anything not yet added.
         with engine.begin() as connection:
-            for table in SQLBase.metadata.tables.values():
-                schema = connection.schema_for_object(table)
-                existing_columns = {
-                    column["name"]
-                    for column in inspector.get_columns(table.name, schema=schema)
-                }
-                missing_columns = [
-                    column
-                    for column in table.columns
-                    if column.name not in existing_columns
-                ]
-                if not missing_columns:
-                    continue
-
-                logger.info(
-                    f"Schema sync: adding missing columns to {table.name}: "
-                    f"{[column.name for column in missing_columns]}"
-                )
-
-                qualified_name = f"{schema}.{table.name}" if schema else table.name
-                for column in missing_columns:
-                    column_ddl = CreateColumn(column).compile(dialect=engine.dialect)
-                    connection.execute(
-                        text(f"ALTER TABLE {qualified_name} ADD COLUMN {column_ddl}")
-                    )
-
+            self._sync_missing_columns(connection, inspector)
             self._sync_missing_indexes(connection, inspector)
 
-    def _sync_missing_indexes(self, connection: Any, inspector: Any) -> None:
+    def _sync_missing_columns(
+        self, connection: Connection, inspector: Inspector
+    ) -> None:
+        for table in SQLBase.metadata.tables.values():
+            schema = connection.schema_for_object(table)
+            existing_columns = {
+                column["name"]
+                for column in inspector.get_columns(table.name, schema=schema)
+            }
+            missing_columns = [
+                column
+                for column in table.columns
+                if column.name not in existing_columns
+            ]
+            if not missing_columns:
+                continue
+
+            logger.info(
+                f"Schema sync: adding missing columns to {table.name}: "
+                f"{[column.name for column in missing_columns]}"
+            )
+
+            qualified_name = f"{schema}.{table.name}" if schema else table.name
+            for column in missing_columns:
+                column_ddl = CreateColumn(column).compile(dialect=connection.dialect)
+                connection.execute(
+                    text(f"ALTER TABLE {qualified_name} ADD COLUMN {column_ddl}")
+                )
+
+    def _sync_missing_indexes(
+        self, connection: Connection, inspector: Inspector
+    ) -> None:
         for table in SQLBase.metadata.tables.values():
             schema = connection.schema_for_object(table)
             existing_index_names = {
