@@ -68,14 +68,14 @@ In `grafana/mariadb/queries.md`, correct the panel-type heading for "Current Bil
 Four small additive/consistency fixes in `grafana/mariadb/queries.md`:
 
 1. Rename the p/kWh Efficiency vs Day's Avg Rate query's `DATE(...) AS day` column (and its `HAVING`/`ORDER BY` references) to `AS time`, matching the file's existing convention of aliasing genuine time-axis columns `time`.
-2. Add a new "Field-formatting convention" callout near the top of the file, alongside the existing "Join convention" and "Local-time convention" notes: cost columns → Grafana currency unit (GBP, £), kWh columns → a custom "kWh" unit, percentage-change columns → Grafana's percent unit.
+2. Add a new "Field-formatting convention" callout near the top of the file, alongside the existing "Join convention" and "Local-time convention" notes: cost columns → Grafana currency unit (GBP, £), rate/pence-per-kWh columns → a custom "p/kWh" unit, kWh columns → a custom "kWh" unit, percentage-change columns → Grafana's percent unit.
 3. Add a short note under Half-hourly Consumption and Half-hourly Cost recommending bar draw style (not the default line), since each row is a discrete per-interval quantity rather than a continuous signal.
 4. Add a short note under the Price Curve panel recommending the `forecast` series be rendered with a dashed line style (and/or muted color) distinct from `actual`, so predicted and confirmed prices are never visually conflated.
 
 ### Acceptance criteria
 
 - [ ] p/kWh Efficiency query's column and all references renamed `day` → `time`; query still executes and returns correctly ordered rows.
-- [ ] Field-formatting convention callout present, covering cost/kWh/percent columns, in the same style as existing convention notes.
+- [x] Field-formatting convention callout present, covering cost/rate(p-per-kWh)/kWh/percent columns, in the same style as existing convention notes.
 - [ ] Bar-draw-style note present under both half-hourly panels.
 - [ ] Actual-vs-forecast styling note present under Price Curve.
 - [ ] p/kWh Efficiency query executed read-only against production MariaDB and returns rows without error.
