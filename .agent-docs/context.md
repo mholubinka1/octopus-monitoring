@@ -65,7 +65,7 @@ The sole active persistence store for this app. The database itself is created b
 _Avoid_: the database, mysql db
 
 **Schema Sync**:
-The additive-only schema reconciliation `MariaDBClient` runs automatically on every app startup — creates any table missing from the live database and adds any column missing from an existing table, both diffed against `model.py`. Never drops or alters an existing column; that stays a deliberate manual action. See [ADR-0005](adr/0005-additive-only-schema-sync.md).
+The additive-only schema reconciliation `MariaDBClient` runs automatically on every app startup — creates any table missing from the live database, adds any column missing from an existing table, and creates any index missing from an existing table, all diffed against `model.py`. Never drops or alters an existing column or index; that stays a deliberate manual action. See [ADR-0005](adr/0005-additive-only-schema-sync.md).
 _Avoid_: migration, schema migration (this project deliberately has no versioned migration tool)
 
 **InfluxDB (legacy)**:
