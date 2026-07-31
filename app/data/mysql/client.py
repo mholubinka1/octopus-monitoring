@@ -112,8 +112,9 @@ class MariaDBClient:
 
         inspector = inspect(engine)
         # MariaDB/MySQL DDL auto-commits per statement, so this transaction
-        # doesn't make the ADD COLUMN loop atomic — it's just a connection
-        # scope. Idempotent regardless: a re-run picks up anything not yet added.
+        # doesn't make the ADD COLUMN / CREATE INDEX loops atomic — it's just
+        # a connection scope. Idempotent regardless: a re-run picks up
+        # anything not yet added.
         with engine.begin() as connection:
             self._sync_missing_columns(connection, inspector)
             self._sync_missing_indexes(connection, inspector)
