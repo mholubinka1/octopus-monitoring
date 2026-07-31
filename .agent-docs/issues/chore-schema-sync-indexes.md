@@ -1,5 +1,7 @@
 # Issues: chore-schema-sync-indexes
 
+> Work complete — PR ready to merge. Last acceptance criterion is a post-deploy manual check, left unchecked until performed after this ships and the app restarts in production.
+
 ## Schema Sync creates missing indexes (#452)
 
 **Blocked by**: None
@@ -12,13 +14,13 @@ Declare five missing indexes as SQLAlchemy `Index()` objects in `app/data/mysql/
 
 ### Acceptance criteria
 
-- [ ] All five indexes declared in `model.py` with columns ordered equality-filters-first per the leftmost-prefix rule (`energy`/`region`/`product_code`/`job_name` before the range/order column).
-- [ ] `MariaDBClient._sync_schema` creates any index declared in the model but missing from the live database.
-- [ ] An index that already exists live (by name) is left untouched — never dropped, altered, or recreated.
-- [ ] Test: a stripped schema missing one of the declared indexes gets that index created on `MariaDBClient` construction, verified via `inspect(engine).get_indexes(...)`.
-- [ ] Test: a schema with every index already present is left unchanged and construction doesn't raise.
-- [ ] Test: every declared `Index` compiles as valid MariaDB DDL (dialect-compile check, no live MariaDB needed).
-- [ ] `.agent-docs/context.md`'s Schema Sync entry updated to mention index creation.
+- [x] All five indexes declared in `model.py` with columns ordered equality-filters-first per the leftmost-prefix rule (`energy`/`region`/`product_code`/`job_name` before the range/order column).
+- [x] `MariaDBClient._sync_schema` creates any index declared in the model but missing from the live database.
+- [x] An index that already exists live (by name) is left untouched — never dropped, altered, or recreated.
+- [x] Test: a stripped schema missing one of the declared indexes gets that index created on `MariaDBClient` construction, verified via `inspect(engine).get_indexes(...)`.
+- [x] Test: a schema with every index already present is left unchanged and construction doesn't raise.
+- [x] Test: every declared `Index` compiles as valid MariaDB DDL (dialect-compile check, no live MariaDB needed).
+- [x] `.agent-docs/context.md`'s Schema Sync entry updated to mention index creation.
 - [ ] Post-merge manual check (not a test): after deploying and restarting the app, `EXPLAIN` against production shows indexed access (not `type=ALL`) for the `consumption`⋈`agreement`⋈`product_rate` join.
 
 ---
