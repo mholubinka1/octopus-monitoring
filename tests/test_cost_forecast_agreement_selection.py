@@ -157,7 +157,7 @@ def _source(mariadb: MariaDBClient, meters: list[Meter]) -> _RealCostForecastSou
 def test_no_electricity_meter_raises_a_clear_error(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
     retriever = CostForecastRetriever(_source(mariadb_client, []))
 
     with pytest.raises(RuntimeError, match="[Nn]o electricity meter"):
@@ -168,7 +168,7 @@ def test_no_electricity_meter_raises_a_clear_error(
 def test_no_current_agreement_raises_a_clear_error(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
     lapsed_meter = Electricity(
         mpan="1234567890123",
         serial_number="00A1234567",
@@ -226,7 +226,7 @@ def test_current_agreement_with_a_bounded_valid_to_still_matches(
     # agreement. Mirrors the real account's shape (a lapsed prior agreement
     # plus a bounded current one) so the current one is proven to be selected
     # by range, not merely "the only agreement present".
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
 
     with mariadb_client.session_write_scope() as s:
         _seed_fixed_tariff_agreement_and_rate(s)
@@ -278,7 +278,7 @@ def test_current_agreement_half_open_interval_boundaries(
 ) -> None:
     # valid_from is inclusive, valid_to is exclusive -- otherwise a renewal's
     # first instant would match both the expiring and incoming agreement.
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
     as_of = datetime(2026, 7, 7, tzinfo=UTC)
 
     with mariadb_client.session_write_scope() as s:

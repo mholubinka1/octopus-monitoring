@@ -190,7 +190,7 @@ def _source(mariadb: MariaDBClient, meters: list[Meter]) -> _RealCostForecastSou
 def test_fixed_tariff_actual_cost_and_projection(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -259,7 +259,7 @@ def test_standing_charge_is_charged_exactly_once_per_day_with_a_non_midnight_as_
     # Jul9}, since remaining_days always excludes as_of.date() ("today").
     # 3 + 2 = 5 standing-charge-days total, matching the period length
     # exactly, with today's standing fee counted once, not twice.
-    _mock_billing_period("2026-07-06", "2026-07-10")
+    _mock_billing_period("2026-07-07", "2026-07-11")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -363,7 +363,7 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
     # would produce a visibly different total. UTC 22:00/22:30 on 2026-07-06
     # are the last two half-hourly slots of *local* (BST) 6 July -- local
     # 23:00-00:00.
-    _mock_billing_period("2026-07-06", "2026-07-07")
+    _mock_billing_period("2026-07-07", "2026-07-08")
     _mock_agile_forecast(
         [
             {
@@ -433,7 +433,7 @@ def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
     # boundary. Uses two different flat rates on two different real
     # (non-tiled) remaining days so a window that silently excluded the
     # final day would produce a visibly smaller, wrong total.
-    _mock_billing_period("2026-07-06", "2026-07-08")
+    _mock_billing_period("2026-07-07", "2026-07-09")
     _mock_agile_forecast(
         _flat_agile_prices(date(2026, 7, 7), 1, "10.00")
         + _flat_agile_prices(date(2026, 7, 8), 1, "50.00")
@@ -473,7 +473,7 @@ def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
 def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-07-10")
+    _mock_billing_period("2026-07-07", "2026-07-11")
     _mock_agile_forecast(_flat_agile_prices(date(2026, 7, 6), 7, "15.00"))
 
     with mariadb_client.session_write_scope() as s:
@@ -519,7 +519,7 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
 def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-07-25")
+    _mock_billing_period("2026-07-07", "2026-07-26")
     # Only 7 real days of forecast (Jul6-Jul12) -- the remaining window
     # (Jul7-Jul25, 19 days) needs Jul13-Jul25 (13 days) from tiling.
     _mock_agile_forecast(_flat_agile_prices(date(2026, 7, 6), 7, "15.00"))
@@ -559,7 +559,7 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
 def test_a_zero_consumption_elapsed_day_still_contributes_its_standing_charge(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -619,7 +619,7 @@ def test_a_lag_incomplete_elapsed_day_gets_the_same_gap_fill_as_a_true_zero_day(
     # It must still be excluded and gap-filled identically, and its
     # (large, if wrongly included) partial total must not leak into the
     # projection average.
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -690,7 +690,7 @@ def test_the_only_elapsed_day_being_gap_filled_still_produces_a_forecast(
     # (zero real kWh), so filtering gap-filled days out of the projection
     # average would otherwise leave nothing to average, raising instead of
     # producing a (admittedly rough) forecast.
-    _mock_billing_period("2026-07-06", "2026-08-06")
+    _mock_billing_period("2026-07-07", "2026-08-07")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -740,7 +740,7 @@ def test_the_only_elapsed_day_being_gap_filled_still_produces_a_forecast(
 def test_no_current_product_rate_raises_a_clear_error(
     mariadb_client: MariaDBClient,
 ) -> None:
-    _mock_billing_period("2026-07-06", "2026-07-10")
+    _mock_billing_period("2026-07-07", "2026-07-11")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -797,7 +797,7 @@ def test_no_product_rate_for_a_zero_consumption_elapsed_day_raises_and_writes_no
     # produce a plausible-but-wrong number, matching this file's established
     # "raise rather than guess" philosophy elsewhere (e.g. the current-rate
     # lookup in _project_remaining_cost).
-    _mock_billing_period("2026-07-06", "2026-07-10")
+    _mock_billing_period("2026-07-07", "2026-07-11")
 
     with mariadb_client.session_write_scope() as s:
         s.add(
@@ -923,7 +923,7 @@ def test_agile_predict_unreachable_raises_and_writes_no_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
-    _mock_billing_period("2026-07-06", "2026-07-10")
+    _mock_billing_period("2026-07-07", "2026-07-11")
     responses.add(
         responses.GET,
         AGILE_ENDPOINT,
