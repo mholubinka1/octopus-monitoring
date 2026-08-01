@@ -82,7 +82,10 @@ window, not Kraken's ledger window:
   → asserted `BillingPeriod.start`/`end`). No new seam needed.
 - Every existing date assertion in that file needs updating to the shifted values, per
   the tracer-bullet BDD loop (one assertion/case at a time, not a bulk find-replace):
-  - `test_isFixed_true_uses_the_kraken_end_date_directly`: start `2026-07-06→2026-07-05`,
+  - `test_isFixed_true_uses_the_kraken_end_date_directly` (renamed to
+    `test_isFixed_true_shifts_both_kraken_dates_back_one_day` per Copilot review
+    feedback, since its old name implied a pass-through that no longer happens):
+    start `2026-07-06→2026-07-05`,
     end `2026-08-05→2026-08-04`.
   - `test_isFixed_false_falls_back_to_start_plus_one_calendar_month` (renamed to
     `test_isFixed_false_derives_the_tariff_window_a_day_before_krakens_ledger_dates`,

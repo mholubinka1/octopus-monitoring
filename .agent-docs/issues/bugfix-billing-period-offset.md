@@ -27,7 +27,8 @@ further day — this account's real cycle shape is `[day X, day X−1 of next mo
       day-of-month, minus one further day, clamped to the target month's last valid
       day where applicable.
 - [ ] `tests/test_kraken_billing_period.py`'s existing flexible-billing test cases
-      (`test_isFixed_false_falls_back_to_start_plus_one_calendar_month`,
+      (`test_isFixed_false_derives_the_tariff_window_a_day_before_krakens_ledger_dates`
+      [renamed from `test_isFixed_false_falls_back_to_start_plus_one_calendar_month`],
       `test_isFixed_false_clamps_to_the_last_valid_day_of_a_shorter_month`,
       `test_isFixed_false_clamps_correctly_across_a_leap_year_february`,
       `test_isFixed_false_rolls_over_a_year_boundary`) pass with updated expected
@@ -59,7 +60,7 @@ date) unchanged.
 - [ ] `BillingPeriod.from_billing_options` with `is_fixed=True` returns a start one
       day earlier than the raw `period_start`, and an end one day earlier than the
       raw `period_end`.
-- [ ] `tests/test_kraken_billing_period.py::test_isFixed_true_uses_the_kraken_end_date_directly`
+- [ ] `tests/test_kraken_billing_period.py::test_isFixed_true_shifts_both_kraken_dates_back_one_day`
       passes with updated expected dates.
 - [ ] `tests/test_kraken_billing_period.py::test_isFixed_true_with_no_end_date_raises_rather_than_silently_falling_back`
       still passes unchanged (still raises before returning any date, real or
