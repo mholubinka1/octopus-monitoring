@@ -62,6 +62,7 @@ date) unchanged.
 - [ ] `tests/test_kraken_billing_period.py::test_isFixed_true_uses_the_kraken_end_date_directly`
       passes with updated expected dates.
 - [ ] `tests/test_kraken_billing_period.py::test_isFixed_true_with_no_end_date_raises_rather_than_silently_falling_back`
-      still passes unchanged (raises before any date math).
+      still passes unchanged (still raises before returning any date, real or
+      fabricated).
 
 ---
