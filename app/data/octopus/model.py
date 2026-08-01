@@ -3,7 +3,7 @@ import logging.config
 import re
 from abc import ABC
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 from logging import Logger, getLogger
@@ -51,11 +51,19 @@ class BillingPeriod:
                     'billing"); refusing to guess a fallback date.'
                 )
             return cls(start=period_start, end=period_end)
-        # Flexible billing (isFixed: false) has no fixed end date from
-        # Kraken -- fall back to start + 1 calendar month, same day-of-month,
-        # clamped to the month's last valid day (e.g. the 31st rolling back
-        # to the 28th/29th/30th).
-        return cls(start=period_start, end=_add_one_month_clamped(period_start))
+        # Kraken's currentBillingPeriodStartDate reports the account
+        # statement/ledger window, one day later than the tariff charge
+        # window Octopus actually bills against -- confirmed across 6
+        # consecutive real bills. Flexible billing (isFixed: false) has no
+        # fixed end date from Kraken -- fall back to the adjusted start + 1
+        # calendar month, same day-of-month, clamped to the month's last
+        # valid day, then back one further day: this account's real cycle
+        # shape is [day X, day X-1 of next month], not [day X, day X].
+        adjusted_start = period_start - timedelta(days=1)
+        return cls(
+            start=adjusted_start,
+            end=_add_one_month_clamped(adjusted_start) - timedelta(days=1),
+        )
 
 
 def _add_one_month_clamped(d: date) -> date:

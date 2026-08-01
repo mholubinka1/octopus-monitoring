@@ -56,14 +56,16 @@ def test_isFixed_true_uses_the_kraken_end_date_directly() -> None:
 
 
 @responses.activate
-def test_isFixed_false_falls_back_to_start_plus_one_calendar_month() -> None:
+def test_isFixed_false_derives_the_tariff_window_a_day_before_krakens_ledger_dates() -> (
+    None
+):
     _mock_token_mint()
     _mock_billing_options("2026-07-06", None, is_fixed=False)
 
     billing_period = _client().get_current_billing_period()
 
-    assert billing_period.start == date(2026, 7, 6)
-    assert billing_period.end == date(2026, 8, 6)
+    assert billing_period.start == date(2026, 7, 5)
+    assert billing_period.end == date(2026, 8, 4)
 
 
 @responses.activate
@@ -73,8 +75,8 @@ def test_isFixed_false_clamps_to_the_last_valid_day_of_a_shorter_month() -> None
 
     billing_period = _client().get_current_billing_period()
 
-    assert billing_period.start == date(2026, 1, 31)
-    assert billing_period.end == date(2026, 2, 28)
+    assert billing_period.start == date(2026, 1, 30)
+    assert billing_period.end == date(2026, 2, 27)
 
 
 @responses.activate
@@ -84,7 +86,7 @@ def test_isFixed_false_clamps_correctly_across_a_leap_year_february() -> None:
 
     billing_period = _client().get_current_billing_period()
 
-    assert billing_period.end == date(2028, 2, 29)
+    assert billing_period.end == date(2028, 2, 28)
 
 
 @responses.activate
@@ -94,7 +96,7 @@ def test_isFixed_false_rolls_over_a_year_boundary() -> None:
 
     billing_period = _client().get_current_billing_period()
 
-    assert billing_period.end == date(2027, 1, 15)
+    assert billing_period.end == date(2027, 1, 13)
 
 
 @responses.activate
