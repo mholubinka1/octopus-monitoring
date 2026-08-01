@@ -84,7 +84,9 @@ window, not Kraken's ledger window:
   the tracer-bullet BDD loop (one assertion/case at a time, not a bulk find-replace):
   - `test_isFixed_true_uses_the_kraken_end_date_directly`: start `2026-07-06→2026-07-05`,
     end `2026-08-05→2026-08-04`.
-  - `test_isFixed_false_falls_back_to_start_plus_one_calendar_month`: start
+  - `test_isFixed_false_falls_back_to_start_plus_one_calendar_month` (renamed to
+    `test_isFixed_false_derives_the_tariff_window_a_day_before_krakens_ledger_dates`,
+    since its old name described the pre-fix behavior): start
     `2026-07-06→2026-07-05`, end `2026-08-06→2026-08-04` (two days off the old value —
     one for the start shift, one for the same-day-of-month framing correction).
   - `test_isFixed_false_clamps_to_the_last_valid_day_of_a_shorter_month`: start
