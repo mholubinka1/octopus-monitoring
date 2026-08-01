@@ -51,8 +51,8 @@ def test_isFixed_true_uses_the_kraken_end_date_directly() -> None:
 
     billing_period = _client().get_current_billing_period()
 
-    assert billing_period.start == date(2026, 7, 6)
-    assert billing_period.end == date(2026, 8, 5)
+    assert billing_period.start == date(2026, 7, 5)
+    assert billing_period.end == date(2026, 8, 4)
 
 
 @responses.activate

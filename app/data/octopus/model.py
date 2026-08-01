@@ -42,6 +42,12 @@ class BillingPeriod:
     def from_billing_options(
         cls, period_start: date, period_end: date | None, is_fixed: bool
     ) -> "BillingPeriod":
+        # Kraken's currentBillingPeriodStartDate/EndDate report the account
+        # statement/ledger window, one day later on both ends than the
+        # tariff charge window Octopus actually bills against -- confirmed
+        # across 6 consecutive real bills. Shift the start back a day
+        # before branching so both cases derive from the true tariff start.
+        adjusted_start = period_start - timedelta(days=1)
         if is_fixed:
             if period_end is None:
                 raise ValueError(
@@ -50,16 +56,12 @@ class BillingPeriod:
                     'schema ("Null if the account is on flexible '
                     'billing"); refusing to guess a fallback date.'
                 )
-            return cls(start=period_start, end=period_end)
-        # Kraken's currentBillingPeriodStartDate reports the account
-        # statement/ledger window, one day later than the tariff charge
-        # window Octopus actually bills against -- confirmed across 6
-        # consecutive real bills. Flexible billing (isFixed: false) has no
-        # fixed end date from Kraken -- fall back to the adjusted start + 1
-        # calendar month, same day-of-month, clamped to the month's last
-        # valid day, then back one further day: this account's real cycle
-        # shape is [day X, day X-1 of next month], not [day X, day X].
-        adjusted_start = period_start - timedelta(days=1)
+            return cls(start=adjusted_start, end=period_end - timedelta(days=1))
+        # Flexible billing (isFixed: false) has no fixed end date from
+        # Kraken -- fall back to the adjusted start + 1 calendar month, same
+        # day-of-month, clamped to the month's last valid day, then back one
+        # further day: this account's real cycle shape is [day X, day X-1 of
+        # next month], not [day X, day X].
         return cls(
             start=adjusted_start,
             end=_add_one_month_clamped(adjusted_start) - timedelta(days=1),
