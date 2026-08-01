@@ -168,3 +168,7 @@ config.yml
 
 #testing
 energy-monitor-temp
+
+# Claude Code git worktrees
+/worktrees/
+/.worktrees/
