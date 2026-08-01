@@ -95,7 +95,7 @@ window, not Kraken's ledger window:
     similarly from the adjusted start.
   - `test_isFixed_false_rolls_over_a_year_boundary`: recompute similarly.
   - `test_isFixed_true_with_no_end_date_raises_rather_than_silently_falling_back`:
-    unaffected (raises before any date math).
+    unaffected (still raises before returning any date, real or fabricated).
 - New case: a test asserting the "day X, day X−1 of next month" shape specifically for
   a flexible-billing period whose start is *not* near a month boundary (e.g. the 6th),
   to pin the general (non-clamped) behavior independently from the clamping-specific
