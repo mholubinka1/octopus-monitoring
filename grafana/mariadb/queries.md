@@ -26,6 +26,22 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 **Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: before the fix, the Yesterday's Cost panel showed £6.01 — roughly double the £3.19 the corrected query returns for the same day (the official Octopus app showed £3.25 for that day; that residual gap turned out to be a second, distinct bug — see the local-time convention below and issue #434 for the join-doubling investigation).
 
+**`product_rate` join performance — use a correlated subquery, not a range predicate.** The half-open range predicate above is correct but, against `product_rate` specifically, is a performance trap: MariaDB cannot turn a two-sided open range (`valid_from <= X AND X < valid_to`) into an indexed seek against the composite index `(product_code, region, valid_from, valid_to)`, since it can't know in advance that the windows are non-overlapping. It falls back to a Block Nested Loop join — a full scan of both `consumption` and `product_rate` compared row-by-row. Confirmed live against production (4,199 `consumption` rows × 37,075 `product_rate` rows): the p/kWh Efficiency panel's query, written with the range-predicate join, took **88.9s** (`EXPLAIN` showed `type: ALL` on both tables, even with the index available as a `possible_key`). Rewritten as a correlated subquery — "find the single most-recent `product_rate` row with `valid_from <= X`, `ORDER BY valid_from DESC LIMIT 1`" — the same index supports an actual indexed descent (`EXPLAIN` shows `eq_ref`, 1 row), and the same query returned the same values (row-for-row verified) in **11.8s**. Every panel joining `consumption` to `product_rate` uses this form:
+
+```sql
+JOIN product_rate pr
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
+```
+
+instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply to the `agreement` join (only 7 rows in production — a full scan there is cheap regardless), nor to Price Curve or Cheapest N-Hour Window (both query `product_rate` directly by its own `valid_from`, no interval join against it).
+
 **Local-time convention — group and label by Europe/London, not raw UTC.** `period_from` is stored as true UTC. Any query that groups or labels by calendar day (`DATE(...)`) or hour-of-day (`HOUR(...)`, `DAYNAME(...)`) must first convert to local time: `CONVERT_TZ(period_from, 'UTC', 'Europe/London')`. During BST this shifts the effective day/hour boundary back by an hour from raw UTC — the difference between a UTC calendar day and the local calendar day Octopus's own app (and a UK user) means by "26 July." Confirmed live: this was the second half of the £3.19-vs-£3.25 residual gap above — the corrected join still bucketed by UTC date, one hour off from the local day boundary. `CONVERT_TZ` requires MariaDB's named-timezone tables to be loaded (confirmed present on the production instance); queries that don't group or label by day/hour (e.g. `Half-hourly Cost`, the `Price Curve`) don't need it, since every timestamp comparison in this file is otherwise a plain UTC-to-UTC instant comparison.
 
 **Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
@@ -56,10 +72,14 @@ WITH daily_costs AS (
    AND c.period_from >= a.valid_from
    AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
   JOIN product_rate pr
-    ON pr.product_code = a.product_code
-   AND pr.region = '${region}'
-   AND c.period_from >= pr.valid_from
-   AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
   WHERE c.energy = 'E'
     AND c.period_from >= CURDATE() - INTERVAL 7 DAY
     AND c.period_from < CURDATE()
@@ -164,10 +184,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 ORDER BY c.period_from;
@@ -187,10 +211,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
   AND c.period_from >= NOW() - INTERVAL 90 DAY
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
@@ -319,10 +347,14 @@ FROM (
    AND c.period_from >= a.valid_from
    AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
   JOIN product_rate pr
-    ON pr.product_code = a.product_code
-   AND pr.region = '${region}'
-   AND c.period_from >= pr.valid_from
-   AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 84 DAY
   GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
@@ -377,10 +409,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
@@ -428,10 +464,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
