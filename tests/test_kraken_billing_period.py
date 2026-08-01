@@ -69,6 +69,20 @@ def test_isFixed_false_derives_the_tariff_window_a_day_before_krakens_ledger_dat
 
 
 @responses.activate
+def test_isFixed_false_pins_the_day_before_same_day_next_month_shape() -> None:
+    # A second, independent data point (different month, different
+    # day-of-month, no clamping involved) pinning the general shape:
+    # [day X, day X-1 of next month], not [day X, day X (same)].
+    _mock_token_mint()
+    _mock_billing_options("2026-03-15", None, is_fixed=False)
+
+    billing_period = _client().get_current_billing_period()
+
+    assert billing_period.start == date(2026, 3, 14)
+    assert billing_period.end == date(2026, 4, 13)
+
+
+@responses.activate
 def test_isFixed_false_clamps_to_the_last_valid_day_of_a_shorter_month() -> None:
     _mock_token_mint()
     _mock_billing_options("2026-01-31", None, is_fixed=False)

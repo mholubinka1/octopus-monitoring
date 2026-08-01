@@ -1,5 +1,11 @@
 # Octopus Energy Billing Period API — Research
 
+> **Addendum**: `currentBillingPeriodStartDate`/`currentBillingPeriodEndDate` (see the
+> smoke test below) report Octopus's account statement/ledger window, not the tariff
+> charge window Octopus actually bills against — confirmed one day later on both ends
+> across 6 real bills. `BillingPeriod.from_billing_options` (`app/data/octopus/model.py`)
+> corrects for this; see `.agent-docs/specs/bugfix-billing-period-offset.md`.
+
 ## TL;DR
 
 The REST v1 API this codebase already uses (`OctopusTransport`, `auth=(api_key, "")`)

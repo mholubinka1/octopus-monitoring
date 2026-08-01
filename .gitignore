@@ -169,6 +169,7 @@ config.yml
 #testing
 energy-monitor-temp
 
-# Claude Code git worktrees
-/worktrees/
-/.worktrees/
+# Claude Code git worktrees (EnterWorktree's default in-repo location;
+# worktrees created via an explicit sibling path, as this repo's convention
+# does, live outside the repo tree and need no ignore rule)
+/.claude/worktrees/
