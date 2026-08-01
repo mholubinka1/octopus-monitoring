@@ -115,8 +115,10 @@ the Table version presumably already uses for its 24 hour-columns.
 **SQL** — the transpose of the existing panel's query. Same `WHERE`/window/local-time
 conventions (45-day cap per the file's retention note, `CONVERT_TZ` for local-day/hour
 labelling, no completeness-guard `HAVING` — this panel doesn't need one, same as
-today's version, since each cell already averages across ~6-7 same-weekday-same-hour
-samples spread over the window rather than summing one calendar day, so a single
+today's version, since each cell already averages across twelve or fourteen
+same-weekday-same-hour samples (`consumption` is half-hourly, and 45 days gives each
+weekday six or seven occurrences) spread over the window rather than summing one
+calendar day, so a single
 missing half-hour doesn't invalidate a whole day's bucket the way the daily-total
 panels' guard protects against):
 
