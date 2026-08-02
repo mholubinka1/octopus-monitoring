@@ -1,5 +1,7 @@
 # Issues: feature/grafana-heatmap-panel
 
+> Work complete — PR ready to merge.
+
 ## Rewrite Consumption Heatmap panel as native Grafana Heatmap
 
 **GitHub issue**: #456
@@ -16,11 +18,11 @@ Also rewrite the panel's heading/window label and add explanatory prose: why the
 
 ### Acceptance criteria
 
-- [ ] Query is wide-format: first column `time` (real `DATETIME` via `TIMESTAMP(CURDATE()) + INTERVAL HOUR(...) HOUR`), seven weekday columns (`Monday`...`Sunday`), each `ROUND(AVG(CASE WHEN DAYNAME(...) = '<day>' THEN est_kwh END), 4)`, grouped by hour, ordered by time.
-- [ ] Window is `NOW() - INTERVAL 45 DAY`, not 90 days.
-- [ ] NULL cells (no matching rows for a weekday/hour combination) are left as NULL, not `COALESCE`d to 0.
-- [ ] Panel heading updated to reflect the native Heatmap type and the 45-day window (not "table, colored cells" — this branch never had that workaround; not "90-Day Window").
-- [ ] Prose explains: the wide-format `Calculate: Off` mechanism (first time field = X, each other numeric field = its own Y row), why this panel matters, the 45-day window rationale, the `kWh` unit override via field override, and the Reverse-toggle note for row order.
-- [ ] No changes to any other panel, the shared conventions section, or the "Row 2 lookback windows" paragraph (out of scope — tracked on the separate bugfix branch).
+- [x] Query is wide-format: first column `time` (real `DATETIME` via `TIMESTAMP(CURDATE()) + INTERVAL HOUR(...) HOUR`), seven weekday columns (`Monday`...`Sunday`), each `ROUND(AVG(CASE WHEN DAYNAME(...) = '<day>' THEN est_kwh END), 4)`, grouped by hour, ordered by time.
+- [x] Window is `NOW() - INTERVAL 45 DAY`, not 90 days.
+- [x] NULL cells (no matching rows for a weekday/hour combination) are left as NULL, not `COALESCE`d to 0.
+- [x] Panel heading updated to reflect the native Heatmap type and the 45-day window (not "table, colored cells" — this branch never had that workaround; not "90-Day Window").
+- [x] Prose explains: the wide-format `Calculate: Off` mechanism (first time field = X, each other numeric field = its own Y row), why this panel matters, the 45-day window rationale, the `kWh` unit override via field override, and the Reverse-toggle note for row order.
+- [x] No changes to any other panel, the shared conventions section, or the "Row 2 lookback windows" paragraph (out of scope — tracked on the separate bugfix branch).
 
 ---
