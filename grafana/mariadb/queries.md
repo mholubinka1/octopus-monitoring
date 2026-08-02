@@ -336,18 +336,31 @@ ORDER BY d;
 
 ```
 
-### Consumption Heatmap — Hour × Day-of-Week, 90-Day Window (heatmap)
+### Consumption Heatmap — Hour × Day-of-Week, 45-Day Window (heatmap)
+
+The only panel on the dashboard showing *when in the week* (day and hour together) you use the most electricity — Day-of-Week Average collapses across all 24 hours into one number per day, and none of the time-series panels show a repeating weekly profile at all. Since Agile's cheap/expensive rate windows are also time-of-day and day-of-week correlated, this is the diagnostic view for *where* your usage overlaps with expensive pricing.
+
+Grafana's native Heatmap panel does render this data — the constraint is narrower than "categorical axes aren't supported." With `Calculate from data: Off`, the panel accepts a wide time-series shape: the first time-typed field becomes the X axis, and every other numeric field becomes its own Y-axis row, labelled by that field's column name. So instead of one row per weekday and one column per hour (the shape a Table panel would want), this query is transposed: one row per hour and one column per weekday. `time` is a genuine `DATETIME` — deliberately anchored to *today's* date (`CURDATE()`) purely so the field is time-typed; the date component is discarded visually, only the hour-of-day tick matters, and the panel renders `00:00`–`23:00` ticks natively with zero custom axis formatting as a result. There's no field-mapping UI for any of this in the panel editor — role assignment (which field is X, which are Y-rows) is implicit from the data's shape and typing, not a setting to configure.
+
+`period_from >= NOW() - INTERVAL 45 DAY`, not 90 — `consumption`'s startup backfill only ever pulls `retention_days` (45) of history (see **Retention Window** in `.agent-docs/context.md`), so a 90-day window here would silently return less data than it claims, the same trap the file's other Row 2 panels are separately being fixed for. No completeness-guard `HAVING` clause is needed here, unlike the daily-total panels elsewhere in this file — each cell already averages roughly twelve or fourteen same-weekday-same-hour samples spread over the window (`consumption` is half-hourly, so each hour bucket usually folds two readings per matching day — except on the two UK DST transition days a year, where the skipped/doubled local hour has zero or four readings that day instead, per the same 23-/25-hour local day this file's other panels already guard against; a 45-day window gives each weekday roughly six or seven occurrences (45 = 6×7 + 3, so most splits put three weekdays at seven occurrences and four at six) — though `NOW() - INTERVAL 45 DAY` is a rolling cutoff, not calendar-day-aligned, so which weekdays land on which side of that split shifts depending on where in the week it falls), so one missing half-hour doesn't invalidate a whole cell the way it would invalidate a single day's total. A weekday/hour combination with zero matching rows in the window renders as an empty cell rather than a false zero — deliberate, matching how `AVG(CASE WHEN ...)` already behaves elsewhere in this file.
+
+Set `Calculate from data` to **Off** in the panel editor. Apply the `kWh` custom unit (per the Field-formatting convention above) via a field override with a name-regex matching all seven weekday columns — they don't match the `*_kwh` naming pattern the convention otherwise relies on, so the override needs to name them explicitly. One thing to verify visually once built, not resolvable from Grafana's docs or panel source alone: whether the first value column (`Monday`) renders as the top or bottom row. It should render top — if it comes out reversed, the Heatmap panel's Y-Axis **Reverse** toggle fixes it with no query change.
 
 ```sql
 SELECT
-  DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS day_of_week,
-  HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS hour_of_day,
-  ROUND(AVG(est_kwh), 4) AS avg_kwh
+  TIMESTAMP(CURDATE()) + INTERVAL HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) HOUR AS time,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Monday'    THEN est_kwh END), 4) AS `Monday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Tuesday'   THEN est_kwh END), 4) AS `Tuesday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Wednesday' THEN est_kwh END), 4) AS `Wednesday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Thursday'  THEN est_kwh END), 4) AS `Thursday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Friday'    THEN est_kwh END), 4) AS `Friday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Saturday'  THEN est_kwh END), 4) AS `Saturday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Sunday'    THEN est_kwh END), 4) AS `Sunday`
 FROM consumption
 WHERE energy = 'E'
-  AND period_from >= NOW() - INTERVAL 90 DAY
-GROUP BY DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')), HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
-ORDER BY FIELD(DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'), hour_of_day;
+  AND period_from >= NOW() - INTERVAL 45 DAY
+GROUP BY HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
+ORDER BY time;
 
 ```
 
