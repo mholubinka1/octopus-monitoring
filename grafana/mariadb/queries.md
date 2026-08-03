@@ -26,6 +26,24 @@ cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost
 
 **Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: before the fix, the Yesterday's Cost panel showed £6.01 — roughly double the £3.19 the corrected query returns for the same day (the official Octopus app showed £3.25 for that day; that residual gap turned out to be a second, distinct bug — see the local-time convention below and issue #434 for the join-doubling investigation).
 
+**`product_rate` join performance — use a correlated subquery, not a range predicate.** The half-open range predicate above is correct but, against `product_rate` specifically, is a performance trap: MariaDB cannot turn a two-sided open range (`valid_from <= X AND X < valid_to`) into an indexed seek against the composite index `(product_code, region, valid_from, valid_to)`, since it can't know in advance that the windows are non-overlapping. It falls back to a Block Nested Loop join — a full scan of both `consumption` and `product_rate` compared row-by-row. Confirmed live against production (4,199 `consumption` rows × 37,075 `product_rate` rows): the p/kWh Efficiency panel's query, written with the range-predicate join, took **88.9s** (`EXPLAIN` showed `type: ALL` on both tables, even with the index available as a `possible_key`). Rewritten as a correlated subquery — "find the single most-recent `product_rate` row with `valid_from <= X`, `ORDER BY valid_from DESC LIMIT 1`" — the same index supports an actual indexed descent (`EXPLAIN` shows `eq_ref`, 1 row), and the same query returned the same values (row-for-row verified) in **11.8s**. Every panel joining `consumption` to `product_rate` uses this form:
+
+```sql
+JOIN product_rate pr
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
+```
+
+instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply to the `agreement` join (only 7 rows in production — a full scan there is cheap regardless), nor to Price Curve or Cheapest N-Hour Window (both query `product_rate` directly by its own `valid_from`, no interval join against it).
+
+**Row 2 lookback windows are capped at the retention window (45 days), not 90 days or 12 weeks.** No pruning job actually deletes old `consumption` rows yet (see **Retention Window** in `.agent-docs/context.md`) — the real reason the table is short-lived is that `retention_days` (45) bounds the Startup Backfill's lookback, so the app never fetches more than 45 days of history from Octopus at once. Confirmed live: production's `consumption` table spans exactly 44 days (`2026-06-16` to `2026-07-30`, 4,247 rows as of this measurement — the `4,199`-row figure in the join-performance note above was measured earlier, during that separate investigation; both counts are real, just taken at different times, not a discrepancy). Any query with a longer lookback than that silently returns less data than it appears to ask for, not an error — `NOW() - INTERVAL 90 DAY` or `INTERVAL 84 DAY` against raw `consumption` has never actually returned that much history and won't until a pruning job changes the picture. p/kWh Efficiency, Day-of-Week Average Consumption, both 7-Day Rolling Average panels, the Consumption Heatmap, and both new Daily Cost Trend panels below are all affected; each is written with a 45-day window and a title that says so, rather than a longer one that's silently truncated. Day-of-Week Average and the 7-Day Rolling *Usage* panel could genuinely show a full 12 weeks by reading `daily_consumption_summary` instead (exempt from this cap, per Row 4 below) since they only need daily kWh totals — deliberately not done here, kept on raw `consumption` capped at 45 days like the others, since p/kWh Efficiency, the Rolling *Cost* panel, the Heatmap, and the Daily Cost Trend panels all need half-hourly or rate-joined granularity `daily_consumption_summary` doesn't have and can't be moved regardless; revisit only if these panels genuinely need to be inconsistent with each other's window length.
+
 **Local-time convention — group and label by Europe/London, not raw UTC.** `period_from` is stored as true UTC. Any query that groups or labels by calendar day (`DATE(...)`) or hour-of-day (`HOUR(...)`, `DAYNAME(...)`) must first convert to local time: `CONVERT_TZ(period_from, 'UTC', 'Europe/London')`. During BST this shifts the effective day/hour boundary back by an hour from raw UTC — the difference between a UTC calendar day and the local calendar day Octopus's own app (and a UK user) means by "26 July." Confirmed live: this was the second half of the £3.19-vs-£3.25 residual gap above — the corrected join still bucketed by UTC date, one hour off from the local day boundary. `CONVERT_TZ` requires MariaDB's named-timezone tables to be loaded (confirmed present on the production instance); queries that don't group or label by day/hour (e.g. `Half-hourly Cost`, the `Price Curve`) don't need it, since every timestamp comparison in this file is otherwise a plain UTC-to-UTC instant comparison.
 
 **Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
@@ -56,10 +74,14 @@ WITH daily_costs AS (
    AND c.period_from >= a.valid_from
    AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
   JOIN product_rate pr
-    ON pr.product_code = a.product_code
-   AND pr.region = '${region}'
-   AND c.period_from >= pr.valid_from
-   AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
   WHERE c.energy = 'E'
     AND c.period_from >= CURDATE() - INTERVAL 7 DAY
     AND c.period_from < CURDATE()
@@ -75,6 +97,87 @@ SELECT date, cost_gbp AS yesterday_cost_gbp
 FROM daily_costs
 ORDER BY date DESC
 LIMIT 1;
+
+```
+
+### Daily Cost Trend — Last 45 Days (stat, line graph)
+
+Distinct from Yesterday's Cost above: that panel answers "what did yesterday cost," searching back up to 7 days for the most recent complete day. This one is a Stat panel with `Graph mode: Line` for its sparkline, reduced with `Last (not null)` over the full 45-day series, so the headline number is whichever complete day is most recent within that longer window — visually similar but a different reducer target, and one that can silently land further back than 7 days if there's a longer gap in `consumption`.
+
+Because the completeness guard (see p/kWh Efficiency panel below) excludes any partial day, the "last" point in this series is not reliably "yesterday" — pair this panel with **Daily Cost Trend — As Of Date** below so the displayed number is never mistaken for a more recent day than it actually is.
+
+```sql
+WITH daily_costs AS (
+  SELECT
+    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
+    ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
+  FROM consumption c
+  JOIN agreement a
+    ON a.energy = c.energy
+   AND c.period_from >= a.valid_from
+   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+  JOIN product_rate pr
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
+  WHERE c.energy = 'E'
+    AND c.period_from >= CURDATE() - INTERVAL 45 DAY
+    AND c.period_from < CURDATE()
+  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
+  -- Completeness guard: see p/kWh Efficiency panel below for the rationale
+  -- and why this isn't a fixed 48.
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
+)
+SELECT time, cost_gbp
+FROM daily_costs
+ORDER BY time;
+
+```
+
+### Daily Cost Trend — As Of Date (stat, text)
+
+Companion to the panel above — same underlying series, but reduced down to just the date of its most recent complete day. Placed as a small text Stat panel next to/under the main one (`Text mode: Value`, no unit, `Fields: as_of_date`) so the headline cost is never shown without the day it belongs to. Reuses the identical CTE (guard included) rather than reading back the other panel's result, since Grafana panels can't share a query.
+
+```sql
+WITH daily_costs AS (
+  SELECT
+    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
+    ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
+  FROM consumption c
+  JOIN agreement a
+    ON a.energy = c.energy
+   AND c.period_from >= a.valid_from
+   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+  JOIN product_rate pr
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
+  WHERE c.energy = 'E'
+    AND c.period_from >= CURDATE() - INTERVAL 45 DAY
+    AND c.period_from < CURDATE()
+  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
+  -- Completeness guard: see p/kWh Efficiency panel below for the rationale
+  -- and why this isn't a fixed 48.
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
+)
+SELECT MAX(time) AS as_of_date
+FROM daily_costs;
 
 ```
 
@@ -164,10 +267,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 ORDER BY c.period_from;
@@ -187,12 +294,16 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
-  AND c.period_from >= NOW() - INTERVAL 90 DAY
+  AND c.period_from >= NOW() - INTERVAL 45 DAY
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
 -- Completeness guard: Octopus's settlement lag means a day can still be
 -- missing rows more than 24 hours after it ends -- exclude it rather than
@@ -258,7 +369,7 @@ ORDER BY FIELD(window_size, '30 min', '1 hour', '2 hours', '3 hours', '4 hours',
 
 ```
 
-### Day-of-Week Average Consumption — Last 12 Weeks (bar chart)
+### Day-of-Week Average Consumption — Last 45 Days (bar chart)
 
 ```sql
 SELECT
@@ -268,7 +379,7 @@ FROM (
   SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh
   FROM consumption
   WHERE energy = 'E'
-    AND period_from >= NOW() - INTERVAL 84 DAY
+    AND period_from >= NOW() - INTERVAL 45 DAY
   GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
@@ -281,7 +392,7 @@ ORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','S
 
 ```
 
-### Daily Average Usage — 7-Day Rolling Average, 12 Weeks (time series)
+### Daily Average Usage — 7-Day Rolling Average, 45 Days (time series)
 
 ```sql
 SELECT
@@ -291,7 +402,7 @@ FROM (
   SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh
   FROM consumption
   WHERE energy = 'E'
-    AND period_from >= NOW() - INTERVAL 84 DAY
+    AND period_from >= NOW() - INTERVAL 45 DAY
   GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
@@ -303,7 +414,7 @@ ORDER BY d;
 
 ```
 
-### Daily Average Cost — 7-Day Rolling Average, 12 Weeks (time series)
+### Daily Average Cost — 7-Day Rolling Average, 45 Days (time series)
 
 ```sql
 SELECT
@@ -319,12 +430,16 @@ FROM (
    AND c.period_from >= a.valid_from
    AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
   JOIN product_rate pr
-    ON pr.product_code = a.product_code
-   AND pr.region = '${region}'
-   AND c.period_from >= pr.valid_from
-   AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
   WHERE c.energy = 'E'
-    AND c.period_from >= NOW() - INTERVAL 84 DAY
+    AND c.period_from >= NOW() - INTERVAL 45 DAY
   GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
   -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
@@ -377,10 +492,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
@@ -428,10 +547,14 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'G'
   AND $__timeFilter(c.period_from)
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
