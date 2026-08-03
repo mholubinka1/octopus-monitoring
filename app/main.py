@@ -28,6 +28,7 @@ logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 CONSUMPTION_REFRESH_JOB = "consumption_refresh"
+CONSUMPTION_BACKFILL_JOB = "consumption_backfill"
 PRICING_REFRESH_JOB = "pricing_refresh"
 WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
 PRUNE_OLD_DATA_JOB = "prune_old_data"
@@ -39,13 +40,17 @@ DAILY_JOB_TIME = "04:00"  # shared by every daily/weekly-cadence job, so
 # docker-compose.yml, which only enables watchtower via container labels.
 
 
+def _retention_window_start(retention_days: int) -> dt:
+    current_time = dt.now(datetime.UTC)
+    limit = (current_time - timedelta(days=retention_days)).date()
+    return dt(limit.year, limit.month, limit.day, tzinfo=datetime.UTC)
+
+
 def startup(
     consumption: ConsumptionRetriever,
     refresh_config: RefreshSettings,
 ) -> None:
-    current_time = dt.now(datetime.UTC)
-    limit = (current_time - timedelta(days=refresh_config.retention)).date()
-    limit_dt = dt(limit.year, limit.month, limit.day, tzinfo=datetime.UTC)
+    limit_dt = _retention_window_start(refresh_config.retention)
     logger.info(f"Startup. Retrieving consumption history from {limit_dt}.")
     consumption.retrieve(period_from=limit_dt)
 
@@ -166,6 +171,26 @@ def register_jobs(
     )
 
 
+def register_consumption_backfill_job(
+    scheduler: Scheduler,
+    refresh_config: RefreshSettings,
+    consumption: ConsumptionRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    def backfill() -> None:
+        consumption.retrieve(
+            period_from=_retention_window_start(refresh_config.retention)
+        )
+
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every().day.at(DAILY_JOB_TIME),
+        CONSUMPTION_BACKFILL_JOB,
+        backfill,
+        mariadb,
+    )
+
+
 def register_pricing_job(
     scheduler: Scheduler,
     refresh_config: RefreshSettings,
@@ -270,6 +295,9 @@ def main() -> None:
     run_initial_consumption_summary_sync(consumption_summary)
     run_initial_cost_forecast_sync(cost_forecast)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
+    register_consumption_backfill_job(
+        default_scheduler, refresh_config, consumption, client.mariadb
+    )
     register_pricing_job(default_scheduler, refresh_config, pricing, client.mariadb)
     register_consumption_summary_job(
         default_scheduler, consumption_summary, pruner, client.mariadb

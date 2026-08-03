@@ -1,4 +1,7 @@
+import datetime
 import threading
+from datetime import datetime as dt
+from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -14,6 +17,7 @@ from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from data.pruning import DataPruner
 from main import (
+    register_consumption_backfill_job,
     register_consumption_summary_job,
     register_cost_forecast_refresh_job,
     register_jobs,
@@ -428,3 +432,88 @@ def test_a_persistently_failing_backfill_retries_with_backoff_and_does_not_crash
         runs = session.query(model.job_run).all()
     assert len(runs) == 5
     assert all(run.status == "failure" for run in runs)
+
+
+def test_consumption_backfill_job_is_registered_daily_at_0400(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+
+    job = register_consumption_backfill_job(
+        scheduler, REFRESH_CONFIG, Mock(spec=ConsumptionRetriever), mariadb_client
+    )
+
+    assert job.unit == "days"
+    assert str(job.at_time) == "04:00:00"
+
+
+def test_a_successful_backfill_run_calls_retrieve_and_is_recorded_as_successful(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    consumption = Mock(spec=ConsumptionRetriever)
+
+    job = register_consumption_backfill_job(
+        scheduler, REFRESH_CONFIG, consumption, mariadb_client
+    )
+    job.run().join()
+
+    consumption.retrieve.assert_called_once()
+    consumption.refresh.assert_not_called()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = (
+            session.query(model.job_run)
+            .filter_by(job_name="consumption_backfill")
+            .all()
+        )
+
+    assert len(runs) == 1
+    assert runs[0].status == "success"
+
+
+def test_a_backfill_run_retrieves_from_the_start_of_the_retention_window(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    consumption = Mock(spec=ConsumptionRetriever)
+
+    before = dt.now(datetime.UTC) - timedelta(days=REFRESH_CONFIG.retention)
+    job = register_consumption_backfill_job(
+        scheduler, REFRESH_CONFIG, consumption, mariadb_client
+    )
+    job.run().join()
+    after = dt.now(datetime.UTC) - timedelta(days=REFRESH_CONFIG.retention)
+
+    _, kwargs = consumption.retrieve.call_args
+    period_from = kwargs["period_from"]
+    assert before.date() <= period_from.date() <= after.date()
+
+
+def test_a_persistently_failing_backfill_retries_with_exponential_backoff(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sleep_delays: list[int] = []
+    monkeypatch.setattr("common.decorator.time.sleep", sleep_delays.append)
+    scheduler = Scheduler()
+    consumption = Mock(spec=ConsumptionRetriever)
+    consumption.retrieve.side_effect = RuntimeError("Octopus API unavailable")
+
+    job = register_consumption_backfill_job(
+        scheduler, REFRESH_CONFIG, consumption, mariadb_client
+    )
+    job.run().join()
+
+    assert sleep_delays == [60, 120, 240, 480]
+    assert consumption.retrieve.call_count == 5
+
+    with mariadb_client.session_read_scope() as session:
+        runs = (
+            session.query(model.job_run)
+            .filter_by(job_name="consumption_backfill")
+            .all()
+        )
+
+    assert len(runs) == 5
+    assert all(run.status == "failure" for run in runs)
+    assert all(run.error_message == "Octopus API unavailable" for run in runs)
