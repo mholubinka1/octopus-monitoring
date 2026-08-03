@@ -1,5 +1,7 @@
 # Issues: feature-periodic-consumption-backfill
 
+> Work complete — PR ready to merge.
+
 ## Register periodic consumption_backfill job
 
 **Issue**: #459
@@ -16,10 +18,10 @@ Update `.agent-docs/context.md`'s **Startup Backfill** and **Consumption Backfil
 
 ### Acceptance criteria
 
-- [ ] The job is registered daily at `DAILY_JOB_TIME` (`job.unit == "days"`, `str(job.at_time) == "04:00:00"`).
-- [ ] A successful run calls `ConsumptionRetriever.retrieve(period_from=...)` (not `.refresh()`), with `period_from` reflecting the configured `retention_days`, recomputed at call time rather than frozen at registration.
-- [ ] The run records a successful `job_run` row under the job name `consumption_backfill`.
-- [ ] A persistently failing run retries with exponential backoff (same backoff shape as the other jobs) and records failure `job_run` rows under `consumption_backfill`.
-- [ ] `startup()` is refactored to use the same shared `period_from` helper, with no behavior change to `startup()` itself.
+- [x] The job is registered daily at `DAILY_JOB_TIME` (`job.unit == "days"`, `str(job.at_time) == "04:00:00"`).
+- [x] A successful run calls `ConsumptionRetriever.retrieve(period_from=...)` (not `.refresh()`), with `period_from` reflecting the configured `retention_days`, recomputed at call time rather than frozen at registration.
+- [x] The run records a successful `job_run` row under the job name `consumption_backfill`.
+- [x] A persistently failing run retries with exponential backoff (same backoff shape as the other jobs) and records failure `job_run` rows under `consumption_backfill`.
+- [x] `startup()` is refactored to use the same shared `period_from` helper, with no behavior change to `startup()` itself.
 
 ---
