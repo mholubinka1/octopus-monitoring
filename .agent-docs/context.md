@@ -75,8 +75,12 @@ _Avoid_: the time-series DB (when referring to the current system)
 ### Scheduling and Retrieval
 
 **Startup Backfill**:
-The historical consumption retrieval run on every process start, bounded by `retention_days` (default 400) — not one-time: `ConsumptionRetriever`'s last-retrieved watermark is in-memory only, so this re-runs in full on every restart, not just the first ever run.
+The historical consumption retrieval run on every process start, bounded by `retention_days` (default 400) — not one-time: `ConsumptionRetriever`'s last-retrieved watermark is in-memory only, so this re-runs in full on every restart, not just the first ever run. The same full-window call is also made periodically by the **Consumption Backfill Job**, so it is no longer restart-only.
 _Avoid_: initial sync, bootstrap, one-time sync
+
+**Consumption Backfill Job**:
+A daily job (`consumption_backfill`, `DAILY_JOB_TIME`) that re-runs the Startup Backfill's full-retention-window `ConsumptionRetriever.retrieve()` call, so a day that fell behind the Refresh Loop's cursor, or a permanent gap Octopus never backfills, self-heals on a fixed cadence rather than only at process restart. See [ADR-0011](adr/0011-periodic-consumption-backfill-full-window-reuse.md).
+_Avoid_: gap filler, consumption repair job
 
 **Refresh Loop**:
 The recurring poll of the Octopus API, driven by the `schedule` library on the configured `refresh_interval_hours`.
