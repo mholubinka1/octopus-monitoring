@@ -1,5 +1,7 @@
 # Issues: bugfix/grafana-query-slow-cost-join
 
+> Work complete — PR ready to merge.
+
 ## Fix retention-window claims and add Daily Cost Trend panels
 
 **GitHub issue**: #462
@@ -16,11 +18,11 @@ Note: the join-performance fix itself (range-predicate → correlated-subquery j
 
 ### Acceptance criteria
 
-- [ ] Shared "Row 2 lookback windows..." paragraph present exactly once, explaining the 45-day ceiling.
-- [ ] p/kWh Efficiency, Day-of-Week Average Consumption, and both 7-Day Rolling Average panels all use `INTERVAL 45 DAY` (not 90 or 84), with titles updated to say "45 Days".
-- [ ] "Daily Cost Trend — Last 45 Days" panel added: Stat panel, line-graph sparkline, `Last (not null)` reducer, correlated-subquery join, completeness guard, 45-day window.
-- [ ] "Daily Cost Trend — As Of Date" panel added: companion Stat panel, same underlying CTE, reduced to `MAX(time) AS as_of_date`.
-- [ ] No range-predicate join against `product_rate` remains anywhere in the file (verify via grep for `pr.valid_to`/`>= pr.valid_from`).
-- [ ] Consumption Heatmap panel unchanged from its PR #458-merged state.
+- [x] Shared "Row 2 lookback windows..." paragraph present exactly once, explaining the 45-day ceiling.
+- [x] p/kWh Efficiency, Day-of-Week Average Consumption, and both 7-Day Rolling Average panels all use `INTERVAL 45 DAY` (not 90 or 84), with titles updated to say "45 Days".
+- [x] "Daily Cost Trend — Last 45 Days" panel added: Stat panel, line-graph sparkline, `Last (not null)` reducer, correlated-subquery join, completeness guard, 45-day window.
+- [x] "Daily Cost Trend — As Of Date" panel added: companion Stat panel, same underlying CTE, reduced to `MAX(time) AS as_of_date`.
+- [x] No range-predicate join against `product_rate` remains anywhere in the file (verify via grep for `pr.valid_to`/`>= pr.valid_from`).
+- [x] Consumption Heatmap panel unchanged from its PR #458-merged state.
 
 ---
