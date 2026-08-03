@@ -46,13 +46,21 @@ def _retention_window_start(retention_days: int) -> dt:
     return dt(limit.year, limit.month, limit.day, tzinfo=datetime.UTC)
 
 
-def startup(
+def _retrieve_full_window(
+    label: str,
     consumption: ConsumptionRetriever,
     refresh_config: RefreshSettings,
 ) -> None:
     limit_dt = _retention_window_start(refresh_config.retention)
-    logger.info(f"Startup. Retrieving consumption history from {limit_dt}.")
+    logger.info(f"{label} Retrieving consumption history from {limit_dt}.")
     consumption.retrieve(period_from=limit_dt)
+
+
+def startup(
+    consumption: ConsumptionRetriever,
+    refresh_config: RefreshSettings,
+) -> None:
+    _retrieve_full_window("Startup.", consumption, refresh_config)
 
 
 def run_initial_pricing_sync(pricing: PricingRetriever) -> None:
@@ -178,9 +186,7 @@ def register_consumption_backfill_job(
     mariadb: MariaDBClient,
 ) -> Job:
     def backfill() -> None:
-        consumption.retrieve(
-            period_from=_retention_window_start(refresh_config.retention)
-        )
+        _retrieve_full_window("Consumption backfill.", consumption, refresh_config)
 
     return _schedule_refresh_job(
         scheduler,
@@ -295,6 +301,11 @@ def main() -> None:
     run_initial_consumption_summary_sync(consumption_summary)
     run_initial_cost_forecast_sync(cost_forecast)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
+    # consumption_backfill shares `consumption`'s in-memory cursor with
+    # consumption_refresh above, so their background threads can genuinely
+    # overlap. Left unguarded, same reasoning as the backfill/eager-sync race
+    # above: both compute a correct cursor from idempotent upserts, so
+    # whichever finishes last is still right. See ADR-0011.
     register_consumption_backfill_job(
         default_scheduler, refresh_config, consumption, client.mariadb
     )

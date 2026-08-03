@@ -472,22 +472,30 @@ def test_a_successful_backfill_run_calls_retrieve_and_is_recorded_as_successful(
     assert runs[0].status == "success"
 
 
-def test_a_backfill_run_retrieves_from_the_start_of_the_retention_window(
-    mariadb_client: MariaDBClient,
+def test_a_backfill_run_recomputes_period_from_at_call_time_not_registration(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     scheduler = Scheduler()
     consumption = Mock(spec=ConsumptionRetriever)
+    current_time = dt(2026, 1, 1, tzinfo=datetime.UTC)
 
-    before = dt.now(datetime.UTC) - timedelta(days=REFRESH_CONFIG.retention)
+    class FrozenDatetime(dt):
+        @classmethod
+        def now(cls, tz: datetime.tzinfo | None = None) -> dt:  # type: ignore[override]
+            return current_time
+
+    monkeypatch.setattr("main.dt", FrozenDatetime)
+
     job = register_consumption_backfill_job(
         scheduler, REFRESH_CONFIG, consumption, mariadb_client
     )
+
+    current_time = dt(2026, 6, 1, tzinfo=datetime.UTC)
     job.run().join()
-    after = dt.now(datetime.UTC) - timedelta(days=REFRESH_CONFIG.retention)
 
     _, kwargs = consumption.retrieve.call_args
-    period_from = kwargs["period_from"]
-    assert before.date() <= period_from.date() <= after.date()
+    expected = (current_time - timedelta(days=REFRESH_CONFIG.retention)).date()
+    assert kwargs["period_from"].date() == expected
 
 
 def test_a_persistently_failing_backfill_retries_with_exponential_backoff(
