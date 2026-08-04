@@ -155,7 +155,7 @@ ORDER BY c.period_from;
 
 ### Agile Prices: Today/Tomorrow (Actual + Forecast) — timeseries, id 3
 
-No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below 0p, green from 0p, yellow from 10p, semi-dark-orange from 20p, red from 25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above).
+No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below 0p, green from 0p, yellow from 10p, semi-dark-orange from 20p, red from 25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above). The forecast branch excludes any half-hour `product_rate` already has a row for, preferring the actual rate over `agile_forecast` wherever both exist — same precedence rule as the Cheapest Time Window table below, applied here so the panel never plots two conflicting points for one timestamp (e.g. during an `agile_forecast` refresh outage, where stale forecast rows would otherwise linger alongside newly-published actual rates for the same slots).
 
 ```sql
 SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
@@ -173,9 +173,21 @@ AND valid_from >= CURDATE()
 UNION ALL
 
 SELECT period_from AS time, forecast_unit_rate AS rate_pence_per_kwh, 'forecast' AS series
-FROM agile_forecast
-WHERE region = '${region}'
-  AND period_from >= NOW()
+FROM agile_forecast f
+WHERE f.region = '${region}'
+  AND f.period_from >= NOW()
+  AND NOT EXISTS (
+    SELECT 1 FROM product_rate pr2
+    WHERE pr2.product_code = (
+      SELECT product_code FROM agreement
+      WHERE energy = 'E'
+        AND valid_from <= NOW()
+        AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')
+      ORDER BY valid_from DESC LIMIT 1
+    )
+    AND pr2.region = '${region}'
+    AND pr2.valid_from = f.period_from
+  )
 ORDER BY time;
 ```
 
