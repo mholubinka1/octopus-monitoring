@@ -33,7 +33,7 @@ cost_forecast               (live) id, billing_period_start, billing_period_end,
 
 **Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: before the fix, the Yesterday's Cost panel showed £6.01 — roughly double the £3.19 the corrected query returns for the same day (the official Octopus app showed £3.25 for that day; that residual gap turned out to be a second, distinct bug — see the local-time convention below and issue #434 for the join-doubling investigation).
 
-**`product_rate` join performance — use a correlated subquery, not a range predicate.** The half-open range predicate above is correct but, against `product_rate` specifically, is a performance trap: MariaDB cannot turn a two-sided open range (`valid_from <= X AND X < valid_to`) into an indexed seek against the composite index `(product_code, region, valid_from, valid_to)`, since it can't know in advance that the windows are non-overlapping. It falls back to a Block Nested Loop join — a full scan of both `consumption` and `product_rate` compared row-by-row. Confirmed live against production (4,199 `consumption` rows × 37,075 `product_rate` rows): a range-predicate join against this table took **88.9s** (`EXPLAIN` showed `type: ALL` on both tables, even with the index available as a `possible_key`). Rewritten as a correlated subquery — "find the single most-recent `product_rate` row with `valid_from <= X`, `ORDER BY valid_from DESC LIMIT 1`" — the same index supports an actual indexed descent (`EXPLAIN` shows `eq_ref`, 1 row), and the same query returned the same values (row-for-row verified) in **11.8s**. Most panels joining `consumption` to `product_rate` use this form:
+**`product_rate` join performance — use a correlated subquery, not a range predicate.** The half-open range predicate above is correct but, against `product_rate` specifically, is a performance trap: MariaDB cannot turn a two-sided open range (`valid_from <= X AND X < valid_to`) into an indexed seek against the composite index `(product_code, region, valid_from, valid_to)`, since it can't know in advance that the windows are non-overlapping. It falls back to a Block Nested Loop join — a full scan of both `consumption` and `product_rate` compared row-by-row. Confirmed live against production (4,199 `consumption` rows × 37,075 `product_rate` rows): a range-predicate join against this table took **88.9s** (`EXPLAIN` showed `type: ALL` on both tables, even with the index available as a `possible_key`). Rewritten as a correlated subquery — "find the single most-recent `product_rate` row with `valid_from <= X`, `ORDER BY valid_from DESC LIMIT 1`" — the same index supports an actual indexed descent (`EXPLAIN` shows `eq_ref`, 1 row), and the same query returned the same values (row-for-row verified) in **11.8s**. Every panel joining `consumption` to `product_rate` uses this form:
 
 ```sql
 JOIN product_rate pr
@@ -47,7 +47,7 @@ JOIN product_rate pr
   )
 ```
 
-instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply to the `agreement` join (only 7 rows in production — a full scan there is cheap regardless), nor to Agile Prices or the Cheapest Time Window table (both query `product_rate` directly by its own `valid_from`, no interval join against it). **One panel still deviates from this**: see the callout on **Latest Consumption** (query B) below — `Yesterday's Cost (Electricity)` had the same issue and has since been fixed.
+instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply to the `agreement` join (only 7 rows in production — a full scan there is cheap regardless), nor to Agile Prices or the Cheapest Time Window table (both query `product_rate` directly by its own `valid_from`, no interval join against it). Every panel joining `consumption` to `product_rate` now uses this form — `Yesterday's Cost (Electricity)` and `Latest Consumption` (query B) both previously used the slow range-predicate form and have since been fixed.
 
 **Row 2 lookback windows are capped at the retention window (45 days), not 90 days or 12 weeks.** No pruning job actually deletes old `consumption` rows yet (see **Retention Window** in `.agent-docs/context.md`) — the real reason the table is short-lived is that `retention_days` (45) bounds the Startup Backfill's lookback, so the app never fetches more than 45 days of history from Octopus at once. Any query with a longer lookback than that silently returns less data than it appears to ask for, not an error. Panels below that read raw `consumption` are written with a 45-day window for this reason. Monthly Total Consumption and the Year-on-Year panel read `daily_consumption_summary` instead (exempt from this cap) since they only need daily kWh totals.
 
@@ -56,7 +56,7 @@ instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply 
 **Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
 
 - Cost columns already converted to pounds (`cost_gbp`, `*_cost_gbp`) → Grafana's currency (GBP, £) unit (`currencyGBP`).
-- Rate columns still in pence/kWh (`rate_pence_per_kwh`, `rate`, etc.) → a custom unit of `p/kWh` — these are deliberately *not* divided by 100, unlike the cost columns above, so don't apply the GBP unit to them. **The Agile Prices panel's unit was `p/kw` (missing the `h`), now corrected to `p/kwh`** — worth double-checking the casing matches the exact custom unit string used elsewhere on the dashboard next time that panel's open in the editor, since Grafana custom unit strings are compared verbatim.
+- Rate columns still in pence/kWh (`rate_pence_per_kwh`, `rate`, etc.) → a custom unit of `p/kwh` (lowercase — this is the exact string the live Agile Prices panel uses, corrected from an earlier `p/kw` typo; Grafana custom unit strings are compared verbatim, so use this exact casing rather than `p/kWh` if adding the unit to any other panel) — these are deliberately *not* divided by 100, unlike the cost columns above, so don't apply the GBP unit to them.
 - Energy columns (`*_kwh`, `est_kwh`) → a custom unit of `kWh` (`kwatth`).
 - Percentage-change columns → Grafana's percent unit.
 
@@ -138,20 +138,24 @@ JOIN agreement a
  AND c.period_from >= a.valid_from
  AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
 JOIN product_rate pr
-  ON pr.product_code = a.product_code
- AND pr.region = '${region}'
- AND c.period_from >= pr.valid_from
- AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
 WHERE c.energy = 'E'
   AND $__timeFilter(c.period_from)
 ORDER BY c.period_from;
 ```
 
-Query B has the same range-predicate-join deviation noted on Yesterday's Cost above — worth the same re-timing check.
+**Fixed**: Query B previously used the plain range-predicate join against `product_rate` — the same 88.9s-class pattern already fixed on Yesterday's Cost. Rewritten to the correlated-subquery form used everywhere else.
 
 ### Agile Prices: Today/Tomorrow (Actual + Forecast) — timeseries, id 3
 
-No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below £0, green from £0, yellow from £10p, semi-dark-orange from £20p, red from £25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kw` (see the field-formatting convention note above — should be `p/kWh`).
+No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below £0, green from £0, yellow from £10p, semi-dark-orange from £20p, red from £25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above).
 
 ```sql
 SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
