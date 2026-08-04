@@ -155,7 +155,7 @@ ORDER BY c.period_from;
 
 ### Agile Prices: Today/Tomorrow (Actual + Forecast) — timeseries, id 3
 
-No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below £0, green from £0, yellow from £10p, semi-dark-orange from £20p, red from £25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above).
+No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below 0p, green from 0p, yellow from 10p, semi-dark-orange from 20p, red from 25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above).
 
 ```sql
 SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
@@ -240,7 +240,7 @@ ORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','S
 
 ### Cheapest Time Window — table, id 13
 
-**No panel title** — cleared intentionally (see the "remove a panel title" note in project history); identifiable only by its field override renaming `window_size` → "Cheapest Time Window", and by the heading below.
+**No panel title** — cleared intentionally (see the "remove a panel title" note in project history); identifiable only by its field override renaming `window_size` → "Cheapest Time Window", and by the heading below. Represented in `dashboard.json` as an explicit `"title": ""` rather than an omitted key, so the blank title round-trips reliably through Grafana's export/import rather than depending on unspecified default behaviour for a missing field.
 
 4 rows (`1h`/`2h`/`3h`/`4h` block sizes) × 3 columns (`24hrs`/`3days`/`5days` lookahead horizons — the middle column was renamed from `72hrs` to `3days`, same underlying 3-day cutoff, just relabeled once the dashboard's own forward window settled at 48h rather than 72h), wide-format like the Heatmap below. `product_rate` only reliably covers ~1–2 days ahead (Octopus publishes Agile rates the evening before), so the 3-day/5-day columns fall back to `agile_forecast` for any half-hour beyond what's actually been published, preferring actual rates over forecast wherever both exist. A window only counts for a horizon if it fits entirely inside it. Colour-coding is baked into the cell text itself as an emoji (🔵/🟢/🟡/🟠/🔴) rather than via Grafana thresholds, since Table panels can't apply numeric threshold-based cell colouring to a field whose displayed value is a composed string (time + rate) — SQL-side colouring sidesteps that limitation entirely and is portable across Grafana versions. Bands: `<0` blue, `[0,10)` green, `[10,20)` yellow, `[20,25]` orange, `>25` red. Field override renames `window_size` → "Cheapest Time Window". Assumes no gaps in the half-hourly series (actual or forecast) — a missing slot shifts a window's average incorrectly. Ties (identical average rate) are broken arbitrarily by whichever row MariaDB returns first from `ORDER BY ... LIMIT 1`.
 
