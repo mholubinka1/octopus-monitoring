@@ -1,0 +1,1721 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_MYSQL",
+      "label": "mysql",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "mysql",
+      "pluginName": "MySQL"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "barchart",
+      "name": "Bar chart",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.4.2"
+    },
+    {
+      "type": "panel",
+      "id": "heatmap",
+      "name": "Heatmap",
+      "version": ""
+    },
+    {
+      "type": "datasource",
+      "id": "mysql",
+      "name": "MySQL",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "max": 19,
+          "min": -1,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "orange",
+                "value": 4
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "currencyGBP"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_gbp"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,\r\n  ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp\r\nFROM consumption c\r\nJOIN agreement a\r\n  ON a.energy = c.energy\r\n AND c.period_from >= a.valid_from\r\n AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')\r\nJOIN product_rate pr\r\n  ON pr.id = (\r\n    SELECT pr2.id FROM product_rate pr2\r\n    WHERE pr2.product_code = a.product_code\r\n      AND pr2.region = '${region}'\r\n      AND pr2.valid_from <= c.period_from\r\n    ORDER BY pr2.valid_from DESC\r\n    LIMIT 1\r\n  )\r\nWHERE c.energy = 'E'\r\n  AND c.period_from >= CURDATE() - INTERVAL 45 DAY\r\n  AND c.period_from < CURDATE()\r\nGROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))\r\nHAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,\r\n  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),\r\n  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')\r\n) / 30\r\nORDER BY time;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "45d",
+      "title": "Yesterday's Cost (Electricity)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "semi-dark-orange",
+                "value": 80
+              },
+              {
+                "color": "dark-red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "currencyGBP"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "billing_period_cost_gbp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Current Spend"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "projected_cost_gbp"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Projected Spend"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 5,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "displayMode": "lcd",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "max"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp\r\nFROM cost_forecast\r\nORDER BY computed_at DESC\r\nLIMIT 1;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Billing Period Progress ($billing_period_start → $billing_period_end)",
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "applyTo": {
+              "id": "byName",
+              "options": "billing_period_cost_gbp"
+            },
+            "configRefId": "A",
+            "mappings": [
+              {
+                "fieldName": "billing_period_cost_gbp",
+                "handlerKey": "field.name",
+                "reducerId": "max"
+              }
+            ]
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {}
+        }
+      ],
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": -1,
+            "drawStyle": "line",
+            "fillOpacity": 52,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "kwatth"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyGBP"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 5,
+        "x": 9,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT period_from AS time, est_kwh\r\nFROM consumption\r\nWHERE energy = 'E'\r\n  AND $__timeFilter(period_from)\r\nORDER BY period_from;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "hide": false,
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  c.period_from AS time,\r\n  ROUND(c.est_kwh * pr.unit_rate / 100, 4) AS cost_gbp\r\nFROM consumption c\r\nJOIN agreement a\r\n  ON a.energy = c.energy\r\n AND c.period_from >= a.valid_from\r\n AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')\r\nJOIN product_rate pr\r\n  ON pr.product_code = a.product_code\r\n AND pr.region = '${region}'\r\n AND c.period_from >= pr.valid_from\r\n AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')\r\nWHERE c.energy = 'E'\r\n  AND $__timeFilter(c.period_from)\r\nORDER BY c.period_from;",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "48h",
+      "title": "Latest Consumption",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "semi-dark-blue",
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "series",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 1,
+            "drawStyle": "bars",
+            "fillOpacity": 0,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 6,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "light-blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "semi-dark-orange",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "p/kwh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 0
+      },
+      "hideTimeOverride": false,
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series\r\nFROM product_rate\r\nWHERE product_code = (\r\n  SELECT product_code FROM agreement\r\n  WHERE energy = 'E'\r\n    AND valid_from <= NOW()\r\n    AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')\r\n  ORDER BY valid_from DESC LIMIT 1\r\n)\r\nAND region = '${region}'\r\nAND valid_from >= CURDATE()\r\n\r\nUNION ALL\r\n\r\nSELECT period_from AS time, forecast_unit_rate AS rate_pence_per_kwh, 'forecast' AS series\r\nFROM agile_forecast\r\nWHERE region = '${region}'\r\n  AND period_from >= NOW()\r\nORDER BY time;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Agile Prices: Today/Tomorrow (Actual + Forecast)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisGridShow": true,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 51,
+          "min": -50,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "blue",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 7
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,\r\n  ROUND(\r\n    (AVG(pr.unit_rate) - (SUM(c.est_kwh * pr.unit_rate) / NULLIF(SUM(c.est_kwh), 0)))\r\n      / NULLIF(AVG(pr.unit_rate), 0) * 100,\r\n    2\r\n  ) AS load_shift_efficiency_pct\r\nFROM consumption c\r\nJOIN agreement a\r\n  ON a.energy = c.energy\r\n AND c.period_from >= a.valid_from\r\n AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')\r\nJOIN product_rate pr\r\n  ON pr.id = (\r\n    SELECT pr2.id FROM product_rate pr2\r\n    WHERE pr2.product_code = a.product_code\r\n      AND pr2.region = '${region}'\r\n      AND pr2.valid_from <= c.period_from\r\n    ORDER BY pr2.valid_from DESC\r\n    LIMIT 1\r\n  )\r\nWHERE c.energy = 'E'\r\n  AND c.period_from >= NOW() - INTERVAL 45 DAY\r\nGROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))\r\nHAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,\r\n  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),\r\n  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')\r\n) / 30\r\nORDER BY time;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "45d",
+      "title": "Load Shift Efficiency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "series",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 40,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 8
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "dark-red",
+                "value": 15
+              }
+            ]
+          },
+          "unit": "kwatth"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 8,
+        "y": 7
+      },
+      "id": 6,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  DAYNAME(d) AS day_of_week,\r\n  ROUND(AVG(daily_kwh), 3) AS avg_kwh\r\nFROM (\r\n  SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh\r\n  FROM consumption\r\n  WHERE energy = 'E'\r\n    AND period_from >= NOW() - INTERVAL 45 DAY\r\n  GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))\r\n  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,\r\n    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),\r\n    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')\r\n  ) / 30\r\n) daily\r\nGROUP BY DAYNAME(d)\r\nORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday');\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "45d",
+      "title": "Average Consumption Per Day",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "window_size"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cheapest Time Window"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 10,
+        "x": 14,
+        "y": 9
+      },
+      "id": 13,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH current_agreement AS (\r\n  SELECT product_code FROM agreement\r\n  WHERE energy = 'E'\r\n    AND valid_from <= NOW()\r\n    AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')\r\n  ORDER BY valid_from DESC LIMIT 1\r\n),\r\nactual_rates AS (\r\n  SELECT valid_from AS time, unit_rate AS rate\r\n  FROM product_rate\r\n  WHERE product_code = (SELECT product_code FROM current_agreement)\r\n    AND region = '${region}'\r\n    AND valid_from >= NOW()\r\n    AND valid_from < NOW() + INTERVAL 5 DAY\r\n),\r\nforecast_rates AS (\r\n  SELECT f.period_from AS time, f.forecast_unit_rate AS rate\r\n  FROM agile_forecast f\r\n  WHERE f.region = '${region}'\r\n    AND f.period_from >= NOW()\r\n    AND f.period_from < NOW() + INTERVAL 5 DAY\r\n    AND NOT EXISTS (SELECT 1 FROM actual_rates a WHERE a.time = f.period_from)\r\n),\r\nrates AS (\r\n  SELECT time, rate FROM actual_rates\r\n  UNION ALL\r\n  SELECT time, rate FROM forecast_rates\r\n),\r\nwindows AS (\r\n  SELECT\r\n    time AS window_start,\r\n    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS avg_1h,\r\n    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 3 FOLLOWING) AS avg_2h,\r\n    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 5 FOLLOWING) AS avg_3h,\r\n    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 7 FOLLOWING) AS avg_4h\r\n  FROM rates\r\n)\r\nSELECT\r\n  '1h' AS window_size,\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_1h < 0 THEN '🔵' WHEN avg_1h < 10 THEN '🟢' WHEN avg_1h < 20 THEN '🟡' WHEN avg_1h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_1h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 1 HOUR <= NOW() + INTERVAL 1 DAY\r\n   ORDER BY avg_1h ASC LIMIT 1) AS `24hrs`,\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_1h < 0 THEN '🔵' WHEN avg_1h < 10 THEN '🟢' WHEN avg_1h < 20 THEN '🟡' WHEN avg_1h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_1h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 1 HOUR <= NOW() + INTERVAL 3 DAY\r\n   ORDER BY avg_1h ASC LIMIT 1) AS `3days`,\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_1h < 0 THEN '🔵' WHEN avg_1h < 10 THEN '🟢' WHEN avg_1h < 20 THEN '🟡' WHEN avg_1h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_1h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 1 HOUR <= NOW() + INTERVAL 5 DAY\r\n   ORDER BY avg_1h ASC LIMIT 1) AS `5days`\r\n\r\nUNION ALL\r\n\r\nSELECT\r\n  '2h',\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_2h < 0 THEN '🔵' WHEN avg_2h < 10 THEN '🟢' WHEN avg_2h < 20 THEN '🟡' WHEN avg_2h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_2h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 2 HOUR <= NOW() + INTERVAL 1 DAY\r\n   ORDER BY avg_2h ASC LIMIT 1),\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_2h < 0 THEN '🔵' WHEN avg_2h < 10 THEN '🟢' WHEN avg_2h < 20 THEN '🟡' WHEN avg_2h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_2h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 2 HOUR <= NOW() + INTERVAL 3 DAY\r\n   ORDER BY avg_2h ASC LIMIT 1),\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_2h < 0 THEN '🔵' WHEN avg_2h < 10 THEN '🟢' WHEN avg_2h < 20 THEN '🟡' WHEN avg_2h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_2h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 2 HOUR <= NOW() + INTERVAL 5 DAY\r\n   ORDER BY avg_2h ASC LIMIT 1)\r\n\r\nUNION ALL\r\n\r\nSELECT\r\n  '3h',\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_3h < 0 THEN '🔵' WHEN avg_3h < 10 THEN '🟢' WHEN avg_3h < 20 THEN '🟡' WHEN avg_3h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_3h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 3 HOUR <= NOW() + INTERVAL 1 DAY\r\n   ORDER BY avg_3h ASC LIMIT 1),\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_3h < 0 THEN '🔵' WHEN avg_3h < 10 THEN '🟢' WHEN avg_3h < 20 THEN '🟡' WHEN avg_3h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_3h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 3 HOUR <= NOW() + INTERVAL 3 DAY\r\n   ORDER BY avg_3h ASC LIMIT 1),\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_3h < 0 THEN '🔵' WHEN avg_3h < 10 THEN '🟢' WHEN avg_3h < 20 THEN '🟡' WHEN avg_3h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_3h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 3 HOUR <= NOW() + INTERVAL 5 DAY\r\n   ORDER BY avg_3h ASC LIMIT 1)\r\n\r\nUNION ALL\r\n\r\nSELECT\r\n  '4h',\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_4h < 0 THEN '🔵' WHEN avg_4h < 10 THEN '🟢' WHEN avg_4h < 20 THEN '🟡' WHEN avg_4h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_4h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 4 HOUR <= NOW() + INTERVAL 1 DAY\r\n   ORDER BY avg_4h ASC LIMIT 1),\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_4h < 0 THEN '🔵' WHEN avg_4h < 10 THEN '🟢' WHEN avg_4h < 20 THEN '🟡' WHEN avg_4h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_4h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 4 HOUR <= NOW() + INTERVAL 3 DAY\r\n   ORDER BY avg_4h ASC LIMIT 1),\r\n  (SELECT CONCAT(\r\n     CASE WHEN avg_4h < 0 THEN '🔵' WHEN avg_4h < 10 THEN '🟢' WHEN avg_4h < 20 THEN '🟡' WHEN avg_4h <= 25 THEN '🟠' ELSE '🔴' END,\r\n     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_4h, 2), 'p'\r\n   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 4 HOUR <= NOW() + INTERVAL 5 DAY\r\n   ORDER BY avg_4h ASC LIMIT 1)\r\n\r\nORDER BY FIELD(window_size, '1h', '2h', '3h', '4h');\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 10,
+        "x": 0,
+        "y": 15
+      },
+      "hideTimeOverride": true,
+      "id": 12,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "cellValues": {
+          "unit": "kwatth"
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "min": 0,
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "RdYlGn",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "mode": "single",
+          "showColorScale": false,
+          "yHistogram": false
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": true
+        }
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  TIMESTAMP(CURDATE()) + INTERVAL HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) HOUR AS time,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Monday'    THEN est_kwh END), 4) AS `Monday`,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Tuesday'   THEN est_kwh END), 4) AS `Tuesday`,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Wednesday' THEN est_kwh END), 4) AS `Wednesday`,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Thursday'  THEN est_kwh END), 4) AS `Thursday`,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Friday'    THEN est_kwh END), 4) AS `Friday`,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Saturday'  THEN est_kwh END), 4) AS `Saturday`,\r\n  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Sunday'    THEN est_kwh END), 4) AS `Sunday`\r\nFROM consumption\r\nWHERE energy = 'E'\r\n  AND period_from >= NOW() - INTERVAL 45 DAY\r\nGROUP BY HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))\r\nORDER BY time;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "now/d",
+      "timeShift": "0d/d",
+      "title": "Consumption Heatmap (Hour-by-Hour, Last 45 Days)",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "semi-dark-purple",
+            "mode": "shades"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 22,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "kwatth"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 7,
+        "x": 10,
+        "y": 15
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY) AS time,\r\n  SUM(total_kwh) AS monthly_kwh\r\nFROM daily_consumption_summary\r\nWHERE energy = 'E'\r\n  AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')\r\nGROUP BY DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)\r\nORDER BY time;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "365d",
+      "title": "Monthly Total Consumption",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 9,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "super-light-red",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "yoy_pct_change_4wk_avg"
+            },
+            "properties": [
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Rolling Average"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "yoy_pct_change"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Week-by-Week Percentage Change"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 7,
+        "x": 17,
+        "y": 15
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH weekly AS (\r\n  SELECT YEARWEEK(date, 3) AS yearweek, SUM(total_kwh) AS weekly_kwh\r\n  FROM daily_consumption_summary\r\n  WHERE energy = 'E'\r\n  GROUP BY YEARWEEK(date, 3)\r\n  HAVING COUNT(*) = 7\r\n),\r\ntarget AS (\r\n  SELECT\r\n    yearweek,\r\n    weekly_kwh AS this_year_kwh,\r\n    CASE\r\n      WHEN MOD(yearweek, 100) = 53\r\n       AND (yearweek - 100) NOT IN (SELECT yearweek FROM weekly)\r\n      THEN (yearweek - 100) - 1\r\n      ELSE yearweek - 100\r\n    END AS comparator_yearweek\r\n  FROM weekly\r\n  WHERE yearweek >= YEARWEEK(CURDATE() - INTERVAL 52 WEEK, 3)\r\n)\r\nSELECT\r\n  STR_TO_DATE(CONCAT(t.yearweek, ' Monday'), '%x%v %W') AS time,\r\n  ROUND((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100, 2) AS yoy_pct_change,\r\n  ROUND(\r\n    AVG((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100)\r\n      OVER (ORDER BY t.yearweek ROWS BETWEEN 3 PRECEDING AND CURRENT ROW),\r\n    2\r\n  ) AS yoy_pct_change_4wk_avg\r\nFROM target t\r\nLEFT JOIN weekly c ON c.yearweek = t.comparator_yearweek\r\nORDER BY t.yearweek;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "365d",
+      "title": "Consumption Year-on-Year Percentage Change",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 50,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "min": -1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              },
+              {
+                "color": "yellow",
+                "value": 3
+              },
+              {
+                "color": "orange",
+                "value": 4
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "unit": "currencyGBP"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 7,
+        "x": 10,
+        "y": 23
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  d AS time,\r\n  ROUND(AVG(daily_cost) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS rolling_avg_cost_gbp\r\nFROM (\r\n  SELECT\r\n    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS d,\r\n    (SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100 AS daily_cost\r\n  FROM consumption c\r\n  JOIN agreement a\r\n    ON a.energy = c.energy\r\n   AND c.period_from >= a.valid_from\r\n   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')\r\n  JOIN product_rate pr\r\n    ON pr.id = (\r\n      SELECT pr2.id FROM product_rate pr2\r\n      WHERE pr2.product_code = a.product_code\r\n        AND pr2.region = '${region}'\r\n        AND pr2.valid_from <= c.period_from\r\n      ORDER BY pr2.valid_from DESC\r\n      LIMIT 1\r\n    )\r\n  WHERE c.energy = 'E'\r\n    AND c.period_from >= NOW() - INTERVAL 45 DAY\r\n  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))\r\n  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,\r\n    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),\r\n    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')\r\n  ) / 30\r\n) daily\r\nORDER BY d;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "45d",
+      "title": "Daily Average Cost (Rolling 7-Day Window)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "series",
+            "axisGridShow": false,
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 41,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "decimals": 0,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 8
+              },
+              {
+                "color": "orange",
+                "value": 12
+              },
+              {
+                "color": "red",
+                "value": 15
+              }
+            ]
+          },
+          "unit": "kwatth"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 7,
+        "x": 17,
+        "y": 23
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  d AS time,\r\n  ROUND(AVG(daily_kwh) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 3) AS rolling_avg_kwh\r\nFROM (\r\n  SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh\r\n  FROM consumption\r\n  WHERE energy = 'E'\r\n    AND period_from >= NOW() - INTERVAL 45 DAY\r\n  GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))\r\n  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,\r\n    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),\r\n    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')\r\n  ) / 30\r\n) daily\r\nORDER BY d;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "45d",
+      "title": "Daily Average Usage (Rolling 7-Day Window)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30m",
+  "schemaVersion": 39,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "mysql",
+          "uid": "${DS_MYSQL}"
+        },
+        "definition": "SELECT DISTINCT region FROM product_rate;",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Region",
+        "multi": false,
+        "name": "region",
+        "options": [],
+        "query": "SELECT DISTINCT region FROM product_rate;",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "mysql",
+          "uid": "${DS_MYSQL}"
+        },
+        "definition": "SELECT DATE_FORMAT(billing_period_start, '%Y-%m-%d') AS billing_period_start\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "description": "",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "billing_period_start",
+        "options": [],
+        "query": "SELECT DATE_FORMAT(billing_period_start, '%Y-%m-%d') AS billing_period_start\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "mysql",
+          "uid": "${DS_MYSQL}"
+        },
+        "definition": "SELECT DATE_FORMAT(billing_period_end, '%Y-%m-%d') AS billing_period_end\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "billing_period_end",
+        "options": [],
+        "query": "SELECT DATE_FORMAT(billing_period_end, '%Y-%m-%d') AS billing_period_end\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now+48h"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "pi-desktop: octopus-energy",
+  "uid": "afu5ghhf1e29sb",
+  "version": 19,
+  "weekStart": ""
+}

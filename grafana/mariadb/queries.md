@@ -1,12 +1,19 @@
 # Grafana Queries
 
-One SQL block per panel, grouped by dashboard row, meant to be copied directly into Grafana's MySQL/MariaDB query editor. Mirrors the convention used in `pi-desktop/monitoring/grafana/influxdb2/flux_queries` (one query per panel, comment/heading identifying the panel), adapted to Markdown with fenced SQL blocks.
+One SQL block per panel, documenting the live dashboard. Reconciled directly against [`grafana/dashboard.json`](../dashboard.json) — a full export of the dashboard's JSON model — rather than against the specs, so this file now describes what's actually deployed, not just what was planned. Re-sync both files together whenever the dashboard changes; this doc and the JSON export are meant to never drift apart again.
 
-**Status**: reconciled with the current `feature/agile-cost-forecast` and `feature/grafana-dashboard` specs (`.agent-docs/specs/`) — the tariff-comparison feature these queries originally assumed has been dropped entirely; queries below reflect that. Validate against the real schema once implementation lands — table/column names here are the spec input, not yet built (except `consumption`, `agreement`, `product`, `product_rate`, `job_run`, `daily_consumption_summary`, which already exist).
+**Status**: `agile_forecast` and `cost_forecast` are confirmed live and in use (no longer spec-only) — `cost_forecast` backs both the Billing Period Progress panel and the `billing_period_start`/`billing_period_end` dashboard variables; `agile_forecast` backs Agile Prices and the Cheapest Time Window table. The tariff-comparison feature these queries originally assumed was dropped entirely and never came back. The Gas row and Health row documented in earlier revisions of this file are **no longer part of the dashboard** — see the callout at the bottom of this file before assuming that was intentional.
 
-One Grafana dashboard variable is assumed throughout:
+Three Grafana dashboard variables are defined (`templating.list` in the JSON):
 
-- `${region}` — the account's GSP region code (see **Region Code / GSP** in `.agent-docs/context.md`)
+- `${region}` — the account's GSP region code (see **Region Code / GSP** in `.agent-docs/context.md`). Query: `SELECT DISTINCT region FROM product_rate;`
+- `${billing_period_start}` / `${billing_period_end}` — pulled live from the most recent `cost_forecast` row (`ORDER BY computed_at DESC LIMIT 1`), formatted `YYYY-MM-DD`. Not consumed by any panel query — they're interpolated directly into the **Billing Period Progress** panel's title so the billing window is visible without a separate table panel.
+
+**Dashboard-level time range**: `from: now-3h`, `to: now+48h`, `refresh: 30m`. This is what actually gives the Agile Prices panel its forward lookahead — not a panel-level `timeFrom`/`timeShift` override (Grafana's per-panel relative-time override can only push the *start* earlier; it always hardcodes the end to literal "now", so it structurally cannot show forecast data past the current moment). Setting the dashboard's own default range to end at `now+48h` sidesteps that limitation entirely, since the ceiling only applies to panel-level overrides, not the dashboard's own top-level range. Any panel that needs a *different, fixed* window from this shared default carries its own `timeFrom`/`timeShift` (documented per panel below).
+
+**Note on the lookahead figure**: earlier in this dashboard's design, the explicit requirement was a 72-hour Agile Prices lookahead. The live JSON now has `to: now+48h`, not `+72h`. This may be a deliberate later adjustment made directly in Grafana, or an unintended regression from some other edit — worth confirming which before treating 48h as the final answer. The Cheapest Time Window table's `5days` column still independently reaches 5 days out via `agile_forecast` regardless of this dashboard-level setting, since that panel is a Table with no time axis. (Its middle column was renamed `72hrs` → `3days` for this reason — the old label implied a specific hour-count no longer aligned with the dashboard's own 48h window; see that panel below.)
+
+**Datasource portability fixed**: this export uses Grafana's "export for sharing externally" format — every panel references the datasource as `${DS_MYSQL}` (an `__inputs`-declared placeholder), not a hardcoded UID. Earlier exports hardcoded the literal datasource UID (`aftel9qlylts0e`), which would have broken on any Grafana instance where that UID didn't already exist (e.g. after a full rebuild where the MySQL datasource gets re-added with a new random UID, since it's not provisioned via YAML). Importing this JSON now prompts for a datasource mapping instead of silently failing. Dashboard `uid` is now `afu5ghhf1e29sb`, `version: 19`.
 
 ## Schema assumed
 
@@ -17,16 +24,16 @@ product                   (existing) product_code PK, display_name, direction
 product_rate              (existing) id, product_code, region, valid_from, valid_to, unit_rate, standing_charge
 job_run                   (existing) id, job_name, status, ran_at, error_message
 daily_consumption_summary (existing) energy, date PK(energy, date), total_kwh
-agile_forecast   (new) id, region, period_from, period_to, forecast_unit_rate, fetched_at
-cost_forecast    (new) id, billing_period_start, billing_period_end, actual_cost_to_date,
-                        projected_total_cost, computed_at
+agile_forecast             (live) id, region, period_from, period_to, forecast_unit_rate, fetched_at
+cost_forecast               (live) id, billing_period_start, billing_period_end, actual_cost_to_date,
+                                    projected_total_cost, computed_at
 ```
 
 `agile_forecast` caches the raw half-hourly AgilePredict response (real 14-day forecast only) for charting. `cost_forecast` is the billing-period-level summary the app computes once daily (actual cost so far + full-period projection, using tiled forecast data internally beyond day 14 — that tiling isn't persisted point-by-point, only the summary is).
 
 **Join convention — half-open windows only.** Any query joining `consumption` to `product_rate` or `agreement` on a `valid_from`/`valid_to` window must use a half-open range: `c.period_from >= valid_from AND c.period_from < COALESCE(valid_to, '9999-12-31 23:59:59')`. Never `BETWEEN valid_from AND COALESCE(valid_to, '9999-12-31 23:59:59')` (inclusive on both ends) — `consumption.period_from` sits on the exact same half-hourly grid as these windows, and adjacent windows are back-to-back (one row's `valid_to` equals the next row's `valid_from`), so an inclusive-both-ends join matches a consumption row against *two* rate rows instead of one, silently doubling every `SUM(est_kwh * unit_rate)` in the query. Confirmed live: before the fix, the Yesterday's Cost panel showed £6.01 — roughly double the £3.19 the corrected query returns for the same day (the official Octopus app showed £3.25 for that day; that residual gap turned out to be a second, distinct bug — see the local-time convention below and issue #434 for the join-doubling investigation).
 
-**`product_rate` join performance — use a correlated subquery, not a range predicate.** The half-open range predicate above is correct but, against `product_rate` specifically, is a performance trap: MariaDB cannot turn a two-sided open range (`valid_from <= X AND X < valid_to`) into an indexed seek against the composite index `(product_code, region, valid_from, valid_to)`, since it can't know in advance that the windows are non-overlapping. It falls back to a Block Nested Loop join — a full scan of both `consumption` and `product_rate` compared row-by-row. Confirmed live against production (4,199 `consumption` rows × 37,075 `product_rate` rows): the p/kWh Efficiency panel's query, written with the range-predicate join, took **88.9s** (`EXPLAIN` showed `type: ALL` on both tables, even with the index available as a `possible_key`). Rewritten as a correlated subquery — "find the single most-recent `product_rate` row with `valid_from <= X`, `ORDER BY valid_from DESC LIMIT 1`" — the same index supports an actual indexed descent (`EXPLAIN` shows `eq_ref`, 1 row), and the same query returned the same values (row-for-row verified) in **11.8s**. Every panel joining `consumption` to `product_rate` uses this form:
+**`product_rate` join performance — use a correlated subquery, not a range predicate.** The half-open range predicate above is correct but, against `product_rate` specifically, is a performance trap: MariaDB cannot turn a two-sided open range (`valid_from <= X AND X < valid_to`) into an indexed seek against the composite index `(product_code, region, valid_from, valid_to)`, since it can't know in advance that the windows are non-overlapping. It falls back to a Block Nested Loop join — a full scan of both `consumption` and `product_rate` compared row-by-row. Confirmed live against production (4,199 `consumption` rows × 37,075 `product_rate` rows): a range-predicate join against this table took **88.9s** (`EXPLAIN` showed `type: ALL` on both tables, even with the index available as a `possible_key`). Rewritten as a correlated subquery — "find the single most-recent `product_rate` row with `valid_from <= X`, `ORDER BY valid_from DESC LIMIT 1`" — the same index supports an actual indexed descent (`EXPLAIN` shows `eq_ref`, 1 row), and the same query returned the same values (row-for-row verified) in **11.8s**. Most panels joining `consumption` to `product_rate` use this form:
 
 ```sql
 JOIN product_rate pr
@@ -40,182 +47,111 @@ JOIN product_rate pr
   )
 ```
 
-instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply to the `agreement` join (only 7 rows in production — a full scan there is cheap regardless), nor to Price Curve or Cheapest N-Hour Window (both query `product_rate` directly by its own `valid_from`, no interval join against it).
+instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply to the `agreement` join (only 7 rows in production — a full scan there is cheap regardless), nor to Agile Prices or the Cheapest Time Window table (both query `product_rate` directly by its own `valid_from`, no interval join against it). **One panel still deviates from this**: see the callout on **Latest Consumption** (query B) below — `Yesterday's Cost (Electricity)` had the same issue and has since been fixed.
 
-**Row 2 lookback windows are capped at the retention window (45 days), not 90 days or 12 weeks.** No pruning job actually deletes old `consumption` rows yet (see **Retention Window** in `.agent-docs/context.md`) — the real reason the table is short-lived is that `retention_days` (45) bounds the Startup Backfill's lookback, so the app never fetches more than 45 days of history from Octopus at once. Confirmed live: production's `consumption` table spans exactly 44 days (`2026-06-16` to `2026-07-30`, 4,247 rows as of this measurement — the `4,199`-row figure in the join-performance note above was measured earlier, during that separate investigation; both counts are real, just taken at different times, not a discrepancy). Any query with a longer lookback than that silently returns less data than it appears to ask for, not an error — `NOW() - INTERVAL 90 DAY` or `INTERVAL 84 DAY` against raw `consumption` has never actually returned that much history and won't until a pruning job changes the picture. p/kWh Efficiency, Day-of-Week Average Consumption, both 7-Day Rolling Average panels, the Consumption Heatmap, and both new Daily Cost Trend panels below are all affected; each is written with a 45-day window and a title that says so, rather than a longer one that's silently truncated. Day-of-Week Average and the 7-Day Rolling *Usage* panel could genuinely show a full 12 weeks by reading `daily_consumption_summary` instead (exempt from this cap, per Row 4 below) since they only need daily kWh totals — deliberately not done here, kept on raw `consumption` capped at 45 days like the others, since p/kWh Efficiency, the Rolling *Cost* panel, the Heatmap, and the Daily Cost Trend panels all need half-hourly or rate-joined granularity `daily_consumption_summary` doesn't have and can't be moved regardless; revisit only if these panels genuinely need to be inconsistent with each other's window length.
+**Row 2 lookback windows are capped at the retention window (45 days), not 90 days or 12 weeks.** No pruning job actually deletes old `consumption` rows yet (see **Retention Window** in `.agent-docs/context.md`) — the real reason the table is short-lived is that `retention_days` (45) bounds the Startup Backfill's lookback, so the app never fetches more than 45 days of history from Octopus at once. Any query with a longer lookback than that silently returns less data than it appears to ask for, not an error. Panels below that read raw `consumption` are written with a 45-day window for this reason. Monthly Total Consumption and the Year-on-Year panel read `daily_consumption_summary` instead (exempt from this cap) since they only need daily kWh totals.
 
-**Local-time convention — group and label by Europe/London, not raw UTC.** `period_from` is stored as true UTC. Any query that groups or labels by calendar day (`DATE(...)`) or hour-of-day (`HOUR(...)`, `DAYNAME(...)`) must first convert to local time: `CONVERT_TZ(period_from, 'UTC', 'Europe/London')`. During BST this shifts the effective day/hour boundary back by an hour from raw UTC — the difference between a UTC calendar day and the local calendar day Octopus's own app (and a UK user) means by "26 July." Confirmed live: this was the second half of the £3.19-vs-£3.25 residual gap above — the corrected join still bucketed by UTC date, one hour off from the local day boundary. `CONVERT_TZ` requires MariaDB's named-timezone tables to be loaded (confirmed present on the production instance); queries that don't group or label by day/hour (e.g. `Half-hourly Cost`, the `Price Curve`) don't need it, since every timestamp comparison in this file is otherwise a plain UTC-to-UTC instant comparison.
+**Local-time convention — group and label by Europe/London, not raw UTC.** `period_from` is stored as true UTC. Any query that groups or labels by calendar day (`DATE(...)`) or hour-of-day (`HOUR(...)`, `DAYNAME(...)`) must first convert to local time: `CONVERT_TZ(period_from, 'UTC', 'Europe/London')`. During BST this shifts the effective day/hour boundary back by an hour from raw UTC. `CONVERT_TZ` requires MariaDB's named-timezone tables to be loaded (confirmed present on the production instance); queries that don't group or label by day/hour don't need it, since every other timestamp comparison in this file is a plain UTC-to-UTC instant comparison.
 
 **Field-formatting convention.** Set Grafana's field unit per column, per category, rather than leaving raw numbers unformatted:
 
-- Cost columns already converted to pounds (`cost_gbp`, `*_cost_gbp`) → Grafana's currency (GBP, £) unit.
-- Rate columns still in pence/kWh (`rate_pence_per_kwh`, `rate`, `your_avg_rate`, `day_avg_rate`) → a custom unit of `p/kWh` — these are deliberately *not* divided by 100, unlike the cost columns above, so don't apply the GBP unit to them.
-- Energy columns (`*_kwh`, `est_kwh`) → a custom unit of `kWh`.
-- Percentage-change columns (`yoy_pct_change`, `yoy_pct_change_4wk_avg`) → Grafana's percent unit.
+- Cost columns already converted to pounds (`cost_gbp`, `*_cost_gbp`) → Grafana's currency (GBP, £) unit (`currencyGBP`).
+- Rate columns still in pence/kWh (`rate_pence_per_kwh`, `rate`, etc.) → a custom unit of `p/kWh` — these are deliberately *not* divided by 100, unlike the cost columns above, so don't apply the GBP unit to them. **The Agile Prices panel's unit was `p/kw` (missing the `h`), now corrected to `p/kwh`** — worth double-checking the casing matches the exact custom unit string used elsewhere on the dashboard next time that panel's open in the editor, since Grafana custom unit strings are compared verbatim.
+- Energy columns (`*_kwh`, `est_kwh`) → a custom unit of `kWh` (`kwatth`).
+- Percentage-change columns → Grafana's percent unit.
 
 ---
 
 ## Row 1 — Cost Summary
 
-### Yesterday's Cost (stat, two fields: date + cost)
+### Yesterday's Cost (Electricity) — timeseries, id 1
 
-No dependency on billing period — pure join against data already fully populated by the existing pipeline. `unit_rate`/`standing_charge` are stored in pence/kWh and pence/day respectively (Octopus's own convention, never converted on ingest) — divide by 100 to get GBP.
+**Redesigned from a Stat panel to a genuine Timeseries.** Previously this was a Stat panel (`Graph mode: Area`, `Calcs: Last (not null)`) paired with a separate "As Of" companion panel just to show which date the reducer had landed on — necessary because a Stat panel's big number has no inherent date context. Now that it's a real Timeseries, the date is visible directly (axis/tooltip), so the **As Of panel (former id 11) has been removed entirely** rather than fixed further. `timeFrom: 45d` (panel-level override, independent of the dashboard's shared `-3h`/`+48h` range). `noValue: "0"`.
 
-Not actually always "yesterday" — Octopus's settlement lag means yesterday can still be incomplete, so this searches back up to 7 days for the most recent complete (48-row) day and returns its date alongside its cost, rather than silently mislabeling an older day as "yesterday." If no day within the last 7 days is complete, the panel returns no data.
+Thresholds changed to match the same blue/green/yellow/orange/red band style used elsewhere on this dashboard (Load Shift Efficiency, Cheapest Time Window): blue below £1, green from £1, yellow from £3, orange from £4, red from £5 (previously just green/amber/red at £3/£5). `min: -1` (was `0`), `max: 19`. `thresholdsStyle: area` renders the bands as a coloured background rather than just axis colouring. A field override forces the `cost_gbp` series line itself to a fixed purple colour, independent of the threshold-driven background.
 
-```sql
-WITH daily_costs AS (
-  SELECT
-    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS date,
-    ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
-  FROM consumption c
-  JOIN agreement a
-    ON a.energy = c.energy
-   AND c.period_from >= a.valid_from
-   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-  JOIN product_rate pr
-    ON pr.id = (
-      SELECT pr2.id FROM product_rate pr2
-      WHERE pr2.product_code = a.product_code
-        AND pr2.region = '${region}'
-        AND pr2.valid_from <= c.period_from
-      ORDER BY pr2.valid_from DESC
-      LIMIT 1
-    )
-  WHERE c.energy = 'E'
-    AND c.period_from >= CURDATE() - INTERVAL 7 DAY
-    AND c.period_from < CURDATE()
-  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
-  -- Completeness guard: see p/kWh Efficiency panel below for the rationale
-  -- and why this isn't a fixed 48.
-  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-    CONVERT_TZ(CAST(date AS DATETIME), 'Europe/London', 'UTC'),
-    CONVERT_TZ(CAST(date + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-  ) / 30
-)
-SELECT date, cost_gbp AS yesterday_cost_gbp
-FROM daily_costs
-ORDER BY date DESC
-LIMIT 1;
-
-```
-
-### Daily Cost Trend — Last 45 Days (stat, line graph)
-
-Distinct from Yesterday's Cost above: that panel answers "what did yesterday cost," searching back up to 7 days for the most recent complete day. This one is a Stat panel with `Graph mode: Line` for its sparkline, reduced with `Last (not null)` over the full 45-day series, so the headline number is whichever complete day is most recent within that longer window — visually similar but a different reducer target, and one that can silently land further back than 7 days if there's a longer gap in `consumption`.
-
-Because the completeness guard (see p/kWh Efficiency panel below) excludes any partial day, the "last" point in this series is not reliably "yesterday" — pair this panel with **Daily Cost Trend — As Of Date** below so the displayed number is never mistaken for a more recent day than it actually is.
+The `product_rate` join fix from earlier (correlated subquery instead of the range-predicate form that measured at 88.9s elsewhere in this file) is unchanged and still in place.
 
 ```sql
-WITH daily_costs AS (
-  SELECT
-    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
-    ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
-  FROM consumption c
-  JOIN agreement a
-    ON a.energy = c.energy
-   AND c.period_from >= a.valid_from
-   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-  JOIN product_rate pr
-    ON pr.id = (
-      SELECT pr2.id FROM product_rate pr2
-      WHERE pr2.product_code = a.product_code
-        AND pr2.region = '${region}'
-        AND pr2.valid_from <= c.period_from
-      ORDER BY pr2.valid_from DESC
-      LIMIT 1
-    )
-  WHERE c.energy = 'E'
-    AND c.period_from >= CURDATE() - INTERVAL 45 DAY
-    AND c.period_from < CURDATE()
-  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
-  -- Completeness guard: see p/kWh Efficiency panel below for the rationale
-  -- and why this isn't a fixed 48.
-  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-    CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
-    CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-  ) / 30
-)
-SELECT time, cost_gbp
-FROM daily_costs
+SELECT
+  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
+  ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
+FROM consumption c
+JOIN agreement a
+  ON a.energy = c.energy
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+JOIN product_rate pr
+  ON pr.id = (
+    SELECT pr2.id FROM product_rate pr2
+    WHERE pr2.product_code = a.product_code
+      AND pr2.region = '${region}'
+      AND pr2.valid_from <= c.period_from
+    ORDER BY pr2.valid_from DESC
+    LIMIT 1
+  )
+WHERE c.energy = 'E'
+  AND c.period_from >= CURDATE() - INTERVAL 45 DAY
+  AND c.period_from < CURDATE()
+GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
+HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
+  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+) / 30
 ORDER BY time;
-
 ```
 
-### Daily Cost Trend — As Of Date (stat, text)
+### Billing Period Progress ($billing_period_start → $billing_period_end) — bargauge, id 2
 
-Companion to the panel above — same underlying series, but reduced down to just the date of its most recent complete day. Placed as a small text Stat panel next to/under the main one (`Text mode: Value`, no unit, `Fields: as_of_date`) so the headline cost is never shown without the day it belongs to. Reuses the identical CTE (guard included) rather than reading back the other panel's result, since Grafana panels can't share a query.
-
-```sql
-WITH daily_costs AS (
-  SELECT
-    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
-    ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS cost_gbp
-  FROM consumption c
-  JOIN agreement a
-    ON a.energy = c.energy
-   AND c.period_from >= a.valid_from
-   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-  JOIN product_rate pr
-    ON pr.id = (
-      SELECT pr2.id FROM product_rate pr2
-      WHERE pr2.product_code = a.product_code
-        AND pr2.region = '${region}'
-        AND pr2.valid_from <= c.period_from
-      ORDER BY pr2.valid_from DESC
-      LIMIT 1
-    )
-  WHERE c.energy = 'E'
-    AND c.period_from >= CURDATE() - INTERVAL 45 DAY
-    AND c.period_from < CURDATE()
-  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
-  -- Completeness guard: see p/kWh Efficiency panel below for the rationale
-  -- and why this isn't a fixed 48.
-  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-    CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
-    CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-  ) / 30
-)
-SELECT MAX(time) AS as_of_date
-FROM daily_costs;
-
-```
-
-### Billing Period Spend Progress (bar gauge)
-
-Replaces two separate stat panels ("This Billing Period's Cost So Far" and "Total Expected Cost This Billing Period") with a single Bar Gauge: `actual_cost_to_date` as the gauge's value, `projected_total_cost` as its max/threshold, so spend-to-date reads directly as progress toward the full-period projection instead of two disconnected numbers.
+Title interpolates the `${billing_period_start}`/`${billing_period_end}` dashboard variables directly — this is what replaced the separate "Current Billing Period" table panel from earlier drafts of this dashboard. `Display mode: LCD`, `Value mode: Color`, reduced with `Calcs: Max`. Field overrides rename `billing_period_cost_gbp` → "Current Spend" and `projected_cost_gbp` → "Projected Spend". Thresholds: green / yellow (£60) / semi-dark-orange (£80) / dark-red (£100). Has a `configFromData` transformation that derives the gauge's max from `billing_period_cost_gbp` via a `max` reducer, followed by `filterFieldsByName`.
 
 ```sql
 SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp
 FROM cost_forecast
 ORDER BY computed_at DESC
 LIMIT 1;
-
-```
-
-### Current Billing Period (table)
-
-Context for the panel above — shows the dates it's computed against.
-
-```sql
-SELECT billing_period_start, billing_period_end, computed_at
-FROM cost_forecast
-ORDER BY computed_at DESC
-LIMIT 1;
-
 ```
 
 ---
 
 ## Row 2 — Electricity
 
-### Price Curve — Today/Tomorrow Actual + Forecast (time series)
+### Latest Consumption — timeseries, id 4
 
-`product_rate` has no `period_from` column — for the half-hourly Agile product each row's own `valid_from` *is* the half-hour slot, so that's what stands in for the series' time value here (confirmed against the live schema; `DESCRIBE product_rate` has no `period_from`/`period_to`).
+Merges what earlier drafts of this dashboard had as two separate panels (Half-hourly Consumption and Half-hourly Cost) into one dual-axis chart. Query A (`est_kwh`, left axis, `kWh`) is a filled line (blue, high fill opacity) rather than a true bar-draw style. Query B (`cost_gbp`, right axis via a `byFrameRefID: B` override, `currencyGBP`, dark-red, zero fill — line only) overlays cost on a secondary axis. `timeFrom: 48h` pins this panel to a fixed 48-hour window independent of the dashboard's shared `-3h`/`+48h` range, even though the queries also use `$__timeFilter` internally.
 
-Finds the current agreement via the same half-open test as the **Join convention** above (`valid_from <= NOW() AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')`), not `valid_to IS NULL` — Agile agreements are pre-populated with a fixed one-year end date rather than left open-ended, so a `valid_to IS NULL` filter finds no "current" electricity agreement at all once one exists. Confirmed live: production's active electricity agreement (`AGILE-24-10-01`, valid `2026-05-24`–`2027-05-24`) has a set `valid_to`, so the old filter silently returned an empty panel.
+```sql
+-- Query A
+SELECT period_from AS time, est_kwh
+FROM consumption
+WHERE energy = 'E'
+  AND $__timeFilter(period_from)
+ORDER BY period_from;
 
-Render the `forecast` series with a dashed line (and/or a muted colour) distinct from `actual`'s solid line, so a predicted price is never mistaken for a confirmed one.
+-- Query B
+SELECT
+  c.period_from AS time,
+  ROUND(c.est_kwh * pr.unit_rate / 100, 4) AS cost_gbp
+FROM consumption c
+JOIN agreement a
+  ON a.energy = c.energy
+ AND c.period_from >= a.valid_from
+ AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+JOIN product_rate pr
+  ON pr.product_code = a.product_code
+ AND pr.region = '${region}'
+ AND c.period_from >= pr.valid_from
+ AND c.period_from < COALESCE(pr.valid_to, '9999-12-31 23:59:59')
+WHERE c.energy = 'E'
+  AND $__timeFilter(c.period_from)
+ORDER BY c.period_from;
+```
+
+Query B has the same range-predicate-join deviation noted on Yesterday's Cost above — worth the same re-timing check.
+
+### Agile Prices: Today/Tomorrow (Actual + Forecast) — timeseries, id 3
+
+No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below £0, green from £0, yellow from £10p, semi-dark-orange from £20p, red from £25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kw` (see the field-formatting convention note above — should be `p/kWh`).
 
 ```sql
 SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
@@ -237,57 +173,20 @@ FROM agile_forecast
 WHERE region = '${region}'
   AND period_from >= NOW()
 ORDER BY time;
-
 ```
 
-### Half-hourly Consumption (time series, bar draw style)
+### Load Shift Efficiency — timeseries, id 5
 
-Each row is a discrete 30-minute reading, not a continuous signal — use the time series panel's bar draw style rather than the default line, so consecutive intervals aren't visually interpolated into a slope that doesn't exist.
-
-```sql
-SELECT period_from AS time, est_kwh
-FROM consumption
-WHERE energy = 'E'
-  AND $__timeFilter(period_from)
-ORDER BY period_from;
-
-```
-
-### Half-hourly Cost (time series, bar draw style)
-
-Same reasoning as Half-hourly Consumption above — discrete per-interval values, bar draw style rather than line.
-
-```sql
-SELECT
-  c.period_from AS time,
-  ROUND(c.est_kwh * pr.unit_rate / 100, 4) AS cost_gbp
-FROM consumption c
-JOIN agreement a
-  ON a.energy = c.energy
- AND c.period_from >= a.valid_from
- AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-JOIN product_rate pr
-  ON pr.id = (
-    SELECT pr2.id FROM product_rate pr2
-    WHERE pr2.product_code = a.product_code
-      AND pr2.region = '${region}'
-      AND pr2.valid_from <= c.period_from
-    ORDER BY pr2.valid_from DESC
-    LIMIT 1
-  )
-WHERE c.energy = 'E'
-  AND $__timeFilter(c.period_from)
-ORDER BY c.period_from;
-
-```
-
-### p/kWh Efficiency vs Day's Avg Rate (time series)
+Replaces the two-line "p/kWh Efficiency vs Day's Avg Rate" panel from earlier drafts with a single derived percentage: how much cheaper your actual weighted-average rate is than the day's flat average rate, i.e. how well consumption is shifted toward cheap half-hours. Positive = shifted toward cheap hours; negative = shifted toward expensive ones. `timeFrom: 45d`. Thresholds: dark-red below 0%, green from 0%, blue from 20%. `min: -50`, `max: 51`.
 
 ```sql
 SELECT
   DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
-  ROUND(SUM(c.est_kwh * pr.unit_rate) / NULLIF(SUM(c.est_kwh), 0), 4) AS your_avg_rate,
-  ROUND(AVG(pr.unit_rate), 4) AS day_avg_rate
+  ROUND(
+    (AVG(pr.unit_rate) - (SUM(c.est_kwh * pr.unit_rate) / NULLIF(SUM(c.est_kwh), 0)))
+      / NULLIF(AVG(pr.unit_rate), 0) * 100,
+    2
+  ) AS load_shift_efficiency_pct
 FROM consumption c
 JOIN agreement a
   ON a.energy = c.energy
@@ -305,71 +204,16 @@ JOIN product_rate pr
 WHERE c.energy = 'E'
   AND c.period_from >= NOW() - INTERVAL 45 DAY
 GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
--- Completeness guard: Octopus's settlement lag means a day can still be
--- missing rows more than 24 hours after it ends -- exclude it rather than
--- show a misleadingly low/high rate computed from a partial day. The
--- expected count is 48 on an ordinary day, but only 46/50 on the UK
--- spring-forward/fall-back dates (a 23- or 25-hour local day) -- computed
--- here rather than hardcoded, since `time` is already the local calendar
--- date after the CONVERT_TZ above.
 HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
   CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
   CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
 ) / 30
 ORDER BY time;
-
 ```
 
-### Cheapest N-Hour Window Today/Tomorrow (table)
+### Average Consumption Per Day — barchart, id 6
 
-Assumes no gaps in half-hourly `product_rate` rows within the queried range — a missing slot shifts the rolling window incorrectly.
-
-One row per window size (`window_size | start | rate`) rather than one row with 12 paired columns — a single-row table forces horizontal scrolling and pairing columns by eye; this reads top-to-bottom instead. Built as a `UNION ALL` of six single-row `SELECT`s, matching the style the Price Curve panel above already uses. Ordered explicitly via `ORDER BY FIELD(window_size, ...)` rather than relying on `UNION ALL` branch order — every other multi-row panel in this file ends with an explicit `ORDER BY`, and branch order isn't a documented ordering guarantee to lean on.
-
-`product_rate` has no `period_from` column, and the current agreement is found via the same half-open test as the **Join convention** — see the Price Curve panel's notes above for both.
-
-```sql
-WITH rates AS (
-  SELECT valid_from, unit_rate
-  FROM product_rate
-  WHERE product_code = (
-    SELECT product_code FROM agreement
-    WHERE energy = 'E'
-      AND valid_from <= NOW()
-      AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')
-    ORDER BY valid_from DESC LIMIT 1
-  )
-  AND region = '${region}'
-  AND valid_from >= CURDATE()
-  AND valid_from < CURDATE() + INTERVAL 2 DAY
-),
-windows AS (
-  SELECT
-    valid_from AS window_start,
-    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 0  FOLLOWING) AS avg_30min,
-    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 1  FOLLOWING) AS avg_1h,
-    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 3  FOLLOWING) AS avg_2h,
-    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 5  FOLLOWING) AS avg_3h,
-    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 7  FOLLOWING) AS avg_4h,
-    AVG(unit_rate) OVER (ORDER BY valid_from ROWS BETWEEN CURRENT ROW AND 11 FOLLOWING) AS avg_6h
-  FROM rates
-)
-(SELECT '30 min'  AS window_size, window_start AS start, avg_30min AS rate FROM windows ORDER BY avg_30min ASC LIMIT 1)
-UNION ALL
-(SELECT '1 hour'  AS window_size, window_start AS start, avg_1h   AS rate FROM windows ORDER BY avg_1h   ASC LIMIT 1)
-UNION ALL
-(SELECT '2 hours' AS window_size, window_start AS start, avg_2h   AS rate FROM windows ORDER BY avg_2h   ASC LIMIT 1)
-UNION ALL
-(SELECT '3 hours' AS window_size, window_start AS start, avg_3h   AS rate FROM windows ORDER BY avg_3h   ASC LIMIT 1)
-UNION ALL
-(SELECT '4 hours' AS window_size, window_start AS start, avg_4h   AS rate FROM windows ORDER BY avg_4h   ASC LIMIT 1)
-UNION ALL
-(SELECT '6 hours' AS window_size, window_start AS start, avg_6h   AS rate FROM windows ORDER BY avg_6h   ASC LIMIT 1)
-ORDER BY FIELD(window_size, '30 min', '1 hour', '2 hours', '3 hours', '4 hours', '6 hours');
-
-```
-
-### Day-of-Week Average Consumption — Last 45 Days (bar chart)
+Same query as earlier drafts' "Day-of-Week Average Consumption", renamed. `timeFrom: 45d`.
 
 ```sql
 SELECT
@@ -381,7 +225,6 @@ FROM (
   WHERE energy = 'E'
     AND period_from >= NOW() - INTERVAL 45 DAY
   GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
-  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
     CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
     CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
@@ -389,32 +232,159 @@ FROM (
 ) daily
 GROUP BY DAYNAME(d)
 ORDER BY FIELD(DAYNAME(d), 'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday');
-
 ```
 
-### Daily Average Usage — 7-Day Rolling Average, 45 Days (time series)
+### Cheapest Time Window — table, id 13
+
+**No panel title** — cleared intentionally (see the "remove a panel title" note in project history); identifiable only by its field override renaming `window_size` → "Cheapest Time Window", and by the heading below.
+
+4 rows (`1h`/`2h`/`3h`/`4h` block sizes) × 3 columns (`24hrs`/`3days`/`5days` lookahead horizons — the middle column was renamed from `72hrs` to `3days`, same underlying 3-day cutoff, just relabeled once the dashboard's own forward window settled at 48h rather than 72h), wide-format like the Heatmap below. `product_rate` only reliably covers ~1–2 days ahead (Octopus publishes Agile rates the evening before), so the 3-day/5-day columns fall back to `agile_forecast` for any half-hour beyond what's actually been published, preferring actual rates over forecast wherever both exist. A window only counts for a horizon if it fits entirely inside it. Colour-coding is baked into the cell text itself as an emoji (🔵/🟢/🟡/🟠/🔴) rather than via Grafana thresholds, since Table panels can't apply numeric threshold-based cell colouring to a field whose displayed value is a composed string (time + rate) — SQL-side colouring sidesteps that limitation entirely and is portable across Grafana versions. Bands: `<0` blue, `[0,10)` green, `[10,20)` yellow, `[20,25]` orange, `>25` red. Field override renames `window_size` → "Cheapest Time Window". Assumes no gaps in the half-hourly series (actual or forecast) — a missing slot shifts a window's average incorrectly. Ties (identical average rate) are broken arbitrarily by whichever row MariaDB returns first from `ORDER BY ... LIMIT 1`.
+
+```sql
+WITH current_agreement AS (
+  SELECT product_code FROM agreement
+  WHERE energy = 'E'
+    AND valid_from <= NOW()
+    AND NOW() < COALESCE(valid_to, '9999-12-31 23:59:59')
+  ORDER BY valid_from DESC LIMIT 1
+),
+actual_rates AS (
+  SELECT valid_from AS time, unit_rate AS rate
+  FROM product_rate
+  WHERE product_code = (SELECT product_code FROM current_agreement)
+    AND region = '${region}'
+    AND valid_from >= NOW()
+    AND valid_from < NOW() + INTERVAL 5 DAY
+),
+forecast_rates AS (
+  SELECT f.period_from AS time, f.forecast_unit_rate AS rate
+  FROM agile_forecast f
+  WHERE f.region = '${region}'
+    AND f.period_from >= NOW()
+    AND f.period_from < NOW() + INTERVAL 5 DAY
+    AND NOT EXISTS (SELECT 1 FROM actual_rates a WHERE a.time = f.period_from)
+),
+rates AS (
+  SELECT time, rate FROM actual_rates
+  UNION ALL
+  SELECT time, rate FROM forecast_rates
+),
+windows AS (
+  SELECT
+    time AS window_start,
+    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING) AS avg_1h,
+    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 3 FOLLOWING) AS avg_2h,
+    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 5 FOLLOWING) AS avg_3h,
+    AVG(rate) OVER (ORDER BY time ROWS BETWEEN CURRENT ROW AND 7 FOLLOWING) AS avg_4h
+  FROM rates
+)
+SELECT
+  '1h' AS window_size,
+  (SELECT CONCAT(
+     CASE WHEN avg_1h < 0 THEN '🔵' WHEN avg_1h < 10 THEN '🟢' WHEN avg_1h < 20 THEN '🟡' WHEN avg_1h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_1h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 1 HOUR <= NOW() + INTERVAL 1 DAY
+   ORDER BY avg_1h ASC LIMIT 1) AS `24hrs`,
+  (SELECT CONCAT(
+     CASE WHEN avg_1h < 0 THEN '🔵' WHEN avg_1h < 10 THEN '🟢' WHEN avg_1h < 20 THEN '🟡' WHEN avg_1h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_1h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 1 HOUR <= NOW() + INTERVAL 3 DAY
+   ORDER BY avg_1h ASC LIMIT 1) AS `3days`,
+  (SELECT CONCAT(
+     CASE WHEN avg_1h < 0 THEN '🔵' WHEN avg_1h < 10 THEN '🟢' WHEN avg_1h < 20 THEN '🟡' WHEN avg_1h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_1h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 1 HOUR <= NOW() + INTERVAL 5 DAY
+   ORDER BY avg_1h ASC LIMIT 1) AS `5days`
+
+UNION ALL
+
+SELECT
+  '2h',
+  (SELECT CONCAT(
+     CASE WHEN avg_2h < 0 THEN '🔵' WHEN avg_2h < 10 THEN '🟢' WHEN avg_2h < 20 THEN '🟡' WHEN avg_2h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_2h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 2 HOUR <= NOW() + INTERVAL 1 DAY
+   ORDER BY avg_2h ASC LIMIT 1),
+  (SELECT CONCAT(
+     CASE WHEN avg_2h < 0 THEN '🔵' WHEN avg_2h < 10 THEN '🟢' WHEN avg_2h < 20 THEN '🟡' WHEN avg_2h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_2h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 2 HOUR <= NOW() + INTERVAL 3 DAY
+   ORDER BY avg_2h ASC LIMIT 1),
+  (SELECT CONCAT(
+     CASE WHEN avg_2h < 0 THEN '🔵' WHEN avg_2h < 10 THEN '🟢' WHEN avg_2h < 20 THEN '🟡' WHEN avg_2h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_2h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 2 HOUR <= NOW() + INTERVAL 5 DAY
+   ORDER BY avg_2h ASC LIMIT 1)
+
+UNION ALL
+
+SELECT
+  '3h',
+  (SELECT CONCAT(
+     CASE WHEN avg_3h < 0 THEN '🔵' WHEN avg_3h < 10 THEN '🟢' WHEN avg_3h < 20 THEN '🟡' WHEN avg_3h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_3h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 3 HOUR <= NOW() + INTERVAL 1 DAY
+   ORDER BY avg_3h ASC LIMIT 1),
+  (SELECT CONCAT(
+     CASE WHEN avg_3h < 0 THEN '🔵' WHEN avg_3h < 10 THEN '🟢' WHEN avg_3h < 20 THEN '🟡' WHEN avg_3h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_3h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 3 HOUR <= NOW() + INTERVAL 3 DAY
+   ORDER BY avg_3h ASC LIMIT 1),
+  (SELECT CONCAT(
+     CASE WHEN avg_3h < 0 THEN '🔵' WHEN avg_3h < 10 THEN '🟢' WHEN avg_3h < 20 THEN '🟡' WHEN avg_3h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_3h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 3 HOUR <= NOW() + INTERVAL 5 DAY
+   ORDER BY avg_3h ASC LIMIT 1)
+
+UNION ALL
+
+SELECT
+  '4h',
+  (SELECT CONCAT(
+     CASE WHEN avg_4h < 0 THEN '🔵' WHEN avg_4h < 10 THEN '🟢' WHEN avg_4h < 20 THEN '🟡' WHEN avg_4h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_4h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 4 HOUR <= NOW() + INTERVAL 1 DAY
+   ORDER BY avg_4h ASC LIMIT 1),
+  (SELECT CONCAT(
+     CASE WHEN avg_4h < 0 THEN '🔵' WHEN avg_4h < 10 THEN '🟢' WHEN avg_4h < 20 THEN '🟡' WHEN avg_4h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_4h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 4 HOUR <= NOW() + INTERVAL 3 DAY
+   ORDER BY avg_4h ASC LIMIT 1),
+  (SELECT CONCAT(
+     CASE WHEN avg_4h < 0 THEN '🔵' WHEN avg_4h < 10 THEN '🟢' WHEN avg_4h < 20 THEN '🟡' WHEN avg_4h <= 25 THEN '🟠' ELSE '🔴' END,
+     ' ', DATE_FORMAT(CONVERT_TZ(window_start, 'UTC', 'Europe/London'), '%a %H:%i'), ' · ', ROUND(avg_4h, 2), 'p'
+   ) FROM windows WHERE window_start >= NOW() AND window_start + INTERVAL 4 HOUR <= NOW() + INTERVAL 5 DAY
+   ORDER BY avg_4h ASC LIMIT 1)
+
+ORDER BY FIELD(window_size, '1h', '2h', '3h', '4h');
+```
+
+### Consumption Heatmap (Hour-by-Hour, Last 45 Days) — heatmap, id 12
+
+Title restored — the earlier accidental reset to Grafana's "Panel Title" placeholder is fixed; the panel's `timeFrom`/`timeShift` fix and query were unaffected throughout.
+
+`Calculate from data: Off` plus a wide time-series shape (first field time-typed, one column per weekday) — Grafana's native Heatmap panel renders this as a categorical hour × weekday grid with no upgrade or transform needed. `time` is anchored to `TIMESTAMP(CURDATE())` purely to satisfy the time-typing requirement; only the hour-of-day component is meaningful. `timeFrom: "now/d"` + `timeShift: "0d/d"` pins the X axis to exactly today's 00:00–23:59, invariant of what time it actually is when the dashboard is viewed — the combination of both fields together is required; `timeFrom` alone always hardcodes the panel's end to literal "now", which is why this needed the two-field form rather than a single override. `period_from >= NOW() - INTERVAL 45 DAY`, not 90, per the retention-window cap above. `Y-Axis → Reverse: true` (Monday renders at the top). Field override applies the `kWh` custom unit via `cellValues.unit`.
 
 ```sql
 SELECT
-  d AS time,
-  ROUND(AVG(daily_kwh) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 3) AS rolling_avg_kwh
-FROM (
-  SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh
-  FROM consumption
-  WHERE energy = 'E'
-    AND period_from >= NOW() - INTERVAL 45 DAY
-  GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
-  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
-    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-  ) / 30
-) daily
-ORDER BY d;
-
+  TIMESTAMP(CURDATE()) + INTERVAL HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) HOUR AS time,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Monday'    THEN est_kwh END), 4) AS `Monday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Tuesday'   THEN est_kwh END), 4) AS `Tuesday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Wednesday' THEN est_kwh END), 4) AS `Wednesday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Thursday'  THEN est_kwh END), 4) AS `Thursday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Friday'    THEN est_kwh END), 4) AS `Friday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Saturday'  THEN est_kwh END), 4) AS `Saturday`,
+  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Sunday'    THEN est_kwh END), 4) AS `Sunday`
+FROM consumption
+WHERE energy = 'E'
+  AND period_from >= NOW() - INTERVAL 45 DAY
+GROUP BY HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
+ORDER BY time;
 ```
 
-### Daily Average Cost — 7-Day Rolling Average, 45 Days (time series)
+### Daily Average Cost (Rolling 7-Day Window) — timeseries, id 8
+
+Same query as earlier drafts' "Daily Average Cost — 7-Day Rolling Average, 45 Days", renamed. `timeFrom: 45d`. Thresholds match the blue/green/yellow/orange/red band style: blue below £1, green from £1 (moved from £2), yellow from £3, orange from £4, red from £5. `min: -1` (was `0`).
 
 ```sql
 SELECT
@@ -441,141 +411,45 @@ FROM (
   WHERE c.energy = 'E'
     AND c.period_from >= NOW() - INTERVAL 45 DAY
   GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
-  -- Completeness guard: see p/kWh Efficiency panel above for the rationale.
   HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
     CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
     CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
   ) / 30
 ) daily
 ORDER BY d;
-
 ```
 
-### Consumption Heatmap — Hour × Day-of-Week, 45-Day Window (heatmap)
+### Daily Average Usage (Rolling 7-Day Window) — timeseries, id 7
 
-The only panel on the dashboard showing *when in the week* (day and hour together) you use the most electricity — Day-of-Week Average collapses across all 24 hours into one number per day, and none of the time-series panels show a repeating weekly profile at all. Since Agile's cheap/expensive rate windows are also time-of-day and day-of-week correlated, this is the diagnostic view for *where* your usage overlaps with expensive pricing.
-
-Grafana's native Heatmap panel does render this data — the constraint is narrower than "categorical axes aren't supported." With `Calculate from data: Off`, the panel accepts a wide time-series shape: the first time-typed field becomes the X axis, and every other numeric field becomes its own Y-axis row, labelled by that field's column name. So instead of one row per weekday and one column per hour (the shape a Table panel would want), this query is transposed: one row per hour and one column per weekday. `time` is a genuine `DATETIME` — deliberately anchored to *today's* date (`CURDATE()`) purely so the field is time-typed; the date component is discarded visually, only the hour-of-day tick matters, and the panel renders `00:00`–`23:00` ticks natively with zero custom axis formatting as a result. There's no field-mapping UI for any of this in the panel editor — role assignment (which field is X, which are Y-rows) is implicit from the data's shape and typing, not a setting to configure.
-
-`period_from >= NOW() - INTERVAL 45 DAY`, not 90 — `consumption`'s startup backfill only ever pulls `retention_days` (45) of history (see **Retention Window** in `.agent-docs/context.md`), so a 90-day window here would silently return less data than it claims, the same trap the file's other Row 2 panels are separately being fixed for. No completeness-guard `HAVING` clause is needed here, unlike the daily-total panels elsewhere in this file — each cell already averages roughly twelve or fourteen same-weekday-same-hour samples spread over the window (`consumption` is half-hourly, so each hour bucket usually folds two readings per matching day — except on the two UK DST transition days a year, where the skipped/doubled local hour has zero or four readings that day instead, per the same 23-/25-hour local day this file's other panels already guard against; a 45-day window gives each weekday roughly six or seven occurrences (45 = 6×7 + 3, so most splits put three weekdays at seven occurrences and four at six) — though `NOW() - INTERVAL 45 DAY` is a rolling cutoff, not calendar-day-aligned, so which weekdays land on which side of that split shifts depending on where in the week it falls), so one missing half-hour doesn't invalidate a whole cell the way it would invalidate a single day's total. A weekday/hour combination with zero matching rows in the window renders as an empty cell rather than a false zero — deliberate, matching how `AVG(CASE WHEN ...)` already behaves elsewhere in this file.
-
-Set `Calculate from data` to **Off** in the panel editor. Apply the `kWh` custom unit (per the Field-formatting convention above) via a field override with a name-regex matching all seven weekday columns — they don't match the `*_kwh` naming pattern the convention otherwise relies on, so the override needs to name them explicitly. One thing to verify visually once built, not resolvable from Grafana's docs or panel source alone: whether the first value column (`Monday`) renders as the top or bottom row. It should render top — if it comes out reversed, the Heatmap panel's Y-Axis **Reverse** toggle fixes it with no query change.
+Same query as earlier drafts' "Daily Average Usage — 7-Day Rolling Average, 45 Days", renamed. `timeFrom: 45d`.
 
 ```sql
 SELECT
-  TIMESTAMP(CURDATE()) + INTERVAL HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) HOUR AS time,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Monday'    THEN est_kwh END), 4) AS `Monday`,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Tuesday'   THEN est_kwh END), 4) AS `Tuesday`,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Wednesday' THEN est_kwh END), 4) AS `Wednesday`,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Thursday'  THEN est_kwh END), 4) AS `Thursday`,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Friday'    THEN est_kwh END), 4) AS `Friday`,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Saturday'  THEN est_kwh END), 4) AS `Saturday`,
-  ROUND(AVG(CASE WHEN DAYNAME(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) = 'Sunday'    THEN est_kwh END), 4) AS `Sunday`
-FROM consumption
-WHERE energy = 'E'
-  AND period_from >= NOW() - INTERVAL 45 DAY
-GROUP BY HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
-ORDER BY time;
-
-```
-
-### Standing Charge vs Unit-Rate Cost Split (stacked bar, daily)
-
-```sql
-SELECT
-  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
-  ROUND(SUM(c.est_kwh * pr.unit_rate) / 100, 2) AS unit_rate_cost_gbp,
-  ROUND(MAX(pr.standing_charge) / 100, 2) AS standing_charge_cost_gbp
-FROM consumption c
-JOIN agreement a
-  ON a.energy = c.energy
- AND c.period_from >= a.valid_from
- AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-JOIN product_rate pr
-  ON pr.id = (
-    SELECT pr2.id FROM product_rate pr2
-    WHERE pr2.product_code = a.product_code
-      AND pr2.region = '${region}'
-      AND pr2.valid_from <= c.period_from
-    ORDER BY pr2.valid_from DESC
-    LIMIT 1
-  )
-WHERE c.energy = 'E'
-  AND $__timeFilter(c.period_from)
-GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
--- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
-  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-) / 30
-ORDER BY time;
-
-```
-
----
-
-## Row 3 — Gas
-
-### Gas Consumption (bar)
-
-```sql
-SELECT
-  DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS time,
-  ROUND(SUM(est_kwh), 3) AS gas_kwh
-FROM consumption
-WHERE energy = 'G'
-  AND $__timeFilter(period_from)
-GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
--- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
-  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-) / 30
-ORDER BY time;
-
-```
-
-### Gas Cost (bar)
-
-```sql
-SELECT
-  DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS time,
-  ROUND((SUM(c.est_kwh * pr.unit_rate) + MAX(pr.standing_charge)) / 100, 2) AS gas_cost_gbp
-FROM consumption c
-JOIN agreement a
-  ON a.energy = c.energy
- AND c.period_from >= a.valid_from
- AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
-JOIN product_rate pr
-  ON pr.id = (
-    SELECT pr2.id FROM product_rate pr2
-    WHERE pr2.product_code = a.product_code
-      AND pr2.region = '${region}'
-      AND pr2.valid_from <= c.period_from
-    ORDER BY pr2.valid_from DESC
-    LIMIT 1
-  )
-WHERE c.energy = 'G'
-  AND $__timeFilter(c.period_from)
-GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
--- Completeness guard: see p/kWh Efficiency panel above for the rationale.
-HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
-  CONVERT_TZ(CAST(time AS DATETIME), 'Europe/London', 'UTC'),
-  CONVERT_TZ(CAST(time + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
-) / 30
-ORDER BY time;
-
+  d AS time,
+  ROUND(AVG(daily_kwh) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 3) AS rolling_avg_kwh
+FROM (
+  SELECT DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London')) AS d, SUM(est_kwh) AS daily_kwh
+  FROM consumption
+  WHERE energy = 'E'
+    AND period_from >= NOW() - INTERVAL 45 DAY
+  GROUP BY DATE(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
+) daily
+ORDER BY d;
 ```
 
 ---
 
 ## Row 4 — Yearly Comparison
 
-Reads from `daily_consumption_summary`, not raw `consumption` — populated by `feature/yearly-consumption-comparison`'s weekly `update_consumption_summary` job (and a one-time startup backfill), and exempt from the raw-data retention window, so these panels stay correct after `chore/consumption-data-pruning` starts deleting `consumption` rows older than 45 days.
+Reads from `daily_consumption_summary`, exempt from the 45-day retention cap above. Electricity only — the gas variants of both panels documented in earlier drafts of this file are not present in the current dashboard (see the callout below).
 
-### Monthly Total Consumption — Last 12 Months, Electricity (time series)
+### Monthly Total Consumption — timeseries, id 9
 
-Anchored to the first of the month 11 months ago, not `CURDATE() - INTERVAL 12 MONTH` — that would yield a partial *oldest* month instead of 12 full calendar-month buckets. Returns a real `DATE`-typed `time` column rather than a formatted string, so Grafana's native time axis handles tick labels/zoom — matching the convention every other time-series panel in this file uses. Built via `DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`, not `DATE_FORMAT(date, '%Y-%m-01')` — `DATE_FORMAT()` always returns a string in MariaDB regardless of the format mask used, even one that looks like a date, so it wouldn't actually fix the original "not a real time axis" defect; date arithmetic on the `DATE`-typed `date` column preserves its type.
+`timeFrom: 365d`. Legend now shown (`showLegend: true`, previously hidden). Anchored to the first of the month 11 months ago via date arithmetic (`DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`), not `DATE_FORMAT(...)`, so `time` stays a real `DATE`-typed column rather than a string.
 
 ```sql
 SELECT
@@ -586,32 +460,11 @@ WHERE energy = 'E'
   AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
 GROUP BY DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)
 ORDER BY time;
-
 ```
 
-### Monthly Total Consumption — Last 12 Months, Gas (time series)
+### Consumption Year-on-Year Percentage Change — timeseries, id 10
 
-Same real-date `time` convention as the electricity panel above — see its description for the rationale.
-
-```sql
-SELECT
-  DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY) AS time,
-  SUM(total_kwh) AS monthly_kwh
-FROM daily_consumption_summary
-WHERE energy = 'G'
-  AND date >= DATE_FORMAT(CURDATE() - INTERVAL 11 MONTH, '%Y-%m-01')
-GROUP BY DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)
-ORDER BY time;
-
-```
-
-### Weekly Year-on-Year Change — Last 52/53 Weeks, Electricity (time series)
-
-Groups by `YEARWEEK(date, 3)` (ISO week numbering, mode 3) rather than `YEAR(date)` paired separately with `WEEK(date, 3)` — the latter can misattribute early-January/late-December boundary dates to the wrong week-year, exactly what ISO week numbering exists to avoid. Each week is compared against the same ISO week number one year prior (`yearweek - 100`, e.g. `202630 - 100 = 202530` — subtracting 100 shifts back exactly one week-year while preserving the week number). Both the raw % change and a 4-week trailing moving average of it are returned as separate columns for the same panel.
-
-The panel's displayed x-axis is a real date (`time`, the Monday that ISO week begins on), not the bare `yearweek` integer, so Grafana's time axis works — `yearweek` itself stays internal to the CTEs for the join/arithmetic. Converted via `STR_TO_DATE(CONCAT(yearweek, ' Monday'), '%x%v %W')` — note the **lowercase** `%x%v` (Monday-based ISO week-year), not uppercase `%X%V` (Sunday-based, mode 2): pairing `YEARWEEK(date, 3)` with uppercase specifiers silently round-trips to the wrong date. Confirmed via round-trip (`YEARWEEK(STR_TO_DATE(...), 3) = yearweek`) against production data, including a real week-53 year and a December/January boundary week.
-
-`weekly` only keeps weeks with all 7 days present (`HAVING COUNT(*) = 7`) — the current, still-in-progress ISO week never has 7 days yet, and the oldest weeks near the one-time 2-year backfill's boundary can also be short since that cutoff isn't week-aligned. Filtering incomplete weeks out of `weekly` before `target` and the comparator join both read from it means: an incomplete current week never becomes a target row (nothing sensible to plot for a week that isn't over), and an incomplete comparator week naturally produces a `NULL` `yoy_pct_change` via the `LEFT JOIN` (target week still shown, just no % for that point) instead of dividing against a partial total.
+`timeFrom: 365d`. Groups by ISO week (`YEARWEEK(date, 3)`) and compares each week against the same ISO week one year prior, with a week-53 fallback and a completeness guard excluding any week without all 7 days present. Field overrides rename `yoy_pct_change` → "Week-by-Week Percentage Change" and `yoy_pct_change_4wk_avg` → "Rolling Average" (rendered as a zero-fill yellow line). Legend: table mode, shown on the right (unlike most other panels on this dashboard, which hide their legend).
 
 ```sql
 WITH weekly AS (
@@ -619,20 +472,12 @@ WITH weekly AS (
   FROM daily_consumption_summary
   WHERE energy = 'E'
   GROUP BY YEARWEEK(date, 3)
-  -- Completeness guard: only compare weeks with all 7 days present. The
-  -- current, still-in-progress ISO week never has 7 days yet, and the
-  -- oldest weeks near the one-time 2-year backfill's boundary can also be
-  -- short since that cutoff isn't week-aligned.
   HAVING COUNT(*) = 7
 ),
 target AS (
   SELECT
     yearweek,
     weekly_kwh AS this_year_kwh,
-    -- Week-53 fallback: some ISO years have a week 53 (roughly every 5-6
-    -- years) but the prior year may only go up to week 52. In that case,
-    -- compare against that prior year's week 52 instead of leaving the
-    -- comparison null.
     CASE
       WHEN MOD(yearweek, 100) = 53
        AND (yearweek - 100) NOT IN (SELECT yearweek FROM weekly)
@@ -653,79 +498,16 @@ SELECT
 FROM target t
 LEFT JOIN weekly c ON c.yearweek = t.comparator_yearweek
 ORDER BY t.yearweek;
-
-```
-
-### Weekly Year-on-Year Change — Last 52/53 Weeks, Gas (time series)
-
-Same completeness guard, and same `time` (Monday-of-ISO-week, lowercase `%x%v`) conversion, as the electricity panel above — see its description for the rationale.
-
-```sql
-WITH weekly AS (
-  SELECT YEARWEEK(date, 3) AS yearweek, SUM(total_kwh) AS weekly_kwh
-  FROM daily_consumption_summary
-  WHERE energy = 'G'
-  GROUP BY YEARWEEK(date, 3)
-  -- Completeness guard: see the electricity panel above for the rationale.
-  HAVING COUNT(*) = 7
-),
-target AS (
-  SELECT
-    yearweek,
-    weekly_kwh AS this_year_kwh,
-    -- Week-53 fallback: see the electricity panel above for the rationale.
-    CASE
-      WHEN MOD(yearweek, 100) = 53
-       AND (yearweek - 100) NOT IN (SELECT yearweek FROM weekly)
-      THEN (yearweek - 100) - 1
-      ELSE yearweek - 100
-    END AS comparator_yearweek
-  FROM weekly
-  WHERE yearweek >= YEARWEEK(CURDATE() - INTERVAL 52 WEEK, 3)
-)
-SELECT
-  STR_TO_DATE(CONCAT(t.yearweek, ' Monday'), '%x%v %W') AS time,
-  ROUND((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100, 2) AS yoy_pct_change,
-  ROUND(
-    AVG((t.this_year_kwh - c.weekly_kwh) / NULLIF(c.weekly_kwh, 0) * 100)
-      OVER (ORDER BY t.yearweek ROWS BETWEEN 3 PRECEDING AND CURRENT ROW),
-    2
-  ) AS yoy_pct_change_4wk_avg
-FROM target t
-LEFT JOIN weekly c ON c.yearweek = t.comparator_yearweek
-ORDER BY t.yearweek;
-
 ```
 
 ---
 
-## Row 5 — Health
+## Panels documented in earlier drafts that are no longer on the dashboard
 
-### Last Successful Run per Job (table)
+**Flagging rather than silently deleting the history** — worth confirming this is intentional next time the dashboard's touched:
 
-```sql
-SELECT
-  job_name,
-  MAX(CASE WHEN status = 'success' THEN ran_at END) AS last_success,
-  TIMESTAMPDIFF(MINUTE, MAX(CASE WHEN status = 'success' THEN ran_at END), NOW()) AS minutes_since_success
-FROM job_run
-GROUP BY job_name
-ORDER BY job_name;
+- **Row 3 — Gas**: Gas Consumption and Gas Cost panels, plus the gas variants of Monthly Total Consumption and Year-on-Year Change. None appear in the current JSON export.
+- **Row 5 — Health**: Last Successful Run per Job and AgilePredict/Kraken Reachability. Neither appears in the current JSON export.
+- **Standing Charge vs Unit-Rate Cost Split** (stacked bar) and the old **Cheapest N-Hour Window Today/Tomorrow** table (superseded by the new Cheapest Time Window matrix above) — also absent.
 
-```
-
-### AgilePredict/Kraken Reachability (table)
-
-Three heterogeneous columns (status, timestamp, error text) in one row — a poor fit for a single-value Stat panel, hence Table.
-
-```sql
-SELECT
-  status,
-  ran_at AS last_checked,
-  error_message
-FROM job_run
-WHERE job_name = 'cost_forecast_refresh'
-ORDER BY ran_at DESC
-LIMIT 1;
-
-```
+If gas monitoring and the health-check panels are meant to still be live, they may exist on a different dashboard than the one exported here (`grafana/dashboard.json`, titled **"pi-desktop: octopus-energy"**).
