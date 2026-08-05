@@ -465,7 +465,7 @@ Reads from `daily_consumption_summary`, exempt from the 45-day retention cap abo
 
 ### Monthly Total Consumption — timeseries, id 9
 
-`timeFrom: 365d`. Legend now shown (`showLegend: true`, previously hidden). Anchored to the first of the month 11 months ago via date arithmetic (`DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`), not `DATE_FORMAT(...)`, so `time` stays a real `DATE`-typed column rather than a string.
+`timeFrom: 400d`. Legend now shown (`showLegend: true`, previously hidden). Anchored to the first of the month 11 months ago via date arithmetic (`DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`), not `DATE_FORMAT(...)`, so `time` stays a real `DATE`-typed column rather than a string. `timeFrom` is deliberately wider than the query's nominal ~365-day lookback: the true span between "now" and the oldest bucket's timestamp ranges from ~334 to ~366 days depending on where in the current month "now" falls and whether the 12-month window crosses a leap day — a plain `365d` override left zero margin against that leap-year case and clipped the oldest bar.
 
 ```sql
 SELECT
@@ -480,7 +480,7 @@ ORDER BY time;
 
 ### Consumption Year-on-Year Percentage Change — timeseries, id 10
 
-`timeFrom: 365d`. Groups by ISO week (`YEARWEEK(date, 3)`) and compares each week against the same ISO week one year prior, with a week-53 fallback and a completeness guard excluding any week without all 7 days present. Field overrides rename `yoy_pct_change` → "Week-by-Week Percentage Change" and `yoy_pct_change_4wk_avg` → "Rolling Average" (rendered as a zero-fill yellow line). Legend: table mode, shown on the right (unlike most other panels on this dashboard, which hide their legend).
+`timeFrom: 400d`, widened from `365d` for the same reason as the Monthly Total Consumption panel above — the query's 52-53 ISO-week lookback isn't a fixed day count either, and the narrower value could clip the oldest week. Groups by ISO week (`YEARWEEK(date, 3)`) and compares each week against the same ISO week one year prior, with a week-53 fallback and a completeness guard excluding any week without all 7 days present. Field overrides rename `yoy_pct_change` → "Week-by-Week Percentage Change" and `yoy_pct_change_4wk_avg` → "Rolling Average" (rendered as a zero-fill yellow line). Legend: table mode, shown on the right (unlike most other panels on this dashboard, which hide their legend).
 
 ```sql
 WITH weekly AS (
