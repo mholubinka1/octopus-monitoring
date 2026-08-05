@@ -1,5 +1,7 @@
 # Issues: bugfix-grafana-agile-forecast-precedence
 
+> Work complete — PR ready to merge.
+
 ## Give Octopus actual rates precedence over stale AgilePredict forecast in the Agile Prices panel
 
 **GitHub issue**: #467
@@ -22,15 +24,15 @@ that only id 3 and id 13 read `agile_forecast`.
 
 ### Acceptance criteria
 
-- [ ] Running the corrected query against the production Pi's `energy-monitor-db`
+- [x] Running the corrected query against the production Pi's `energy-monitor-db`
       (region `C`) returns no `period_from`/`valid_from` timestamp more than once across
       the `actual` and `forecast` series combined.
-- [ ] Wherever `product_rate` has a row for a half-hour, that half-hour's `agile_forecast`
+- [x] Wherever `product_rate` has a row for a half-hour, that half-hour's `agile_forecast`
       row is excluded from the result.
-- [ ] The `actual`/`forecast` series tagging is unchanged for rows that do appear.
-- [ ] `grafana/mariadb/queries.md`'s SQL block for panel id 3 and `grafana/dashboard.json`'s
+- [x] The `actual`/`forecast` series tagging is unchanged for rows that do appear.
+- [x] `grafana/mariadb/queries.md`'s SQL block for panel id 3 and `grafana/dashboard.json`'s
       `rawSql` for panel id 3 are identical after the edit.
-- [ ] `queries.md`'s prose for panel id 3 describes the precedence behaviour.
-- [ ] No other panel or query in either file is changed.
+- [x] `queries.md`'s prose for panel id 3 describes the precedence behaviour.
+- [x] No other panel or query in either file is changed.
 
 ---
