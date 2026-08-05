@@ -100,7 +100,7 @@ Diagnosed via a live query against the production Pi (`ssh pi@pi-desktop`,
 `energy-monitor-db` container, region `C`), which reproduced the exact duplication
 described in the Problem Statement before any code changes were made.
 
-**Post-fix verification (same Pi, same session)**: ran the corrected query (with the
+Post-fix verification (same Pi, same session): ran the corrected query (with the
 `NOT EXISTS` clause) live against `energy-monitor-db`, region `C`. Result: 625 rows, zero
 `period_from`/`valid_from` timestamps repeated across the combined `actual`/`forecast`
 series. The two slots that previously showed conflicting pairs before the fix
