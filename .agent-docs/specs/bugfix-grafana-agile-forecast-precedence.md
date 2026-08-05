@@ -99,3 +99,11 @@ already established, rather than introducing a new one.
 Diagnosed via a live query against the production Pi (`ssh pi@pi-desktop`,
 `energy-monitor-db` container, region `C`), which reproduced the exact duplication
 described in the Problem Statement before any code changes were made.
+
+**Post-fix verification (same Pi, same session)**: ran the corrected query (with the
+`NOT EXISTS` clause) live against `energy-monitor-db`, region `C`. Result: 625 rows, zero
+`period_from`/`valid_from` timestamps repeated across the combined `actual`/`forecast`
+series. The two slots that previously showed conflicting pairs before the fix
+(`2026-08-04 20:30:00`: `actual` 27.5415p vs `forecast` 30.75p; `2026-08-05 09:00:00`:
+`actual` -1.1445p vs `forecast` 21.94p) each returned only the `actual` row afterward,
+confirming precedence works as intended.
