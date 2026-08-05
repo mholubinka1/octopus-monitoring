@@ -113,15 +113,23 @@ Cost computed directly from real consumption × the real rates actually charged 
 _Avoid_: spend, actual spend
 
 **Cost Forecast**:
-A projection of total cost for the current billing period, built from actual cost to date plus a forecast for the remaining days: future consumption estimated as the average daily usage of the billing period so far, and future price sourced from Agile Predict's real 14-day forecast, tiled (the last 7 forecast days repeated in sequence) for any remaining days beyond that 14-day horizon.
+A projection of total cost for the current billing period, built from actual cost to date plus a forecast for the remaining days: future consumption estimated as the average daily usage of the billing period so far, and future price read from whatever the Agile Forecast Refresh job most recently persisted, tiled (the last 7 forecast days repeated in sequence) for any remaining days beyond that stored horizon. Does not fetch a forecast itself — see Agile Forecast Refresh.
 _Avoid_: price forecast (that term refers to the underlying Agile price data, not the derived cost projection)
 
 **Agile Predict**:
-A third-party public service (`agilepredict.com`, backed by the same Fly.io app historically documented at `prices.fly.dev` — that domain's `/v2/<region>/` path now serves the HTML frontend, not JSON) providing a hard-capped 14-day-ahead Agile price forecast per GSP region via `GET https://agilepredict.com/api/{region}/`, no authentication required. Consumed as an external API rather than reimplemented in-house — see `.agent-docs/adr/0002-agile-predict-forecast-dependency.md`.
+A third-party public service (`agilepredict.com`, backed by the same Fly.io app historically documented at `prices.fly.dev` — that domain's `/v2/<region>/` path now serves the HTML frontend, not JSON) providing a hard-capped 14-day-ahead Agile price forecast per GSP region via `GET https://agilepredict.com/api/{region}/`, no authentication required. The primary source for the Agile Forecast Refresh job; consumed as an external API rather than reimplemented in-house — see `.agent-docs/adr/0002-agile-predict-forecast-dependency.md`.
 _Avoid_: the forecast API, prediction service
 
+**x2r.uk**:
+A second third-party hobby forecast service (`api.x2r.uk`, independent hosting from Agile Predict's Fly.io deployment), providing a ~14-day-ahead Agile price forecast per GSP region via `GET https://api.x2r.uk/agile/{region}`. Used as the Agile Forecast Refresh job's fallback source when Agile Predict fails — same region-code format, different response shape (nested `prices.forecast`/`day_ahead`/`actual`, `date`/`price` fields rather than Agile Predict's flat `date_time`/`agile_pred` list), so it has its own client and its own mapping into `AgileForecastReading`. See `.agent-docs/adr/0002-agile-predict-forecast-dependency.md`.
+_Avoid_: the fallback API, backup forecast
+
+**Agile Forecast Refresh**:
+The hourly job that fetches Agile price forecast readings (Agile Predict primarily, falling back to x2r.uk on failure) and upserts them into `agile_forecast`. Runs on its own cadence, decoupled from Cost Forecast's daily 04:00 job, so an outage of one or both forecast sources no longer blocks the same-day cost projection from recomputing off whatever forecast data is already stored.
+_Avoid_: forecast sync, price forecast job
+
 **Job Run**:
-A logged execution record (job name, status, timestamp) for each scheduled job — consumption refresh, pricing refresh, cost forecast refresh — used to drive the dashboard's health/staleness panel.
+A logged execution record (job name, status, timestamp) for each scheduled job — consumption refresh, pricing refresh, Agile Forecast Refresh, cost forecast refresh — used to drive the dashboard's health/staleness panel.
 _Avoid_: job log, task run
 
 **Retention Window**:
