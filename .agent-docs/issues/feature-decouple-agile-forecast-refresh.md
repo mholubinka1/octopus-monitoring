@@ -1,5 +1,7 @@
 # Issues: feature/decouple-agile-forecast-refresh
 
+> Work complete — PR ready to merge.
+
 ## x2r.uk fallback forecast client (#469)
 
 **Blocked by**: None
@@ -20,12 +22,12 @@ peer that a caller can treat identically to `AgilePredictClient.get_forecast`.
 
 ### Acceptance criteria
 
-- [ ] `X2rClient.get_forecast(region)` returns `list[AgileForecastReading]` mapped from
+- [x] `X2rClient.get_forecast(region)` returns `list[AgileForecastReading]` mapped from
       `prices.forecast`, ignoring `day_ahead`/`actual`.
-- [ ] A non-2xx response or a response with no `prices.forecast` entries raises
+- [x] A non-2xx response or a response with no `prices.forecast` entries raises
       `APIError`, matching `AgilePredictClient`'s existing failure convention.
-- [ ] Individual fetch attempts are retried via `@retry()`, same as `AgilePredictClient`.
-- [ ] `tests/test_x2r_client.py` covers: successful mapping (field names, VAT-inclusive
+- [x] Individual fetch attempts are retried via `@retry()`, same as `AgilePredictClient`.
+- [x] `tests/test_x2r_client.py` covers: successful mapping (field names, VAT-inclusive
       rate, 30-minute `period_to` derivation), and the empty/error-response failure case.
 
 ---
@@ -65,20 +67,20 @@ refreshed hourly, with automatic fallback, regardless of what the daily cost job
 
 ### Acceptance criteria
 
-- [ ] `AgileForecastRetriever.refresh()` fetches from agilepredict.com and persists on
+- [x] `AgileForecastRetriever.refresh()` fetches from agilepredict.com and persists on
       success; x2r.uk is never called when agilepredict.com succeeds.
-- [ ] On agilepredict.com failure, `AgileForecastRetriever.refresh()` fetches from
+- [x] On agilepredict.com failure, `AgileForecastRetriever.refresh()` fetches from
       x2r.uk and persists its readings instead.
-- [ ] When both sources fail, the exception propagates and nothing is persisted.
-- [ ] `AGILE_FORECAST_REFRESH_JOB` is registered on an hourly interval; a successful run
+- [x] When both sources fail, the exception propagates and nothing is persisted.
+- [x] `AGILE_FORECAST_REFRESH_JOB` is registered on an hourly interval; a successful run
       is recorded as a successful `job_run`; a persistently failing run (both sources
       failing) retries with exponential backoff and is recorded as a failed `job_run`.
-- [ ] `run_initial_agile_forecast_sync` runs at startup, before
+- [x] `run_initial_agile_forecast_sync` runs at startup, before
       `run_initial_cost_forecast_sync`, and does not propagate a startup failure (logs
       and continues, matching every other `run_initial_*_sync`).
-- [ ] `tests/test_agile_forecast_retriever.py` covers the three fetch-orchestration
+- [x] `tests/test_agile_forecast_retriever.py` covers the three fetch-orchestration
       cases above at the same DI-protocol seam `test_cost_forecast_retriever.py` uses.
-- [ ] `tests/test_refresh_scheduling.py` covers hourly registration, success/failure
+- [x] `tests/test_refresh_scheduling.py` covers hourly registration, success/failure
       `job_run` recording, and the startup-sync-swallows-failure case, mirroring the
       existing hourly-pricing and daily-cost-forecast test shapes.
 
@@ -110,22 +112,22 @@ longer fail the daily cost forecast job, because it no longer talks to either se
 
 ### Acceptance criteria
 
-- [ ] `MariaDBClient.read_agile_forecast(region, as_of)` returns rows for the region
+- [x] `MariaDBClient.read_agile_forecast(region, as_of)` returns rows for the region
       with `period_from >= as_of`, ordered by `period_from`.
-- [ ] `CostForecastRetriever` no longer calls agilepredict.com (or any HTTP endpoint)
+- [x] `CostForecastRetriever` no longer calls agilepredict.com (or any HTTP endpoint)
       for the Agile forecast; it reads from `agile_forecast` via the new method.
-- [ ] `CostForecastRetriever` no longer persists to `agile_forecast` (the hourly job
+- [x] `CostForecastRetriever` no longer persists to `agile_forecast` (the hourly job
       from slice #2 is the sole writer).
-- [ ] Every existing `_project_agile_variable_cost`/tiling behavior (real-forecast
+- [x] Every existing `_project_agile_variable_cost`/tiling behavior (real-forecast
       window, tiling beyond the stored horizon, inclusive billing-period-end pricing)
       is unchanged and covered by the existing `tests/test_cost_forecast_retriever.py`
       suite, updated to seed `agile_forecast` directly instead of mocking
       agilepredict.com's HTTP endpoint.
-- [ ] `test_agile_predict_unreachable_raises_and_writes_no_row` is removed from
+- [x] `test_agile_predict_unreachable_raises_and_writes_no_row` is removed from
       `test_cost_forecast_retriever.py` (that failure mode no longer exists on this
       class — its equivalent already exists as the "both sources fail" case added in
       slice #2's `test_agile_forecast_retriever.py`).
-- [ ] A new `tests/test_read_agile_forecast.py`, mirroring the existing
+- [x] A new `tests/test_read_agile_forecast.py`, mirroring the existing
       `tests/test_read_current_product_rate.py` convention (one file per MariaDBClient
       read method), covers `read_agile_forecast`'s region and `period_from >= as_of`
       filtering directly against the SQLite fixture.
