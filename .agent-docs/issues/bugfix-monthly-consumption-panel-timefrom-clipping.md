@@ -1,5 +1,7 @@
 # Issues: bugfix-monthly-consumption-panel-timefrom-clipping
 
+> Work complete — PR ready to merge.
+
 ## Widen timeFrom on Monthly Total Consumption and Weekly YoY panels (#474)
 
 **Blocked by**: None
@@ -14,10 +16,10 @@ This is a single end-to-end vertical slice: the panel config change and its docu
 
 ### Acceptance criteria
 
-- [ ] `dashboard.json` panel id 9's `timeFrom` is `400d`
-- [ ] `dashboard.json` panel id 10's `timeFrom` is `400d`
-- [ ] `grafana/mariadb/queries.md` documents `400d` for both panels with the rationale
-- [ ] No SQL query changes — both queries were already correct
-- [ ] Verified visually in Grafana once deployed: oldest month's bar / oldest week's point renders fully, not clipped
+- [x] `dashboard.json` panel id 9's `timeFrom` is `400d`
+- [x] `dashboard.json` panel id 10's `timeFrom` is `400d`
+- [x] `grafana/mariadb/queries.md` documents `400d` for both panels with the rationale
+- [x] No SQL query changes — both queries were already correct
+- [x] Verified visually in Grafana once deployed: oldest month's bar / oldest week's point renders fully, not clipped
 
 ---
