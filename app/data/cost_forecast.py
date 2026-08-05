@@ -78,11 +78,9 @@ class CostForecastSource(MeterSource, Protocol):
 
     def get_current_billing_period(self) -> BillingPeriod: ...
 
-    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]: ...
-
-    def persist_agile_forecast(
-        self, region: str, readings: list[AgileForecastReading], fetched_at: datetime
-    ) -> None: ...
+    def read_agile_forecast(
+        self, region: str, as_of: datetime
+    ) -> list[AgileForecastReading]: ...
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
@@ -302,12 +300,13 @@ class CostForecastRetriever:
     def _project_agile_variable_cost(
         self, billing_period_end: date, future_daily_kwh: Decimal, as_of: datetime
     ) -> Decimal:
-        forecast_readings = self._client.fetch_agile_forecast(self._client.region_code)
-        # Persisted for the pre-existing "Price Curve" Grafana panel, which
-        # reads agile_forecast directly -- fetching it for this in-memory
-        # projection alone would never give that panel any data.
-        self._client.persist_agile_forecast(
-            self._client.region_code, forecast_readings, as_of
+        # Reads whatever the hourly Agile Forecast Refresh job most recently
+        # persisted, rather than fetching agilepredict.com/x2r.uk live here --
+        # that job is the sole writer of agile_forecast (including the data
+        # the pre-existing "Price Curve" Grafana panel reads), so an outage of
+        # either forecast source no longer fails this daily cost projection.
+        forecast_readings = self._client.read_agile_forecast(
+            self._client.region_code, as_of
         )
         # +1 day: billing_period_end is the last inclusive billable day, so
         # the window must extend through its own half-hourly slots, not
