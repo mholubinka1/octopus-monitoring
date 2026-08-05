@@ -21,6 +21,7 @@ from data.octopus.model import (
     Product,
     Rate,
 )
+from data.octopus.x2r import X2rClient
 
 
 class MonitoringClient:
@@ -28,6 +29,7 @@ class MonitoringClient:
     mariadb: MariaDBClient
     _billing_period: BillingPeriodClient
     _agile_predict: AgilePredictClient
+    _x2r: X2rClient
 
     account: Account
     meters: list[Meter]
@@ -38,6 +40,7 @@ class MonitoringClient:
         self.mariadb = MariaDBClient(settings.mariadb)
         self._billing_period = BillingPeriodClient(settings.octopus, KrakenTransport())
         self._agile_predict = AgilePredictClient()
+        self._x2r = X2rClient()
 
         account, meters = self.octopus.get_account_meter_information()
         self.account = account
@@ -115,10 +118,18 @@ class MonitoringClient:
     def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]:
         return self._agile_predict.get_forecast(region)
 
+    def fetch_agile_forecast_fallback(self, region: str) -> list[AgileForecastReading]:
+        return self._x2r.get_forecast(region)
+
     def persist_agile_forecast(
         self, region: str, readings: list[AgileForecastReading], fetched_at: datetime
     ) -> None:
         self.mariadb.write_agile_forecast(region, readings, fetched_at)
+
+    def read_agile_forecast(
+        self, region: str, as_of: datetime
+    ) -> list[AgileForecastReading]:
+        return self.mariadb.read_agile_forecast(region, as_of)
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str

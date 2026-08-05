@@ -78,11 +78,9 @@ class CostForecastSource(MeterSource, Protocol):
 
     def get_current_billing_period(self) -> BillingPeriod: ...
 
-    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]: ...
-
-    def persist_agile_forecast(
-        self, region: str, readings: list[AgileForecastReading], fetched_at: datetime
-    ) -> None: ...
+    def read_agile_forecast(
+        self, region: str, as_of: datetime
+    ) -> list[AgileForecastReading]: ...
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
@@ -302,13 +300,28 @@ class CostForecastRetriever:
     def _project_agile_variable_cost(
         self, billing_period_end: date, future_daily_kwh: Decimal, as_of: datetime
     ) -> Decimal:
-        forecast_readings = self._client.fetch_agile_forecast(self._client.region_code)
-        # Persisted for the pre-existing "Price Curve" Grafana panel, which
-        # reads agile_forecast directly -- fetching it for this in-memory
-        # projection alone would never give that panel any data.
-        self._client.persist_agile_forecast(
-            self._client.region_code, forecast_readings, as_of
+        # Reads whatever the hourly Agile Forecast Refresh job most recently
+        # persisted, rather than fetching agilepredict.com/x2r.uk live here --
+        # that job is the sole writer of agile_forecast (including the data
+        # the pre-existing "Price Curve" Grafana panel reads), so an outage of
+        # either forecast source no longer fails this daily cost projection.
+        forecast_readings = self._client.read_agile_forecast(
+            self._client.region_code, as_of
         )
+        # No readings at all (not merely stale ones -- that case is accepted,
+        # see the spec) means tile_forecast_beyond has nothing to tile from
+        # either, silently projecting zero variable cost for the rest of the
+        # period. Raising here restores the guarantee the old live-fetch path
+        # gave for free (AgilePredictClient.get_forecast raised APIError on
+        # an empty response) and matches this method's own established
+        # "raise rather than guess" convention for money calculations (see
+        # the current_rate check below).
+        if not forecast_readings:
+            raise RuntimeError(
+                f"No Agile forecast data found for region "
+                f"{self._client.region_code} from {as_of} onward -- cannot "
+                "project remaining billing period cost."
+            )
         # +1 day: billing_period_end is the last inclusive billable day, so
         # the window must extend through its own half-hourly slots, not
         # stop at its midnight boundary (which would exclude the entire

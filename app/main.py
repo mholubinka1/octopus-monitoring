@@ -12,6 +12,7 @@ from logging import Logger, getLogger
 from common.config import RefreshSettings, get_settings
 from common.decorator import retry_with_exponential_backoff
 from common.logging import APP_LOGGER_NAME, config
+from data.agile_forecast import AgileForecastRetriever
 from data.base import MonitoringClient
 from data.consumption import ConsumptionRetriever
 from data.consumption_summary import (
@@ -34,6 +35,7 @@ WEEKLY_CONSUMPTION_SUMMARY_JOB = "update_consumption_summary"
 PRUNE_OLD_DATA_JOB = "prune_old_data"
 YEARLY_COMPARISON_BACKFILL_JOB = "yearly_comparison_backfill"
 COST_FORECAST_REFRESH_JOB = "cost_forecast_refresh"
+AGILE_FORECAST_REFRESH_JOB = "agile_forecast_refresh"
 DAILY_JOB_TIME = "04:00"  # shared by every daily/weekly-cadence job, so
 # none of them land in watchtower's 03:00 update window -- that schedule is
 # configured on the Pi host (pi-desktop's compose stack), not in this repo's
@@ -68,6 +70,13 @@ def run_initial_pricing_sync(pricing: PricingRetriever) -> None:
         pricing.refresh()
     except Exception:
         logger.exception("Pricing sync failed at startup; continuing.")
+
+
+def run_initial_agile_forecast_sync(agile_forecast: AgileForecastRetriever) -> None:
+    try:
+        agile_forecast.refresh()
+    except Exception:
+        logger.exception("Agile forecast sync failed at startup; continuing.")
 
 
 def run_initial_consumption_summary_sync(
@@ -260,6 +269,20 @@ def register_cost_forecast_refresh_job(
     )
 
 
+def register_agile_forecast_refresh_job(
+    scheduler: Scheduler,
+    agile_forecast: AgileForecastRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every(1).hours,
+        AGILE_FORECAST_REFRESH_JOB,
+        agile_forecast.refresh,
+        mariadb,
+    )
+
+
 def run_pending_safely(scheduler: Scheduler) -> None:
     try:
         scheduler.run_pending()
@@ -288,6 +311,7 @@ def main() -> None:
     pricing = PricingRetriever(client)
     consumption_summary = ConsumptionSummaryRetriever(client.mariadb)
     yearly_comparison_backfill = ConsumptionSummaryBackfill(client)
+    agile_forecast = AgileForecastRetriever(client)
     cost_forecast = CostForecastRetriever(client)
     pruner = DataPruner(client.mariadb, refresh_config.retention)
 
@@ -299,6 +323,11 @@ def main() -> None:
     # underlying consumption rows, so whichever writes last is still right.
     run_backfill_at_startup(yearly_comparison_backfill, client.mariadb)
     run_initial_consumption_summary_sync(consumption_summary)
+    # Primes agile_forecast before the first cost projection ever runs, so a
+    # fresh install doesn't compute an Agile customer's projection against
+    # an empty table -- cost_forecast reads agile_forecast rather than
+    # fetching it live (see register_agile_forecast_refresh_job below).
+    run_initial_agile_forecast_sync(agile_forecast)
     run_initial_cost_forecast_sync(cost_forecast)
     register_jobs(default_scheduler, refresh_config, consumption, client.mariadb)
     # consumption_backfill shares `consumption`'s in-memory cursor with
@@ -312,6 +341,9 @@ def main() -> None:
     register_pricing_job(default_scheduler, refresh_config, pricing, client.mariadb)
     register_consumption_summary_job(
         default_scheduler, consumption_summary, pruner, client.mariadb
+    )
+    register_agile_forecast_refresh_job(
+        default_scheduler, agile_forecast, client.mariadb
     )
     register_cost_forecast_refresh_job(default_scheduler, cost_forecast, client.mariadb)
 

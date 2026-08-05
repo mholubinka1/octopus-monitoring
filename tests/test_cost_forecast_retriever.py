@@ -10,7 +10,6 @@ from data.local_day import start_of_local_day
 from data.model import CostForecast, DailyCostSummary
 from data.mysql import model
 from data.mysql.client import MariaDBClient
-from data.octopus.agile_predict import AgilePredictClient
 from data.octopus.kraken import BillingPeriodClient, KrakenTransport
 from data.octopus.model import (
     AgileForecastReading,
@@ -23,28 +22,27 @@ from data.octopus.model import (
 from sqlalchemy.orm import Session
 
 GRAPHQL_ENDPOINT = "https://api.octopus.energy/v1/graphql/"
-AGILE_ENDPOINT = "https://agilepredict.com/api/H/"
 PRODUCT_CODE = "VAR-24-10-01"
 REGION = "H"
 
 
 class _RealCostForecastSource:
-    """Real MariaDBClient/BillingPeriodClient/AgilePredictClient underneath
-    -- HTTP calls mocked via `responses`, DB is the real SQLite fixture --
-    with meters fixed up front so tests don't need to mock the account
-    meter-information endpoint too."""
+    """Real MariaDBClient/BillingPeriodClient underneath -- HTTP calls
+    mocked via `responses`, DB is the real SQLite fixture -- with meters
+    fixed up front so tests don't need to mock the account meter-information
+    endpoint too. Agile forecast data is read from agile_forecast (seeded
+    directly by tests), never fetched live -- that's the Agile Forecast
+    Refresh job's job (data/agile_forecast.py), not this one's."""
 
     def __init__(
         self,
         mariadb: MariaDBClient,
         billing_period_client: BillingPeriodClient,
-        agile_predict_client: AgilePredictClient,
         meters: list[Meter],
         region_code: str,
     ) -> None:
         self._mariadb = mariadb
         self._billing_period_client = billing_period_client
-        self._agile_predict_client = agile_predict_client
         self.meters = meters
         self.region_code = region_code
 
@@ -54,16 +52,10 @@ class _RealCostForecastSource:
     def get_current_billing_period(self) -> BillingPeriod:
         return self._billing_period_client.get_current_billing_period()
 
-    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]:
-        return self._agile_predict_client.get_forecast(region)
-
-    def persist_agile_forecast(
-        self,
-        region: str,
-        readings: list[AgileForecastReading],
-        fetched_at: datetime,
-    ) -> None:
-        self._mariadb.write_agile_forecast(region, readings, fetched_at)
+    def read_agile_forecast(
+        self, region: str, as_of: datetime
+    ) -> list[AgileForecastReading]:
+        return self._mariadb.read_agile_forecast(region, as_of)
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
@@ -122,30 +114,24 @@ def _make_electricity_meter(
 AGILE_PRODUCT_CODE = "AGILE-24-10-01"
 
 
-def _mock_agile_forecast(prices: list[dict]) -> None:
-    responses.add(
-        responses.GET,
-        AGILE_ENDPOINT,
-        json=[
-            {
-                "name": "Region | H",
-                "created_at": "2026-07-06T04:15:00+01:00",
-                "prices": prices,
-            }
-        ],
-        status=200,
+def _seed_agile_forecast(
+    mariadb: MariaDBClient, readings: list[AgileForecastReading]
+) -> None:
+    mariadb.write_agile_forecast(
+        REGION, readings, fetched_at=datetime(2026, 7, 6, 4, 15, tzinfo=UTC)
     )
 
 
-def _flat_agile_prices(start_day: date, num_days: int, pred: str) -> list[dict]:
+def _flat_agile_forecast(
+    start_day: date, num_days: int, unit_rate: str
+) -> list[AgileForecastReading]:
     start = start_of_local_day(start_day)
     return [
-        {
-            "date_time": (start + timedelta(minutes=30 * slot)).isoformat(),
-            "agile_pred": pred,
-            "agile_low": pred,
-            "agile_high": pred,
-        }
+        AgileForecastReading(
+            period_from=start + timedelta(minutes=30 * slot),
+            period_to=start + timedelta(minutes=30 * (slot + 1)),
+            unit_rate=Decimal(unit_rate),
+        )
         for slot in range(48 * num_days)
     ]
 
@@ -180,7 +166,6 @@ def _source(mariadb: MariaDBClient, meters: list[Meter]) -> _RealCostForecastSou
     return _RealCostForecastSource(
         mariadb,
         BillingPeriodClient(settings, KrakenTransport()),
-        AgilePredictClient(),
         meters,
         REGION,
     )
@@ -241,8 +226,6 @@ def test_fixed_tariff_actual_cost_and_projection(
         remaining_days * (Decimal("4.8") * Decimal("20.00") + Decimal("48.00")) / 100
     )
     assert row.projected_total_cost == row.actual_cost_to_date + expected_remaining
-    agile_calls = [c for c in responses.calls if c.request.url == AGILE_ENDPOINT]
-    assert not agile_calls
 
 
 @responses.activate
@@ -364,21 +347,20 @@ def test_agile_tariff_costs_each_remaining_slot_at_its_own_rate_not_a_flat_avera
     # are the last two half-hourly slots of *local* (BST) 6 July -- local
     # 23:00-00:00.
     _mock_billing_period("2026-07-07", "2026-07-08")
-    _mock_agile_forecast(
+    _seed_agile_forecast(
+        mariadb_client,
         [
-            {
-                "date_time": "2026-07-06T22:00:00+00:00",
-                "agile_pred": "10.00",
-                "agile_low": "10.00",
-                "agile_high": "10.00",
-            },
-            {
-                "date_time": "2026-07-06T22:30:00+00:00",
-                "agile_pred": "30.00",
-                "agile_low": "30.00",
-                "agile_high": "30.00",
-            },
-        ]
+            AgileForecastReading(
+                period_from=datetime(2026, 7, 6, 22, 0, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 22, 30, tzinfo=UTC),
+                unit_rate=Decimal("10.00"),
+            ),
+            AgileForecastReading(
+                period_from=datetime(2026, 7, 6, 22, 30, tzinfo=UTC),
+                period_to=datetime(2026, 7, 6, 23, 0, tzinfo=UTC),
+                unit_rate=Decimal("30.00"),
+            ),
+        ],
     )
 
     with mariadb_client.session_write_scope() as s:
@@ -434,9 +416,10 @@ def test_agile_tariff_prices_the_inclusive_final_billable_day_not_just_up_to_it(
     # (non-tiled) remaining days so a window that silently excluded the
     # final day would produce a visibly smaller, wrong total.
     _mock_billing_period("2026-07-07", "2026-07-09")
-    _mock_agile_forecast(
-        _flat_agile_prices(date(2026, 7, 7), 1, "10.00")
-        + _flat_agile_prices(date(2026, 7, 8), 1, "50.00")
+    _seed_agile_forecast(
+        mariadb_client,
+        _flat_agile_forecast(date(2026, 7, 7), 1, "10.00")
+        + _flat_agile_forecast(date(2026, 7, 8), 1, "50.00"),
     )
 
     with mariadb_client.session_write_scope() as s:
@@ -474,7 +457,9 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
     mariadb_client: MariaDBClient,
 ) -> None:
     _mock_billing_period("2026-07-07", "2026-07-11")
-    _mock_agile_forecast(_flat_agile_prices(date(2026, 7, 6), 7, "15.00"))
+    _seed_agile_forecast(
+        mariadb_client, _flat_agile_forecast(date(2026, 7, 6), 7, "15.00")
+    )
 
     with mariadb_client.session_write_scope() as s:
         _seed_agile_agreement_and_rate(s)
@@ -505,14 +490,41 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
     # 4 * (4.8*15.00 + 50.00) = 488.00p
     assert row.projected_total_cost == Decimal("1.70") + Decimal("4.88")
 
-    # The fetched forecast must be persisted for the pre-existing "Price
-    # Curve" Grafana panel (reads agile_forecast) to have data to plot --
-    # fetching it for the in-memory projection isn't enough on its own.
+
+@responses.activate
+def test_no_agile_forecast_data_raises_a_clear_error_and_writes_no_row(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Regression test: an empty agile_forecast (fresh install where the
+    # Agile Forecast Refresh job hasn't populated it yet, or a prolonged
+    # outage that leaves no rows with period_from >= as_of) must fail loudly
+    # rather than silently project zero variable cost -- tile_forecast_beyond
+    # has nothing to tile from either, so the old "raise on empty forecast"
+    # guarantee (AgilePredictClient.get_forecast raised APIError on an empty
+    # response) must be preserved here now that the fetch was replaced with
+    # a read.
+    _mock_billing_period("2026-07-07", "2026-07-11")
+
+    with mariadb_client.session_write_scope() as s:
+        _seed_agile_agreement_and_rate(s)
+        _seed_complete_day(s, date(2026, 7, 6), "0.1")
+
+    retriever = CostForecastRetriever(
+        _source(
+            mariadb_client,
+            [
+                _make_electricity_meter(
+                    tariff_code=f"E-1R-{AGILE_PRODUCT_CODE}-{REGION}"
+                )
+            ],
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="[Nn]o Agile forecast data found"):
+        retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
+
     with mariadb_client.session_read_scope() as session:
-        forecast_rows = session.query(model.agile_forecast).all()
-    assert len(forecast_rows) == 48 * 7
-    assert all(r.region == REGION for r in forecast_rows)
-    assert all(r.forecast_unit_rate == Decimal("15.00") for r in forecast_rows)
+        assert session.query(model.cost_forecast).count() == 0
 
 
 @responses.activate
@@ -522,7 +534,9 @@ def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
     _mock_billing_period("2026-07-07", "2026-07-26")
     # Only 7 real days of forecast (Jul6-Jul12) -- the remaining window
     # (Jul7-Jul25, 19 days) needs Jul13-Jul25 (13 days) from tiling.
-    _mock_agile_forecast(_flat_agile_prices(date(2026, 7, 6), 7, "15.00"))
+    _seed_agile_forecast(
+        mariadb_client, _flat_agile_forecast(date(2026, 7, 6), 7, "15.00")
+    )
 
     with mariadb_client.session_write_scope() as s:
         _seed_agile_agreement_and_rate(s)
@@ -915,43 +929,3 @@ def test_kraken_unreachable_leaves_a_previous_row_unchanged(
         rows = session.query(model.cost_forecast).all()
     assert len(rows) == 1
     assert rows[0].projected_total_cost == Decimal("20.00")
-
-
-@responses.activate
-def test_agile_predict_unreachable_raises_and_writes_no_row(
-    mariadb_client: MariaDBClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
-    _mock_billing_period("2026-07-07", "2026-07-11")
-    responses.add(
-        responses.GET,
-        AGILE_ENDPOINT,
-        json={"detail": "service unavailable"},
-        status=503,
-    )
-
-    with mariadb_client.session_write_scope() as s:
-        _seed_agile_agreement_and_rate(s)
-        # Elapsed day (Jul6) is strictly before as_of's date (Jul7), so it
-        # needs a full 48-slot day -- otherwise it would be gap-filled with
-        # zero kWh and there'd be no real day left to average, raising a
-        # ValueError before ever reaching the agile-forecast fetch this
-        # test means to exercise.
-        _seed_complete_day(s, date(2026, 7, 6), "0.1")
-
-    retriever = CostForecastRetriever(
-        _source(
-            mariadb_client,
-            [
-                _make_electricity_meter(
-                    tariff_code=f"E-1R-{AGILE_PRODUCT_CODE}-{REGION}"
-                )
-            ],
-        )
-    )
-    with pytest.raises(APIError):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
-
-    with mariadb_client.session_read_scope() as session:
-        assert session.query(model.cost_forecast).count() == 0

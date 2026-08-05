@@ -9,7 +9,6 @@ from data.local_day import start_of_local_day
 from data.model import CostForecast, DailyCostSummary
 from data.mysql import model
 from data.mysql.client import MariaDBClient
-from data.octopus.agile_predict import AgilePredictClient
 from data.octopus.kraken import BillingPeriodClient, KrakenTransport
 from data.octopus.model import (
     AgileForecastReading,
@@ -27,22 +26,20 @@ REGION = "H"
 
 
 class _RealCostForecastSource:
-    """Real MariaDBClient/BillingPeriodClient/AgilePredictClient underneath
-    -- HTTP calls mocked via `responses`, DB is the real SQLite fixture --
-    with meters fixed up front so tests don't need to mock the account
+    """Real MariaDBClient/BillingPeriodClient underneath -- HTTP calls
+    mocked via `responses`, DB is the real SQLite fixture -- with meters
+    fixed up front so tests don't need to mock the account
     meter-information endpoint too."""
 
     def __init__(
         self,
         mariadb: MariaDBClient,
         billing_period_client: BillingPeriodClient,
-        agile_predict_client: AgilePredictClient,
         meters: list[Meter],
         region_code: str,
     ) -> None:
         self._mariadb = mariadb
         self._billing_period_client = billing_period_client
-        self._agile_predict_client = agile_predict_client
         self.meters = meters
         self.region_code = region_code
 
@@ -52,16 +49,10 @@ class _RealCostForecastSource:
     def get_current_billing_period(self) -> BillingPeriod:
         return self._billing_period_client.get_current_billing_period()
 
-    def fetch_agile_forecast(self, region: str) -> list[AgileForecastReading]:
-        return self._agile_predict_client.get_forecast(region)
-
-    def persist_agile_forecast(
-        self,
-        region: str,
-        readings: list[AgileForecastReading],
-        fetched_at: datetime,
-    ) -> None:
-        self._mariadb.write_agile_forecast(region, readings, fetched_at)
+    def read_agile_forecast(
+        self, region: str, as_of: datetime
+    ) -> list[AgileForecastReading]:
+        return self._mariadb.read_agile_forecast(region, as_of)
 
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
@@ -147,7 +138,6 @@ def _source(mariadb: MariaDBClient, meters: list[Meter]) -> _RealCostForecastSou
     return _RealCostForecastSource(
         mariadb,
         BillingPeriodClient(settings, KrakenTransport()),
-        AgilePredictClient(),
         meters,
         REGION,
     )

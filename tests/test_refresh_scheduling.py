@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 from common.config import RefreshSettings
+from data.agile_forecast import AgileForecastRetriever
 from data.consumption import ConsumptionRetriever
 from data.consumption_summary import (
     ConsumptionSummaryBackfill,
@@ -17,12 +18,14 @@ from data.mysql.client import MariaDBClient
 from data.pricing import PricingRetriever
 from data.pruning import DataPruner
 from main import (
+    register_agile_forecast_refresh_job,
     register_consumption_backfill_job,
     register_consumption_summary_job,
     register_cost_forecast_refresh_job,
     register_jobs,
     register_pricing_job,
     run_backfill_at_startup,
+    run_initial_agile_forecast_sync,
     run_initial_consumption_summary_sync,
     run_initial_cost_forecast_sync,
     run_initial_pricing_sync,
@@ -314,6 +317,65 @@ def test_a_failed_cost_forecast_run_is_recorded_as_a_failed_job_run(
 
     assert all(run.status == "failure" for run in runs)
     assert len(runs) > 0
+
+
+def test_agile_forecast_refresh_job_is_registered_hourly(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+
+    job = register_agile_forecast_refresh_job(
+        scheduler, Mock(spec=AgileForecastRetriever), mariadb_client
+    )
+
+    assert job.interval == 1
+    assert job.unit == "hours"
+
+
+def test_a_successful_agile_forecast_run_is_recorded_as_a_successful_job_run(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    agile_forecast = Mock(spec=AgileForecastRetriever)
+
+    job = register_agile_forecast_refresh_job(scheduler, agile_forecast, mariadb_client)
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert len(runs) == 1
+    assert runs[0].job_name == "agile_forecast_refresh"
+    assert runs[0].status == "success"
+
+
+def test_a_failed_agile_forecast_run_is_recorded_as_a_failed_job_run(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("common.decorator.time.sleep", lambda seconds: None)
+    scheduler = Scheduler()
+    agile_forecast = Mock(spec=AgileForecastRetriever)
+    agile_forecast.refresh.side_effect = RuntimeError(
+        "agilepredict.com and x2r.uk both unavailable"
+    )
+
+    job = register_agile_forecast_refresh_job(scheduler, agile_forecast, mariadb_client)
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert all(run.status == "failure" for run in runs)
+    assert len(runs) > 0
+
+
+def test_run_initial_agile_forecast_sync_does_not_propagate_a_startup_failure() -> None:
+    agile_forecast = Mock(spec=AgileForecastRetriever)
+    agile_forecast.refresh.side_effect = RuntimeError(
+        "agilepredict.com and x2r.uk both unavailable"
+    )
+
+    run_initial_agile_forecast_sync(agile_forecast)
 
 
 def test_pruning_runs_immediately_after_a_successful_summary_run_in_the_same_tick(

@@ -318,6 +318,32 @@ class MariaDBClient:
             standing_charge=row.standing_charge,
         )
 
+    def read_agile_forecast(
+        self, region: str, as_of: datetime
+    ) -> list[AgileForecastReading]:
+        af = model.agile_forecast
+        with self.session_read_scope() as session:
+            rows = (
+                session.query(af)
+                .filter(af.region == region, af.period_from >= as_of)
+                .order_by(af.period_from)
+                .all()
+            )
+        # DATETIME columns come back tz-naive regardless of backend -- every
+        # value stored here is UTC by convention (matching local_day's own
+        # naive-to-UTC normalization), so it's reattached here rather than
+        # left for callers to guess. Without this, the tz-aware `as_of`
+        # comparison in _project_agile_variable_cost would raise comparing
+        # naive to aware.
+        return [
+            AgileForecastReading(
+                period_from=row.period_from.replace(tzinfo=UTC),
+                period_to=row.period_to.replace(tzinfo=UTC),
+                unit_rate=row.forecast_unit_rate,
+            )
+            for row in rows
+        ]
+
     def read_elapsed_billing_period_costs(
         self, period_from: datetime, period_to: datetime, region: str
     ) -> list[DailyCostSummary]:
