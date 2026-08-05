@@ -53,3 +53,7 @@ class AgileForecastRetriever:
             )
 
         self._client.persist_agile_forecast(self._client.region_code, readings, as_of)
+        logger.info(
+            f"Agile forecast refresh: {len(readings)} reading(s) persisted for "
+            f"region {self._client.region_code}."
+        )
