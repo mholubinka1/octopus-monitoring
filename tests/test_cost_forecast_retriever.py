@@ -492,6 +492,42 @@ def test_agile_tariff_remaining_days_within_the_real_forecast_horizon(
 
 
 @responses.activate
+def test_no_agile_forecast_data_raises_a_clear_error_and_writes_no_row(
+    mariadb_client: MariaDBClient,
+) -> None:
+    # Regression test: an empty agile_forecast (fresh install where the
+    # Agile Forecast Refresh job hasn't populated it yet, or a prolonged
+    # outage that leaves no rows with period_from >= as_of) must fail loudly
+    # rather than silently project zero variable cost -- tile_forecast_beyond
+    # has nothing to tile from either, so the old "raise on empty forecast"
+    # guarantee (AgilePredictClient.get_forecast raised APIError on an empty
+    # response) must be preserved here now that the fetch was replaced with
+    # a read.
+    _mock_billing_period("2026-07-07", "2026-07-11")
+
+    with mariadb_client.session_write_scope() as s:
+        _seed_agile_agreement_and_rate(s)
+        _seed_complete_day(s, date(2026, 7, 6), "0.1")
+
+    retriever = CostForecastRetriever(
+        _source(
+            mariadb_client,
+            [
+                _make_electricity_meter(
+                    tariff_code=f"E-1R-{AGILE_PRODUCT_CODE}-{REGION}"
+                )
+            ],
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="[Nn]o Agile forecast data found"):
+        retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
+
+    with mariadb_client.session_read_scope() as session:
+        assert session.query(model.cost_forecast).count() == 0
+
+
+@responses.activate
 def test_agile_tariff_remaining_days_beyond_the_forecast_horizon_uses_tiling(
     mariadb_client: MariaDBClient,
 ) -> None:
