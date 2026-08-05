@@ -1,15 +1,32 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import requests
 from common.decorator import retry
 from common.exceptions import APIError
 from common.http import raise_for_http_error
+from data.local_day import LONDON
 from data.octopus.model import AgileForecastReading
 from pydantic import BaseModel
 
 REQUEST_TIMEOUT_SECONDS = 30
 HALF_HOUR = timedelta(minutes=30)
+
+
+def _to_utc(value: datetime) -> datetime:
+    # x2r.uk documents `date` as Europe/London, not UTC -- unlike
+    # agilepredict.com's UTC-offset timestamps, a naive value here means
+    # local wall-clock time, so it must be interpreted as London before
+    # converting, not defaulted to UTC (that would be off by the BST
+    # offset). Mirrors local_day.to_local_date's naive-handling shape.
+    # One inherent gap: a naive value during the UK's autumn DST "fall
+    # back" hour is genuinely ambiguous (that local time occurs twice) --
+    # ZoneInfo defaults to the first (BST) occurrence, since x2r.uk's
+    # response carries no fold/disambiguation data to resolve it correctly.
+    # At most one 30-minute forecast slot a year; not fixable client-side.
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=LONDON)
+    return value.astimezone(UTC)
 
 
 class X2rPriceEntry(BaseModel):
@@ -47,11 +64,14 @@ class X2rClient:
         if not parsed.prices.forecast:
             raise APIError(f"No Agile forecast data returned for region {region}.")
 
-        return [
-            AgileForecastReading(
-                period_from=entry.date,
-                period_to=entry.date + HALF_HOUR,
-                unit_rate=entry.price,
+        readings = []
+        for entry in parsed.prices.forecast:
+            period_from = _to_utc(entry.date)
+            readings.append(
+                AgileForecastReading(
+                    period_from=period_from,
+                    period_to=period_from + HALF_HOUR,
+                    unit_rate=entry.price,
+                )
             )
-            for entry in parsed.prices.forecast
-        ]
+        return readings

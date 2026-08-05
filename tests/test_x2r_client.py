@@ -54,6 +54,39 @@ def test_get_forecast_maps_forecast_prices_to_unit_rate_with_thirty_minute_perio
 
 
 @responses.activate
+def test_bst_offset_dates_are_normalized_to_utc() -> None:
+    # x2r.uk documents `date` as Europe/London -- during BST (British
+    # Summer Time, UTC+1), local 01:00 is UTC 00:00. Instant-equality alone
+    # wouldn't catch a client that returned the value with its original
+    # +01:00 tzinfo still attached (Python compares aware datetimes by
+    # absolute instant, so that would already pass the equality assertion)
+    # -- the actual regression this guards is a persistence-layer one: the
+    # naive DATETIME column downstream stores whichever wall-clock numbers
+    # the tzinfo says, so tzinfo must genuinely be UTC, not just
+    # instant-equivalent to it.
+    _mock_forecast([{"date": "2026-07-22T01:00:00+01:00", "price": "21.19"}])
+
+    readings = X2rClient().get_forecast(REGION)
+
+    assert readings[0].period_from == datetime(2026, 7, 22, 0, 0, tzinfo=UTC)
+    assert readings[0].period_from.tzinfo is UTC
+    assert readings[0].period_to == datetime(2026, 7, 22, 0, 30, tzinfo=UTC)
+
+
+@responses.activate
+def test_naive_dates_are_interpreted_as_london_local_time_not_utc() -> None:
+    # If x2r.uk ever omits the UTC offset entirely, a naive "01:00" must
+    # still be read as Europe/London local time (BST here), not
+    # misinterpreted as already being UTC.
+    _mock_forecast([{"date": "2026-07-22T01:00:00", "price": "21.19"}])
+
+    readings = X2rClient().get_forecast(REGION)
+
+    assert readings[0].period_from == datetime(2026, 7, 22, 0, 0, tzinfo=UTC)
+    assert readings[0].period_from.tzinfo is UTC
+
+
+@responses.activate
 def test_day_ahead_and_actual_prices_are_not_included_in_the_forecast() -> None:
     _mock_forecast(
         forecast=[_price_entry(0, "21.19")],
