@@ -567,7 +567,7 @@
             "axisPlacement": "auto",
             "barAlignment": 1,
             "drawStyle": "bars",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "scheme",
             "hideFrom": {
               "legend": false,
@@ -1041,7 +1041,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 16,
+        "h": 17,
         "w": 10,
         "x": 0,
         "y": 15
@@ -1235,7 +1235,7 @@
           }
         }
       ],
-      "timeFrom": "365d",
+      "timeFrom": "400d",
       "title": "Monthly Total Consumption",
       "type": "timeseries"
     },
@@ -1385,7 +1385,7 @@
           }
         }
       ],
-      "timeFrom": "365d",
+      "timeFrom": "400d",
       "title": "Consumption Year-on-Year Percentage Change",
       "type": "timeseries"
     },
