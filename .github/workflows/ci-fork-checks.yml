@@ -1,18 +1,20 @@
-name: Code Quality Checks
+name: Fork PR Checks
 
 on:
-  push:
+  pull_request:
     branches:
-      - '**'
+      - 'main'
 
 jobs:
   checks:
-    name: Run all code quality checks
-    runs-on: [self-hosted, linux, ARM64]
+    name: Run checks on GitHub-hosted runner for fork PRs
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Install uv
@@ -70,3 +72,8 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run tests
+        run: |
+          BASELINE=$(cat .github/coverage-baseline.txt)
+          uv run pytest --cov=app --cov-report=term-missing --cov-fail-under="$BASELINE"
