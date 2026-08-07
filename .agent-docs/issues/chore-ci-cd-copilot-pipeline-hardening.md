@@ -91,10 +91,11 @@ is evaluated from the base branch).
 
 ### Acceptance criteria
 
-- [ ] `auto_request_review.yml` disabled via `gh api` before deletion
-- [ ] `.github/workflows/auto_request_review.yml` deleted
-- [ ] `.github/reviewers.yml` deleted
-- [ ] Follow-up note recorded for the user: after this PR merges, confirm `mholubinka1` is
+- [x] `auto_request_review.yml` disabled via `gh api` before deletion (workflow id 140718204,
+      state confirmed `disabled_manually`)
+- [x] `.github/workflows/auto_request_review.yml` deleted
+- [x] `.github/reviewers.yml` deleted
+- [x] Follow-up note recorded for the user: after this PR merges, confirm `mholubinka1` is
       auto-assigned via CODEOWNERS on the next real PR
 
 ---
