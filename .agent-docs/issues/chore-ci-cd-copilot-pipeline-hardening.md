@@ -32,6 +32,11 @@ for all outside collaborators." Record the trigger-design decision as a new ADR.
 - [x] A real push on this branch triggers `ci-checks.yml`/`ci-arm64.yml` successfully on the
       self-hosted runner (verified via `gh run watch`: both completed successfully)
 
+**Post-review follow-up**: the shared lint/type-check/security-scan steps in `ci-checks.yml`
+and `ci-fork-checks.yml` were originally duplicated verbatim (a code-review Duplicated Code
+finding). Extracted into `.github/actions/lint-checks/action.yml`, a composite action both
+workflows now call. Re-verified working on a real push after the refactor.
+
 ---
 
 ## Add CODEOWNERS and require Code Owner review (#479)
