@@ -1,3 +1,7 @@
+> Work complete — PR ready to merge. One acceptance criterion (live deployment
+> observation) remains unchecked below since it can only be confirmed after
+> merging and deploying; see the PR for details.
+
 # Issues: chore/grafana-billing-period-variable-refresh
 
 ## Resync billing-period title variables on auto-refresh
@@ -21,10 +25,10 @@ No other variable, panel query, or application code changes.
 
 ### Acceptance criteria
 
-- [ ] `billing_period_start` variable has `"refresh": 2` in `grafana/dashboard.json`
-- [ ] `billing_period_end` variable has `"refresh": 2` in `grafana/dashboard.json`
-- [ ] `region` variable is unchanged (`"refresh": 1`)
-- [ ] No other field on either variable, and no panel query, changes
+- [x] `billing_period_start` variable has `"refresh": 2` in `grafana/dashboard.json`
+- [x] `billing_period_end` variable has `"refresh": 2` in `grafana/dashboard.json`
+- [x] `region` variable is unchanged (`"refresh": 1`)
+- [x] No other field on either variable, and no panel query, changes
 - [ ] Deployed and observed live: title's date range updates on the dashboard's normal
       auto-refresh tick after a new `cost_forecast` row lands, without a manual page
       reload
