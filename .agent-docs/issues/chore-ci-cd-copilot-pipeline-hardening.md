@@ -19,16 +19,18 @@ for all outside collaborators." Record the trigger-design decision as a new ADR.
 
 ### Acceptance criteria
 
-- [ ] `ci-checks.yml`: `on:` is `push` only; `runs-on: [self-hosted, linux, ARM64]`
-- [ ] `ci-arm64.yml`: `on:` is `push` only; runner label unchanged; build/push steps unchanged
-- [ ] `ci-fork-checks.yml` exists: `on: pull_request`, `runs-on: ubuntu-latest`, job gated by
+- [x] `ci-checks.yml`: `on:` is `push` only; `runs-on: [self-hosted, linux, ARM64]`
+- [x] `ci-arm64.yml`: `on:` is `push` only; runner label unchanged; build/push steps unchanged
+- [x] `ci-fork-checks.yml` exists: `on: pull_request`, `runs-on: ubuntu-latest`, job gated by
       `if: github.event.pull_request.head.repo.full_name != github.repository`
-- [ ] Fork PR workflow approval set to "Require approval for all outside collaborators"
-      (verified via `gh api`)
-- [ ] New ADR added to `.agent-docs/adr/` documenting the push-only + SHA-matched
-      status-checks + hosted-only fork fallback design
-- [ ] A real push on this branch triggers `ci-checks.yml`/`ci-arm64.yml` successfully on the
-      self-hosted runner (verified via `gh run list`)
+- [ ] Fork PR workflow approval set to "Require approval for all outside collaborators" —
+      **manual step required**: no public REST API endpoint found for this setting
+      (checked `actions/permissions` and `actions/permissions/workflow`, neither exposes it).
+      Set it yourself at Settings → Actions → General → Fork pull request workflows.
+- [x] New ADR added to `.agent-docs/adr/` documenting the push-only + SHA-matched
+      status-checks + hosted-only fork fallback design (`0012-push-only-self-hosted-ci-with-hosted-fork-fallback.md`)
+- [x] A real push on this branch triggers `ci-checks.yml`/`ci-arm64.yml` successfully on the
+      self-hosted runner (verified via `gh run watch`: both completed successfully)
 
 ---
 
@@ -45,9 +47,9 @@ Code Owners" in a ruleset on `main` so it's enforced, not just advisory.
 
 ### Acceptance criteria
 
-- [ ] `.github/CODEOWNERS` contains `* @mholubinka1`
-- [ ] Ruleset on `main` has "Require review from Code Owners" enabled (verified via
-      `gh api repos/.../rulesets`)
+- [x] `.github/CODEOWNERS` contains `* @mholubinka1`
+- [x] Ruleset on `main` has "Require review from Code Owners" enabled (verified via
+      `gh api repos/.../rulesets`: ruleset id 20551010, enforcement "active")
 
 ---
 
@@ -64,7 +66,13 @@ there, else the repo's code review settings), leaving on-demand/manual Copilot r
 
 ### Acceptance criteria
 
-- [ ] Automatic Copilot code review confirmed off (verified via `gh api` / ruleset config)
+- [x] Automatic Copilot code review confirmed off at the repo-ruleset level (verified via
+      `gh api repos/.../rulesets`: only the CODEOWNERS ruleset exists, no `copilot_code_review`
+      rule present anywhere). **Manual follow-up recommended**: since no repo ruleset ever
+      enabled this, the auto-review credits you observed likely come from your personal
+      GitHub account's Copilot settings (Settings → Copilot → Code review), not a per-repo
+      toggle — worth checking there directly, and it would apply across all 7 repos in scope
+      at once rather than needing repeating per-repo.
 
 ---
 
