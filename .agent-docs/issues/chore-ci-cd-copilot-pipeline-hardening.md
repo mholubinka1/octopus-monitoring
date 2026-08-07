@@ -34,7 +34,7 @@ for all outside collaborators." Record the trigger-design decision as a new ADR.
 
 **Post-review follow-up**: the shared lint/type-check/security-scan steps in `ci-checks.yml`
 and `ci-fork-checks.yml` were originally duplicated verbatim (a code-review Duplicated Code
-finding). Extracted into `.github/actions/lint-checks/action.yml`, a composite action both
+finding). Extracted into `.github/actions/code-quality-checks/action.yml`, a composite action both
 workflows now call. Re-verified working on a real push after the refactor.
 
 ---
