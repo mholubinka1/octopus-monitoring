@@ -1,5 +1,9 @@
 # Issues: chore-ci-cd-copilot-pipeline-hardening
 
+> Work complete — PR ready to merge. One acceptance criterion (fork PR workflow approval
+> setting under issue #478) remains an open manual step for you — no GitHub REST API exists
+> for it, so it can't be automated. See that item below for the exact Settings path.
+
 ## Harden self-hosted runner against fork PR execution (#478)
 
 **Blocked by**: None
