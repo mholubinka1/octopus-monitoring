@@ -1,0 +1,39 @@
+name: Fork PR Checks
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  checks:
+    name: Run checks on GitHub-hosted runner for fork PRs
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Checkout trusted config
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .trusted-config
+          sparse-checkout: |
+            .github/actions/code-quality-checks
+            .github/coverage-baseline.txt
+
+      - name: Run code quality checks
+        uses: ./.trusted-config/.github/actions/code-quality-checks
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run tests
+        run: |
+          BASELINE=$(cat .trusted-config/.github/coverage-baseline.txt)
+          uv run pytest --cov=app --cov-report=term-missing --cov-fail-under="$BASELINE"
