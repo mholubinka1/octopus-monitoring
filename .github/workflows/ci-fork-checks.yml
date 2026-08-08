@@ -26,7 +26,6 @@ jobs:
           path: .trusted-actions
           sparse-checkout: |
             .github/actions/code-quality-checks
-          sparse-checkout-cone-mode: false
 
       - name: Run code quality checks
         uses: ./.trusted-actions/.github/actions/code-quality-checks
