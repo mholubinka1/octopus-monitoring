@@ -19,20 +19,21 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Checkout trusted composite action
+      - name: Checkout trusted config
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          path: .trusted-actions
+          path: .trusted-config
           sparse-checkout: |
             .github/actions/code-quality-checks
+            .github/coverage-baseline.txt
 
       - name: Run code quality checks
-        uses: ./.trusted-actions/.github/actions/code-quality-checks
+        uses: ./.trusted-config/.github/actions/code-quality-checks
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run tests
         run: |
-          BASELINE=$(cat .github/coverage-baseline.txt)
+          BASELINE=$(cat .trusted-config/.github/coverage-baseline.txt)
           uv run pytest --cov=app --cov-report=term-missing --cov-fail-under="$BASELINE"
