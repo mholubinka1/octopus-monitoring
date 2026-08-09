@@ -17,8 +17,10 @@ fork-fallback paragraph without rewriting its original reasoning.
 ### Acceptance criteria
 
 - [x] `.github/workflows/ci-fork-checks.yml` deleted
-- [x] No remaining reference to `ci-fork-checks.yml` or `.trusted-config`
-      anywhere in the repo (grep confirms)
+- [x] No remaining *operational* reference to `ci-fork-checks.yml` or
+      `.trusted-config` under `.github/` (grep confirms) — `.agent-docs/`
+      documents (this file, the spec, ADR-0012, ADR-0013) intentionally
+      keep both strings as historical record
 - [x] `ci-checks.yml` and `ci-arm64.yml` unchanged (still push-only,
       self-hosted, using the composite action directly)
 - [x] `.agent-docs/adr/0013-remove-fork-pr-fallback-workflow.md` added
