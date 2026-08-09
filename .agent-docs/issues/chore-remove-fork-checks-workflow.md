@@ -22,8 +22,9 @@ fork-fallback paragraph without rewriting its original reasoning.
       documents (this file, the spec, ADR-0012, ADR-0013, plus the
       pre-existing PR #482 spec/issue files) intentionally keep both
       strings as historical record
-- [x] `ci-checks.yml` and `ci-arm64.yml` unchanged (still push-only,
-      self-hosted, using the composite action directly)
+- [x] `ci-checks.yml` and `ci-arm64.yml` unchanged (both still push-only,
+      self-hosted; `ci-checks.yml` still uses the composite action
+      directly — `ci-arm64.yml` never used it, runs its own steps)
 - [x] `.agent-docs/adr/0013-remove-fork-pr-fallback-workflow.md` added
 - [x] `.agent-docs/adr/0012-...md` has a pointer note added to its
       fork-fallback paragraph, rest of the file unchanged
