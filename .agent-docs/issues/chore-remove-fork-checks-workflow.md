@@ -16,15 +16,18 @@ fork-fallback paragraph without rewriting its original reasoning.
 
 ### Acceptance criteria
 
-- [ ] `.github/workflows/ci-fork-checks.yml` deleted
-- [ ] No remaining reference to `ci-fork-checks.yml` or `.trusted-config`
+- [x] `.github/workflows/ci-fork-checks.yml` deleted
+- [x] No remaining reference to `ci-fork-checks.yml` or `.trusted-config`
       anywhere in the repo (grep confirms)
-- [ ] `ci-checks.yml` and `ci-arm64.yml` unchanged (still push-only,
+- [x] `ci-checks.yml` and `ci-arm64.yml` unchanged (still push-only,
       self-hosted, using the composite action directly)
-- [ ] `.agent-docs/adr/0013-remove-fork-pr-fallback-workflow.md` added
-- [ ] `.agent-docs/adr/0012-...md` has a pointer note added to its
+- [x] `.agent-docs/adr/0013-remove-fork-pr-fallback-workflow.md` added
+- [x] `.agent-docs/adr/0012-...md` has a pointer note added to its
       fork-fallback paragraph, rest of the file unchanged
-- [ ] A real push on this branch triggers `ci-checks.yml`/`ci-arm64.yml`
-      successfully on the self-hosted runner (verified via `gh run watch`)
+- [x] A real push on this branch triggers `ci-checks.yml`/`ci-arm64.yml`
+      successfully on the self-hosted runner (verified via `gh run watch`
+      after clearing a stale `/tmp/gitleaks.tmp` on the runner's persistent
+      disk — unrelated to this diff, a leftover from earlier rapid pushes
+      in a prior session)
 
 ---
