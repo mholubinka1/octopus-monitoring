@@ -1,5 +1,7 @@
 # Issues: chore-remove-fork-checks-workflow
 
+> Work complete — PR ready to merge.
+
 ## Remove ci-fork-checks.yml and record the reversal (#483)
 
 **Blocked by**: None
