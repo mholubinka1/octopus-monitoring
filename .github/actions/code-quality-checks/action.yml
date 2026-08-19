@@ -12,12 +12,12 @@ runs:
   using: composite
   steps:
     - name: Install uv
-      uses: astral-sh/setup-uv@v5
+      uses: astral-sh/setup-uv@v10.0.1
       with:
         python-version: '3.13'
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: 'lts/*'
 
@@ -76,6 +76,6 @@ runs:
       run: uv run --with 'bandit[toml]' bandit -r -c pyproject.toml app
 
     - name: Scan for secrets with gitleaks
-      uses: gitleaks/gitleaks-action@v2
+      uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
