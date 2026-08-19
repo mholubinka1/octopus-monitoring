@@ -1,4 +1,4 @@
-name: Docker Build/Publish Image - ARMv7
+name: Docker Build/Publish Image - ARM64
 
 on:
   push:
@@ -13,14 +13,13 @@ jobs:
     env:
       DOCKER_REGISTRY: docker.io
       DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/octopus-monitoring
-      DOCKER_TARGET_PLATFORM: linux/arm/arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Install uv
         if: success()
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: '3.13'
 
@@ -56,22 +55,13 @@ jobs:
         if: success()
         id: prepare
         run: |
-          echo "docker_platform=${DOCKER_TARGET_PLATFORM}" >> $GITHUB_OUTPUT
           echo "docker_image=${DOCKER_REGISTRY}/${DOCKER_IMAGE}" >> $GITHUB_OUTPUT
-          echo "version=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
 
       - name: Docker info
         run: |
           docker version
           docker info
           docker ps
-
-      - name: Docker Login
-        if: success() && github.event_name == 'push'
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Get Docker Image Tag
         if: success()
@@ -82,9 +72,23 @@ jobs:
           if [ $branchName != 'main' ]; then image_tag='dev'; else image_tag='latest'; fi
           echo "tag=$(echo $image_tag)" >> $GITHUB_OUTPUT
 
-      - name: Docker Build and Push
+      - name: Docker Login, Build, and Push
         if: success() && github.event_name == 'push'
-        uses: docker/build-push-action@v4
+        uses: nick-fields/retry@v4
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAG: ${{ steps.prepare.outputs.docker_image }}:${{ steps.tag.outputs.tag }}
         with:
-          push: true
-          tags: ${{ steps.prepare.outputs.docker_image }}:${{ steps.tag.outputs.tag }}
+          max_attempts: 3
+          retry_wait_seconds: 15
+          timeout_minutes: 5
+          command: |
+            set -euo pipefail
+            trap 'docker logout "$DOCKER_REGISTRY" || true' EXIT
+            echo "$DOCKERHUB_TOKEN" | docker login "$DOCKER_REGISTRY" --username "$DOCKERHUB_USERNAME" --password-stdin
+            # Build from the local checkout rather than a remote git#{sha} context (the
+            # previous docker/build-push-action default) — the remote-fetch path was the
+            # confirmed root cause of a transient CI failure investigated in a sibling repo's
+            # CI hardening pass. Keep this command literal; do not add extra build flags.
+            docker buildx build --push --tag "$TAG" .
