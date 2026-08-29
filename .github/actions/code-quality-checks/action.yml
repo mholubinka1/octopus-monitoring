@@ -15,6 +15,10 @@ runs:
       uses: astral-sh/setup-uv@v10.0.1
       with:
         python-version: '3.13'
+        # Pin the uv binary (not just the action) so `uv audit` — which uv still
+        # marks experimental — runs the same version CI-side as the pinned
+        # uv-audit pre-commit hook (astral-sh/uv-pre-commit 0.11.33).
+        version: '0.11.33'
 
     - name: Set up Node.js
       uses: actions/setup-node@v7
@@ -32,6 +36,14 @@ runs:
     - name: Install project dependencies
       shell: bash
       run: uv sync --locked
+
+    - name: Validate pyproject.toml
+      shell: bash
+      run: uv run --with 'validate-pyproject[all]' validate-pyproject pyproject.toml
+
+    - name: Audit dependencies for known vulnerabilities
+      shell: bash
+      run: uv audit
 
     - name: Type check with mypy
       shell: bash
@@ -56,6 +68,15 @@ runs:
     - name: Check YAML style with yamllint
       shell: bash
       run: uv run --with yamllint yamllint .
+
+    - name: Lint GitHub Actions workflows with actionlint
+      uses: docker://rhysd/actionlint:1.7.12
+      with:
+        args: -color
+
+    - name: Lint shell scripts with shellcheck
+      shell: bash
+      run: git ls-files -z '*.sh' | xargs -0 -r uv run --with shellcheck-py shellcheck
 
     - name: Check spelling with codespell
       shell: bash
