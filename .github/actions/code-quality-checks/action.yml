@@ -75,6 +75,14 @@ runs:
       shell: bash
       run: uv run --with 'bandit[toml]' bandit -r -c pyproject.toml app
 
+    # gitleaks-action downloads to a fixed /tmp/gitleaks.tmp and unpacks to
+    # /tmp/gitleaks-<version>/; on the persistent self-hosted runner a leftover
+    # from an interrupted run makes every later run fail with
+    # "Destination file path /tmp/gitleaks.tmp already exists". Clear both first.
+    - name: Clear stale gitleaks download cache
+      shell: bash
+      run: rm -rf /tmp/gitleaks.tmp /tmp/gitleaks-*
+
     - name: Scan for secrets with gitleaks
       uses: gitleaks/gitleaks-action@v3
       env:
