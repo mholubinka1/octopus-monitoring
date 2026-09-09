@@ -5,8 +5,8 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     volumes:
-      - /mnt/media/pi-media/monitoring/config/energy-monitor:/config
-      - /mnt/media/pi-media/monitoring/log/energy-monitor:/log
+      - /mnt/media/pi-media/containers/energy-monitor/config:/config
+      - /mnt/media/pi-media/containers/energy-monitor/log:/log
     extra_hosts:
       - "host.docker.internal:host-gateway"
     dns:
@@ -29,8 +29,8 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - /mnt/media/pi-media/monitoring/data/mysql/:/var/lib/mysql/
-      - /mnt/media/pi-media/monitoring/config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - /mnt/media/pi-media/containers/energy-monitor-db/data/:/var/lib/mysql/
+      - /mnt/media/pi-media/containers/energy-monitor-db/config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: "mariadb --user=$${MARIADB_USER} --password=$${MARIADB_PASSWORD} --execute \"SHOW DATABASES;\""
       start_interval: 10s
