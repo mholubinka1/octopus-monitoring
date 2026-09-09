@@ -59,7 +59,7 @@ one small overlap remains rather than being engineered away. `MARIADB_DATABASE` 
 ### First-time deployment
 
 1. **Edit the bind-mount paths.** `docker-compose.yml`'s `volumes:` entries
-   (`/mnt/media/pi-media/monitoring/...`) are host-specific placeholders — change them
+   (`/mnt/media/pi-media/containers/...`) are host-specific placeholders — change them
    to real paths on your machine before doing anything else. You need four host
    directories/files:
    - a config directory for the app (mounted to `/config`)
