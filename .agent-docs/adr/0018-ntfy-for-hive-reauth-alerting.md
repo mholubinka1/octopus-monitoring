@@ -1,0 +1,5 @@
+# ntfy.sh as hive-app's re-auth alert channel
+
+Every existing job in this repo signals failure passively, through `job_run` rows a Grafana staleness panel surfaces on demand — nobody is notified proactively; you have to look at the dashboard. hive-app's Hive client introduces one failure mode that pattern doesn't fit: if Cognito forgets its remembered device, recovery needs a live SMS 2FA code, something a headless service cannot supply itself (see `.agent-docs/research/hive-api-access-approach.md`). A dashboard staleness panel that nobody's looking at leaves the heating client silently dead until someone happens to check.
+
+We chose ntfy.sh — a single HTTP POST to a topic URL, no account/SMTP setup — as the first proactive/push alert channel this repo has, scoped narrowly to only this one failure case (not a general-purpose alerting mechanism for every job failure; those stay on the existing `job_run`/dashboard pattern). This is a real precedent: it's the first time this codebase reaches outside its own dashboard to push a notification, and future features reaching for "alert me about X" should reuse this channel rather than each inventing their own.

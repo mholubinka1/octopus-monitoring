@@ -1,0 +1,81 @@
+# hive-app: Heating and Weather Data Gathering
+
+## Problem Statement
+
+The user has no visibility into how their Hive-controlled heating relates to the rest of their home-energy picture. Indoor temperature, the heating schedule, and outdoor weather aren't recorded anywhere, so there's no way to see them alongside octopus-app's existing gas/electricity consumption and cost data — and no way to answer questions like "is today's gas usage normal for how cold it is" or "what is heating actually costing me this billing period." octopus-app's own `cost_forecast` compounds this: it's implicitly electricity-only (`_current_electricity_agreement` is hard-coded), so gas — the fuel heating actually uses — has no cost projection at all.
+
+## Solution
+
+Build `hive-app`, a new data-gathering container mirroring octopus-app's existing shape (scheduler loop, MariaDB persistence via Schema Sync, `job_run` logging, verb-DI-seam client conventions), gathering two things: Hive heating status via the community `apyhiveapi` library, and outdoor weather (current observations plus a forecast) from Weather Underground and Open-Meteo. Extend octopus-app's `cost_forecast` to cover gas, using hive-app's weather forecast to project the remaining billing period. Add Grafana panels that read from both apps' tables in the shared MariaDB instance to visualize indoor/outdoor temperature together and gas consumption against heating activity.
+
+This is the first ticket resolved on the Home Monitoring Wayfinder map (GitHub issue #490) to reach implementation; the map itself, the repo rename, the MariaDB ownership model, packaging, and compose/CI structure remain separately tracked and are **not** settled by this spec — see Out of Scope.
+
+## User Stories
+
+1. As the account holder, I want to see indoor and outdoor temperature on the same chart, so that I can tell how well the house is holding heat against the weather.
+2. As the account holder, I want to see half-hourly gas consumption with the periods heating was actually on shaded differently, so that I can visually attribute gas spikes to heating rather than guessing.
+3. As the account holder, I want a cumulative gas-kWh figure for the current billing period plus a projected total, so that I know where I stand before the bill arrives — the same thing octopus-app already gives me for electricity cost, now for gas.
+4. As the account holder, I want that projection to account for how cold the remaining days of the billing period are expected to be, not just assume average recent usage continues, so that a forecast cold snap doesn't blindside the projection.
+5. As the account holder, I want to see a view of how gas usage relates to outdoor temperature, so that I can judge whether a given day's usage was normal for the weather.
+6. As the operator, I want hive-app to recover from a restart without losing its Hive login, so that a container redeploy doesn't require me to manually re-authenticate every time.
+7. As the operator, I want to be actively notified if hive-app's Hive session needs a live SMS code to recover, so that I notice and act before heating monitoring silently goes stale for days.
+8. As the operator, every other hive-app failure (a weather source being down, a transient Hive poll failure) should behave like every other job in this repo — visible via `job_run` and the dashboard's staleness panel, not a new notification path — so that this doesn't introduce alert fatigue for routine, self-healing failures.
+
+## Implementation Decisions
+
+### hive-app: new container
+
+- New top-level module tree mirroring `app/`'s shape (exact directory/packaging boundary — shared with or independent of octopus-app — is **not** decided here; tracked separately on the shared-code-model and packaging-structure Wayfinder tickets, issues #491/#497). For this spec, describe the modules hive-app needs without committing to where they physically live relative to octopus-app.
+- `HiveSource` protocol (mirrors `PricingSource` in `app/data/pricing.py`): verbs `fetch_heating_status() -> HeatingStatus`, `persist_heating_status(status: HeatingStatus) -> None`, wrapping `apyhiveapi`'s Cognito-SRP-authenticated client. A `HeatingRetriever` (mirrors `ConsumptionRetriever`/`PricingRetriever`) is constructed with an injected `HiveSource` and exposes `refresh()`.
+- `WeatherSource` protocol, same shape, verbs for `fetch_current_observation()`, `fetch_forecast()`, each `persist_*` counterpart. Two concrete implementations: a Weather Underground client (`GET https://api.weather.com/v2/pws/observations/current?stationId=IBECKE4&format=json&units=m&apiKey=...`) as primary, and an Open-Meteo client as fallback on failure — mirroring `PricingRetriever`'s existing primary/fallback pattern for Agile forecast sources (Agile Predict → x2r.uk). Open-Meteo's forecast endpoint (`https://api.open-meteo.com/v1/forecast?...&daily=temperature_2m_max`) supplies the separate forecast fetch; no fallback source for the forecast itself (day-one scope keeps this to one source, unlike the observation fetch).
+- Auth state: `hive_auth_state` table (single row, upserted), holding the Cognito refresh token, `DeviceGroupKey`, and `DeviceKey` persisted after every successful login/refresh, so a container restart resumes via `REFRESH_TOKEN_AUTH`/`DEVICE_SRP_AUTH` rather than a full interactive login. On an unrecoverable auth failure (Cognito no longer recognizes the remembered device, and a live SMS code is required — see `.agent-docs/research/hive-api-access-approach.md`), the heating-poll job's failure path calls a new, narrowly-scoped `notify_reauth_required()` helper that POSTs to a configured ntfy.sh topic URL. This helper is used **only** by this one failure path — not wired into the generic `job_run` failure recording other jobs use (see [ADR-0018](../adr/0018-ntfy-for-hive-reauth-alerting.md)).
+- New config section (mirrors `OctopusAPISettings`/`MariaDBSettings` in `app/common/config.py`): Hive username/password, WU API key + station ID, Open-Meteo needs no key, an ntfy.sh topic URL, and the household's lat/long for weather queries.
+- Jobs, registered the same way `register_*_job` functions wrap `_schedule_refresh_job`/`job_run`/backoff in `app/main.py` today:
+  - `heating_refresh` — every 120 seconds.
+  - `weather_observation_refresh` — every 60 minutes.
+  - `weather_forecast_refresh` — every 60 minutes (Open-Meteo's free tier documents up to 10,000 calls/day for non-commercial use; 24/day is trivially within that).
+
+### New tables (`app/data/mysql/model.py`, or its hive-app equivalent — picked up by the existing additive Schema Sync, [ADR-0005](../adr/0005-additive-only-schema-sync.md))
+
+- `heating_status`: `id` (PK), `polled_at`, `current_temp`, `target_temp`, `mode`, `state`, `boost_active`, `boost_ends_at`, `schedule` (JSON — see [ADR-0017](../adr/0017-json-column-for-heating-schedule.md)).
+- `weather_observation`: `id` (PK), `source`, `observed_at`, `temp`, `humidity`, `pressure`, `wind_speed`, `precipitation`.
+- `weather_forecast`: `id` (PK), `source`, `target_date`, `max_temp`, `fetched_at`.
+- `hive_auth_state`: single row, `refresh_token`, `device_group_key`, `device_key`, `updated_at`.
+
+### octopus-app: `cost_forecast` extended to gas
+
+- New `energy` column added to the existing `cost_forecast` table ([ADR-0016](../adr/0016-energy-column-on-cost-forecast.md)) — `Column(String(1), nullable=False)`, matching the discriminator already used on `consumption`/`agreement`/`daily_consumption_summary`. **Requires a one-time manual `UPDATE cost_forecast SET energy = 'E' WHERE energy IS NULL`-style backfill on the live production database** — Schema Sync adds the column but never populates it (per ADR-0005); this is a deliberate manual deployment step, not something the app does automatically.
+- `cost_forecast.py`'s `_current_electricity_agreement` is generalized to accept an `Energy` parameter (mirroring how `PricingSource.fetch_electricity_rates`/`fetch_gas_rates` already differentiate by fuel) rather than hard-coding electricity. `CostForecastRetriever.refresh()` runs the existing electricity computation and a new gas computation, each writing its own `(billing_period, energy)` row.
+- Gas's `actual_cost_to_date` reuses the existing `consumption ⋈ agreement ⋈ product_rate` join, filtered to `energy = 'G'` — no new query shape needed, gas's `Agreement`/`product_rate` rows are already synced by `PricingRetriever` today, they've simply never been read by `cost_forecast.py`.
+- Gas's `projected_total_cost` is computed via a live (nothing persisted) linear regression: daily gas kWh (`daily_consumption_summary`, `energy = 'G'`) against that day's max outdoor temperature (`weather_observation`, aggregated to a daily max, or `weather_forecast`'s max_temp for future days) over a trailing historical window. The regression is recomputed fresh on every `cost_forecast_refresh` run — no model-coefficients table, consistent with [ADR-0010](../adr/0010-local-day-bucketing-python-vs-sql.md)'s existing preference for computing derived logic in Python rather than storing intermediate state. For each remaining day in the billing period, the regression predicts a kWh figure from that day's `weather_forecast.max_temp`; predicted kWh is converted to £ using the same live `product_rate` unit rate/standing charge octopus-app already tracks for the gas meter (not a manually-entered rate — see the design session's resolution on GitHub issue #494).
+- This computation reads `weather_observation`/`weather_forecast`, tables that belong to hive-app — this cross-app read is possible today only because both apps share one MariaDB instance (the user's stated preference; formally still open on the MariaDB-ownership Wayfinder ticket, issue #492). If that ticket lands on separate databases per app instead, this implementation decision needs revisiting.
+
+### Grafana (`grafana/mariadb/queries.md` — no dashboard exists to wire panels into yet, same situation `feature-yearly-consumption-comparison.md` documented for its own panels)
+
+- Indoor/outdoor temperature overlay: `heating_status.current_temp` and `weather_observation.temp`, both time series, same panel.
+- Gas consumption with heating-ON shading: `consumption` (`energy = 'G'`, half-hourly) as the base series; `heating_status` rows where `state`/`mode` indicate active heating define shaded regions (exact "is heating active" predicate depends on what `state`/`mode` values `apyhiveapi` actually returns — confirm against real polled data during implementation, not guessed here).
+- Gas-vs-outdoor-temp correlation view: a scatter or similar panel joining `daily_consumption_summary` (`energy = 'G'`) against a daily max of `weather_observation.temp`.
+
+## Testing Decisions
+
+- **Weather clients** (WU, Open-Meteo): HTTP-boundary mocking via the `responses` library, exactly matching `test_consumption_seam.py`'s pattern — real client code runs against a mocked HTTP response, result asserted after round-tripping through a real (SQLite-backed) `MariaDBClient`.
+- **Heating client**: `apyhiveapi`'s Cognito SRP flow is not mocked at the HTTP/crypto level — nothing in this repo does that today, and it would mean re-implementing SRP math in tests. Instead, `HeatingRetriever` is tested against a fake `HiveSource` (a plain class implementing the Protocol), the same seam shape `test_pricing_retrieval.py` already uses for `PricingSource`. `apyhiveapi`'s own concrete implementation of `HiveSource` is exercised only by construction/wiring — not unit-tested against a live or mocked Cognito flow.
+- **Auth-failure/ntfy path**: unit test asserting that a `HiveSource` fake raising the specific "needs live SMS" error causes `notify_reauth_required()` to be called (a mocked HTTP POST, `responses`-style), and that it is *not* called for other failure types (ordinary transient poll failures).
+- **Gas cost forecast**: extend `test_cost_forecast_*.py`'s existing seeded-SQLite pattern — seed `consumption`/`agreement`/`product_rate` for a gas meter alongside `daily_consumption_summary` and `weather_observation`/`weather_forecast` rows, run `CostForecastRetriever.refresh()`, assert the resulting gas `cost_forecast` row's `actual_cost_to_date` and `projected_total_cost` match hand-computed expected values. Cover: a cold-forecast day producing a higher projection than a mild one (proves the regression is actually being applied, not just averaging).
+- **Job scheduling**: extend `test_refresh_scheduling.py`'s pattern to hive-app's three new jobs (heating/observation/forecast refresh), asserting `job_run` records success/failure per job.
+- No automated test for the Grafana panel SQL itself, same standing decision as `feature-yearly-consumption-comparison.md` — verified against a real MariaDB instance when the dashboard feature itself is implemented.
+
+## Out of Scope
+
+- Presence-based heating control (auto-preventing heating when nobody's home) — deferred, explicitly last-phase. Tracked as its own research ticket on the Wayfinder map (GitHub issue #499), contingent on confirming whether `apyhiveapi` exposes Hive's geofencing state at all. No data model, control-write path, or UI is designed here.
+- Hot water, smart plugs, lights, and sensors — none exist on the account; `apyhiveapi` supports them, but there's nothing to gather.
+- Historical backfill of weather data predating hive-app's first run — history accumulates going forward only, same precedent as octopus-app's `daily_consumption_summary` before its own 2-year backfill was built specifically for that purpose.
+- The repo rename to `home-monitoring`, the MariaDB ownership/schema model, per-app packaging structure, and docker-compose/CI/deployment shape — all separately tracked, still-open tickets on the Wayfinder map (issues #492, #495, #496, #497). This spec's cross-app MariaDB read (in the gas cost forecast) assumes the user's stated shared-instance preference but doesn't formally resolve that ticket.
+- Building the Grafana dashboard/provisioning itself — this spec only adds query definitions to `grafana/mariadb/queries.md`, matching the standing decision already made for `feature-yearly-consumption-comparison.md`'s own panels.
+- A general-purpose alerting mechanism — ntfy.sh is wired for exactly one failure path (Hive re-auth), not extended to other jobs.
+
+## Further Notes
+
+Full rationale for this feature set — why hive-app is scoped to heating only, why weather needs both observations and a forecast, why the correlation model is computed live rather than persisted, why `cost_forecast` gained an `energy` column instead of a parallel table — is recorded in this session's `/design` transcript and on GitHub issue #494 (closed, resolution comment has the full breakdown) on the Home Monitoring Wayfinder map (issue #490). New glossary terms **Heating Status**, **Weather Observation**, **Weather Forecast**, **Gas Cost Forecast**, and **Presence-Based Heating Control** are documented in `.agent-docs/context.md`'s "Home Monitoring Restructure" section. Three ADRs were recorded as part of this design: [ADR-0016](../adr/0016-energy-column-on-cost-forecast.md), [ADR-0017](../adr/0017-json-column-for-heating-schedule.md), [ADR-0018](../adr/0018-ntfy-for-hive-reauth-alerting.md).
+
+The exact "is heating active" predicate for the gas-consumption-shading Grafana panel needs confirming against real `apyhiveapi` response data during implementation — the research (`.agent-docs/research/hive-api-access-approach.md`) confirms `mode`/`state`/`heat_on_demand` fields exist but this spec doesn't commit to which combination means "actively heating" without having seen real payloads.

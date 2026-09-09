@@ -1,0 +1,5 @@
+# Add an `energy` column to `cost_forecast` rather than a parallel gas table
+
+`cost_forecast` was implicitly electricity-only: `cost_forecast.py` hard-codes `_current_electricity_agreement`, and the table itself carries no energy discriminator. Extending cost forecasting to gas (as part of the hive-app data-scope design — see the Wayfinder map, issue #490) needed a decision between widening this table or forking a second `gas_cost_forecast` table.
+
+We chose to add an `energy` column to the existing `cost_forecast` table, matching the discriminator pattern `consumption`, `agreement`, and `daily_consumption_summary` already use, rather than a parallel table. This keeps one query surface for "cost forecast, any energy" instead of two near-duplicate ones going forward, at the cost of a genuine migration concern: existing historical rows on the live production database predate this column and need a one-time manual `UPDATE ... SET energy = 'E'` backfill — Schema Sync only adds columns, it never populates them (see [ADR-0005](0005-additive-only-schema-sync.md)), so this backfill is a deliberate manual step, not something the app does for you on startup.
