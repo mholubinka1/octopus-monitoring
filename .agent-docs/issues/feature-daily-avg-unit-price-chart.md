@@ -1,5 +1,7 @@
 # Issues: feature-daily-avg-unit-price-chart
 
+> Work complete — PR ready to merge.
+
 ## Add Daily Average Unit Price (Rolling 7-Day Window) panel
 
 **GitHub issue**: [#518](https://github.com/mholubinka1/octopus-monitoring/issues/518)
@@ -16,10 +18,10 @@ Building this required first reconciling `grafana/dashboard.json` and `grafana/m
 
 ### Acceptance criteria
 
-- [ ] New panel shows a 7-day rolling average of consumption-weighted daily unit price (p/kWh), Electricity only, over the last 45 days
-- [ ] Panel sits visually grouped with Daily Average Cost and Daily Average Usage in the same row (order: Unit Price, Cost, Usage), all three fitting the row without overlap
-- [ ] Panel styling (unit, threshold bands) matches the existing Agile Prices panel's `p/kwh` convention; `decimals`/`min` are set explicitly on the new panel (Agile Prices leaves both unset)
-- [ ] `grafana/dashboard.json` matches the current live dashboard export, with the Latest Consumption panel's `product_rate` join confirmed in its documented fixed (correlated-subquery) form
-- [ ] `grafana/mariadb/queries.md` documents the new panel and every other change found during reconciliation
+- [x] New panel shows a 7-day rolling average of consumption-weighted daily unit price (p/kWh), Electricity only, over the last 45 days
+- [x] Panel sits visually grouped with Daily Average Cost and Daily Average Usage in the same row (order: Unit Price, Cost, Usage), all three fitting the row without overlap
+- [x] Panel styling (unit, threshold bands) matches the existing Agile Prices panel's `p/kwh` convention; `decimals`/`min` are set explicitly on the new panel (Agile Prices leaves both unset)
+- [x] `grafana/dashboard.json` matches the current live dashboard export, with the Latest Consumption panel's `product_rate` join confirmed in its documented fixed (correlated-subquery) form
+- [x] `grafana/mariadb/queries.md` documents the new panel and every other change found during reconciliation
 
 ---
