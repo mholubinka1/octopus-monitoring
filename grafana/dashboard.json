@@ -67,6 +67,86 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "datasource": {
+          "type": "mysql",
+          "uid": "${DS_MYSQL}"
+        },
+        "enable": true,
+        "filter": {
+          "exclude": false,
+          "ids": [
+            3
+          ]
+        },
+        "iconColor": "purple",
+        "name": "+24h",
+        "target": {
+          "dataset": "octopus",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() + INTERVAL 24 HOUR AS time, '+24h' AS text",
+          "refId": "Anno",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      },
+      {
+        "datasource": {
+          "type": "mysql",
+          "uid": "${DS_MYSQL}"
+        },
+        "enable": true,
+        "filter": {
+          "exclude": false,
+          "ids": [
+            3
+          ]
+        },
+        "iconColor": "dark-purple",
+        "name": "0h",
+        "target": {
+          "dataset": "octopus",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, 'now' AS text",
+          "refId": "Anno",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
       }
     ]
   },
@@ -120,7 +200,6 @@
           },
           "decimals": 2,
           "mappings": [],
-          "max": 19,
           "min": -1,
           "noValue": "0",
           "thresholds": {
@@ -294,7 +373,7 @@
       },
       "id": 2,
       "options": {
-        "displayMode": "lcd",
+        "displayMode": "gradient",
         "maxVizHeight": 300,
         "minVizHeight": 16,
         "minVizWidth": 8,
@@ -458,6 +537,9 @@
               {
                 "id": "decimals",
                 "value": 2
+              },
+              {
+                "id": "min"
               }
             ]
           }
@@ -1017,8 +1099,8 @@
           }
         }
       ],
-      "title": "",
-      "type": "table"
+      "type": "table",
+      "title": ""
     },
     {
       "datasource": {
@@ -1041,7 +1123,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 17,
+        "h": 16,
         "w": 10,
         "x": 0,
         "y": 15
@@ -1057,6 +1139,7 @@
         "color": {
           "exponent": 0.5,
           "fill": "dark-orange",
+          "max": 1,
           "min": 0,
           "mode": "scheme",
           "reverse": false,
@@ -1068,7 +1151,7 @@
           "color": "rgba(255,0,255,0.7)"
         },
         "filterValues": {
-          "le": 1e-9
+          "le": 1e-09
         },
         "legend": {
           "show": true
@@ -1197,7 +1280,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "mode": "single",
@@ -1438,8 +1521,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
-                "value": null
+                "color": "blue"
               },
               {
                 "color": "green",
@@ -1465,8 +1547,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 7,
-        "x": 10,
+        "w": 4,
+        "x": 15,
         "y": 23
       },
       "id": 8,
@@ -1567,8 +1649,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -1590,8 +1671,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 7,
-        "x": 17,
+        "w": 5,
+        "x": 19,
         "y": 23
       },
       "id": 7,
@@ -1641,6 +1722,134 @@
       "timeFrom": "45d",
       "title": "Daily Average Usage (Rolling 7-Day Window)",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "${DS_MYSQL}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 50,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "min": -1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "light-blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "semi-dark-orange",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "p/kwh"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 5,
+        "x": 10,
+        "y": 23
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "dataset": "octopus",
+          "datasource": {
+            "type": "mysql",
+            "uid": "${DS_MYSQL}"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  d AS time,\r\n  ROUND(AVG(daily_unit_price) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS rolling_avg_unit_price_p\r\nFROM (\r\n  SELECT\r\n    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS d,\r\n    SUM(c.est_kwh * pr.unit_rate) / SUM(c.est_kwh) AS daily_unit_price\r\n  FROM consumption c\r\n  JOIN agreement a\r\n    ON a.energy = c.energy\r\n   AND c.period_from >= a.valid_from\r\n   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')\r\n  JOIN product_rate pr\r\n    ON pr.id = (\r\n      SELECT pr2.id FROM product_rate pr2\r\n      WHERE pr2.product_code = a.product_code\r\n        AND pr2.region = '${region}'\r\n        AND pr2.valid_from <= c.period_from\r\n      ORDER BY pr2.valid_from DESC\r\n      LIMIT 1\r\n    )\r\n  WHERE c.energy = 'E'\r\n    AND c.period_from >= NOW() - INTERVAL 45 DAY\r\n  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))\r\n  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,\r\n    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),\r\n    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')\r\n  ) / 30\r\n) daily\r\nORDER BY d;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "45d",
+      "title": "Daily Average Unit Price (Rolling 7-Day Window)",
+      "type": "timeseries"
     }
   ],
   "refresh": "30m",
@@ -1662,7 +1871,7 @@
         "name": "region",
         "options": [],
         "query": "SELECT DISTINCT region FROM product_rate;",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -1711,12 +1920,12 @@
   },
   "time": {
     "from": "now-3h",
-    "to": "now+48h"
+    "to": "now+120h"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "pi-desktop: octopus-energy",
   "uid": "afu5ghhf1e29sb",
-  "version": 19,
+  "version": 36,
   "weekStart": ""
 }

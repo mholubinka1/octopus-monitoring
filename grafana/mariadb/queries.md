@@ -7,13 +7,15 @@ One SQL block per panel, documenting the live dashboard. Reconciled directly aga
 Three Grafana dashboard variables are defined (`templating.list` in the JSON):
 
 - `${region}` — the account's GSP region code (see **Region Code / GSP** in `.agent-docs/context.md`). Query: `SELECT DISTINCT region FROM product_rate;`
-- `${billing_period_start}` / `${billing_period_end}` — pulled live from the most recent `cost_forecast` row (`ORDER BY computed_at DESC LIMIT 1`), formatted `YYYY-MM-DD`. Not consumed by any panel query — they're interpolated directly into the **Billing Period Progress** panel's title so the billing window is visible without a separate table panel. Refresh trigger: On Time Range Change (`refresh: 2`), not `${region}`'s On Dashboard Load — since the dashboard's time range is relative (`now-3h` to `now+48h`), every 30-minute auto-refresh tick counts as a time range change, so these two variables resync on the same cadence as the panel's own value query instead of only on page load.
+- `${billing_period_start}` / `${billing_period_end}` — pulled live from the most recent `cost_forecast` row (`ORDER BY computed_at DESC LIMIT 1`), formatted `YYYY-MM-DD`. Not consumed by any panel query — they're interpolated directly into the **Billing Period Progress** panel's title so the billing window is visible without a separate table panel. All three variables now refresh On Time Range Change (`refresh: 2`) — `${region}` previously refreshed On Dashboard Load only, but was switched to match the other two at some point after `version: 19`. Since the dashboard's time range is relative (`now-3h` to `now+120h`), every 30-minute auto-refresh tick counts as a time range change, so all three variables now resync on the same cadence as the panels' own value queries instead of only on page load.
 
-**Dashboard-level time range**: `from: now-3h`, `to: now+48h`, `refresh: 30m`. This is what actually gives the Agile Prices panel its forward lookahead — not a panel-level `timeFrom`/`timeShift` override (Grafana's per-panel relative-time override can only push the *start* earlier; it always hardcodes the end to literal "now", so it structurally cannot show forecast data past the current moment). Setting the dashboard's own default range to end at `now+48h` sidesteps that limitation entirely, since the ceiling only applies to panel-level overrides, not the dashboard's own top-level range. Any panel that needs a *different, fixed* window from this shared default carries its own `timeFrom`/`timeShift` (documented per panel below).
+Two built-in annotation markers are also defined (`annotations.list` in the JSON, alongside the default "Annotations & Alerts" query): a purple `+24h` line and a dark-purple `0h` ("now") line, both filtered to render on panel id 3 (Agile Prices) only.
 
-**Note on the lookahead figure**: earlier in this dashboard's design, the explicit requirement was a 72-hour Agile Prices lookahead. The live JSON now has `to: now+48h`, not `+72h`. This may be a deliberate later adjustment made directly in Grafana, or an unintended regression from some other edit — worth confirming which before treating 48h as the final answer. The Cheapest Time Window table's `5days` column still independently reaches 5 days out via `agile_forecast` regardless of this dashboard-level setting, since that panel is a Table with no time axis. (Its middle column was renamed `72hrs` → `3days` for this reason — the old label implied a specific hour-count no longer aligned with the dashboard's own 48h window; see that panel below.)
+**Dashboard-level time range**: `from: now-3h`, `to: now+120h`, `refresh: 30m`. This is what actually gives the Agile Prices panel its forward lookahead — not a panel-level `timeFrom`/`timeShift` override (Grafana's per-panel relative-time override can only push the *start* earlier; it always hardcodes the end to literal "now", so it structurally cannot show forecast data past the current moment). Setting the dashboard's own default range to end at `now+120h` sidesteps that limitation entirely, since the ceiling only applies to panel-level overrides, not the dashboard's own top-level range. Any panel that needs a *different, fixed* window from this shared default carries its own `timeFrom`/`timeShift` (documented per panel below).
 
-**Datasource portability fixed**: this export uses Grafana's "export for sharing externally" format — every panel references the datasource as `${DS_MYSQL}` (an `__inputs`-declared placeholder), not a hardcoded UID. Earlier exports hardcoded the literal datasource UID (`aftel9qlylts0e`), which would have broken on any Grafana instance where that UID didn't already exist (e.g. after a full rebuild where the MySQL datasource gets re-added with a new random UID, since it's not provisioned via YAML). Importing this JSON now prompts for a datasource mapping instead of silently failing. Dashboard `uid` is now `afu5ghhf1e29sb`, `version: 19`.
+**Note on the lookahead figure**: this has moved twice since the dashboard's original 72-hour Agile Prices requirement — first to `+48h`, now to `+120h` (5 days), likely to match the Cheapest Time Window table's own 5-day forecast horizon. Each of these was a manual Grafana edit never reconciled back into this file until now — worth setting up a habit of re-exporting after any live dashboard change, rather than letting version drift accumulate (this sync jumped from `version: 19` to `version: 36`, 17 unreconciled edits). The Cheapest Time Window table's `5days` column still independently reaches 5 days out via `agile_forecast` regardless of this dashboard-level setting, since that panel is a Table with no time axis. (Its middle column was renamed `72hrs` → `3days` when the dashboard's own window was still 48h; see that panel below.)
+
+**Datasource portability fixed**: this export uses Grafana's "export for sharing externally" format — every panel references the datasource as `${DS_MYSQL}` (an `__inputs`-declared placeholder), not a hardcoded UID. Earlier exports hardcoded the literal datasource UID (`aftel9qlylts0e`), which would have broken on any Grafana instance where that UID didn't already exist (e.g. after a full rebuild where the MySQL datasource gets re-added with a new random UID, since it's not provisioned via YAML). Importing this JSON now prompts for a datasource mapping instead of silently failing. Dashboard `uid` is `afu5ghhf1e29sb`, `version: 36`.
 
 ## Schema assumed
 
@@ -68,7 +70,7 @@ instead of the `valid_from`/`valid_to` range-predicate join. This doesn't apply 
 
 **Redesigned from a Stat panel to a genuine Timeseries.** Previously this was a Stat panel (`Graph mode: Area`, `Calcs: Last (not null)`) paired with a separate "As Of" companion panel just to show which date the reducer had landed on — necessary because a Stat panel's big number has no inherent date context. Now that it's a real Timeseries, the date is visible directly (axis/tooltip), so the **As Of panel (former id 11) has been removed entirely** rather than fixed further. `timeFrom: 45d` (panel-level override, independent of the dashboard's shared `-3h`/`+48h` range). `noValue: "0"`.
 
-Thresholds changed to match the same blue/green/yellow/orange/red band style used elsewhere on this dashboard (Load Shift Efficiency, Cheapest Time Window): blue below £1, green from £1, yellow from £3, orange from £4, red from £5 (previously just green/amber/red at £3/£5). `min: -1` (was `0`), `max: 19`. `thresholdsStyle: area` renders the bands as a coloured background rather than just axis colouring. A field override forces the `cost_gbp` series line itself to a fixed purple colour, independent of the threshold-driven background.
+Thresholds changed to match the same blue/green/yellow/orange/red band style used elsewhere on this dashboard (Load Shift Efficiency, Cheapest Time Window): blue below £1, green from £1, yellow from £3, orange from £4, red from £5 (previously just green/amber/red at £3/£5). `min: -1` (was `0`); the field previously also carried a `max: 19` cap, since removed so the axis auto-scales. `thresholdsStyle: area` renders the bands as a coloured background rather than just axis colouring. A field override forces the `cost_gbp` series line itself to a fixed purple colour, independent of the threshold-driven background.
 
 The `product_rate` join fix from earlier (correlated subquery instead of the range-predicate form that measured at 88.9s elsewhere in this file) is unchanged and still in place.
 
@@ -103,7 +105,7 @@ ORDER BY time;
 
 ### Billing Period Progress ($billing_period_start → $billing_period_end) — bargauge, id 2
 
-Title interpolates the `${billing_period_start}`/`${billing_period_end}` dashboard variables directly — this is what replaced the separate "Current Billing Period" table panel from earlier drafts of this dashboard. `Display mode: LCD`, `Value mode: Color`, reduced with `Calcs: Max`. Field overrides rename `billing_period_cost_gbp` → "Current Spend" and `projected_cost_gbp` → "Projected Spend". Thresholds: green / yellow (£60) / semi-dark-orange (£80) / dark-red (£100). Has a `configFromData` transformation that derives the gauge's max from `billing_period_cost_gbp` via a `max` reducer, followed by `filterFieldsByName`.
+Title interpolates the `${billing_period_start}`/`${billing_period_end}` dashboard variables directly — this is what replaced the separate "Current Billing Period" table panel from earlier drafts of this dashboard. `Display mode: Gradient` (was `LCD`), `Value mode: Color`, reduced with `Calcs: Max`. Field overrides rename `billing_period_cost_gbp` → "Current Spend" and `projected_cost_gbp` → "Projected Spend". Thresholds: green / yellow (£60) / semi-dark-orange (£80) / dark-red (£100). Has a `configFromData` transformation that derives the gauge's max from `billing_period_cost_gbp` via a `max` reducer, followed by `filterFieldsByName`.
 
 ```sql
 SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp
@@ -118,7 +120,7 @@ LIMIT 1;
 
 ### Latest Consumption — timeseries, id 4
 
-Merges what earlier drafts of this dashboard had as two separate panels (Half-hourly Consumption and Half-hourly Cost) into one dual-axis chart. Query A (`est_kwh`, left axis, `kWh`) is a filled line (blue, high fill opacity) rather than a true bar-draw style. Query B (`cost_gbp`, right axis via a `byFrameRefID: B` override, `currencyGBP`, dark-red, zero fill — line only) overlays cost on a secondary axis. `timeFrom: 48h` pins this panel to a fixed 48-hour window independent of the dashboard's shared `-3h`/`+48h` range, even though the queries also use `$__timeFilter` internally.
+Merges what earlier drafts of this dashboard had as two separate panels (Half-hourly Consumption and Half-hourly Cost) into one dual-axis chart. Query A (`est_kwh`, left axis, `kWh`) is a filled line (blue, high fill opacity) rather than a true bar-draw style. Query B (`cost_gbp`, right axis via a `byFrameRefID: B` override, `currencyGBP`, dark-red, zero fill — line only) overlays cost on a secondary axis. The `B` override's `min` is now explicitly reset (present with no value) so the right axis auto-scales rather than inheriting a fixed floor. `timeFrom: 48h` pins this panel to a fixed 48-hour window independent of the dashboard's shared `-3h`/`+120h` range, even though the queries also use `$__timeFilter` internally.
 
 ```sql
 -- Query A
@@ -151,11 +153,11 @@ WHERE c.energy = 'E'
 ORDER BY c.period_from;
 ```
 
-**Fixed**: Query B previously used the plain range-predicate join against `product_rate` — the same 88.9s-class pattern already fixed on Yesterday's Cost. Rewritten to the correlated-subquery form used everywhere else.
+**Fixed**: Query B previously used the plain range-predicate join against `product_rate` — the same 88.9s-class pattern already fixed on Yesterday's Cost. Rewritten to the correlated-subquery form used everywhere else. **Confirmed regressed on live Grafana, not in this repo**: a fresh live export (`version: 36`, no record of why) showed a later manual edit in Grafana had reintroduced the range-predicate form on this panel. The repo's own committed `dashboard.json` (at the pre-sync `version: 19`) still had the correlated-subquery fix intact — the regression only ever reached the live dashboard, never git. This sync rewrote the panel back to the correlated-subquery form to match what was live at the time it was exported, which happens to be a no-op against the previously-committed file (nothing suggested the live revert was intentional, and the 88.9s measurement above still applies to this join shape).
 
 ### Agile Prices: Today/Tomorrow (Actual + Forecast) — timeseries, id 3
 
-No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+48h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below 0p, green from 0p, yellow from 10p, semi-dark-orange from 20p, red from 25p — same bands as the Cheapest Time Window table's colour coding below, applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above). The forecast branch excludes any half-hour `product_rate` already has a row for, preferring the actual rate over `agile_forecast` wherever both exist — same precedence rule as the Cheapest Time Window table below, applied here so the panel never plots two conflicting points for one timestamp (e.g. during an `agile_forecast` refresh outage, where stale forecast rows would otherwise linger alongside newly-published actual rates for the same slots).
+No panel-level time override — relies entirely on the dashboard's shared `now-3h` to `now+120h` range for its lookahead (see the dashboard-level time range note at the top of this file). Threshold *lines* (not fill) at the exact price bands used elsewhere on this dashboard: light-blue below 0p, green from 0p, yellow from 10p, semi-dark-orange from 20p, red from 25p — same bands as the Cheapest Time Window table's colour coding below (and reused as-is by the Daily Average Unit Price panel further down), applied here as reference lines rather than cell colours. Unit is `p/kwh` (see the field-formatting convention note above). The forecast branch excludes any half-hour `product_rate` already has a row for, preferring the actual rate over `agile_forecast` wherever both exist — same precedence rule as the Cheapest Time Window table below, applied here so the panel never plots two conflicting points for one timestamp (e.g. during an `agile_forecast` refresh outage, where stale forecast rows would otherwise linger alongside newly-published actual rates for the same slots). The dashboard-level `+24h` and `0h` annotation markers (see the annotations note at the top of this file) are filtered to render only on this panel.
 
 ```sql
 SELECT valid_from AS time, unit_rate AS rate_pence_per_kwh, 'actual' AS series
@@ -379,7 +381,7 @@ ORDER BY FIELD(window_size, '1h', '2h', '3h', '4h');
 
 Title restored — the earlier accidental reset to Grafana's "Panel Title" placeholder is fixed; the panel's `timeFrom`/`timeShift` fix and query were unaffected throughout.
 
-`Calculate from data: Off` plus a wide time-series shape (first field time-typed, one column per weekday) — Grafana's native Heatmap panel renders this as a categorical hour × weekday grid with no upgrade or transform needed. `time` is anchored to `TIMESTAMP(CURDATE())` purely to satisfy the time-typing requirement; only the hour-of-day component is meaningful. `timeFrom: "now/d"` + `timeShift: "0d/d"` pins the X axis to exactly today's 00:00–23:59, invariant of what time it actually is when the dashboard is viewed — the combination of both fields together is required; `timeFrom` alone always hardcodes the panel's end to literal "now", which is why this needed the two-field form rather than a single override. `period_from >= NOW() - INTERVAL 45 DAY`, not 90, per the retention-window cap above. `Y-Axis → Reverse: true` (Monday renders at the top). Field override applies the `kWh` custom unit via `cellValues.unit`.
+`Calculate from data: Off` plus a wide time-series shape (first field time-typed, one column per weekday) — Grafana's native Heatmap panel renders this as a categorical hour × weekday grid with no upgrade or transform needed. `time` is anchored to `TIMESTAMP(CURDATE())` purely to satisfy the time-typing requirement; only the hour-of-day component is meaningful. `timeFrom: "now/d"` + `timeShift: "0d/d"` pins the X axis to exactly today's 00:00–23:59, invariant of what time it actually is when the dashboard is viewed — the combination of both fields together is required; `timeFrom` alone always hardcodes the panel's end to literal "now", which is why this needed the two-field form rather than a single override. `period_from >= NOW() - INTERVAL 45 DAY`, not 90, per the retention-window cap above. `Y-Axis → Reverse: true` (Monday renders at the top). Field override applies the `kWh` custom unit via `cellValues.unit`. Colour scale `max: 1` caps saturation at 1 kWh (previously auto-scaled to the data's own max), so a single unusually high hour no longer washes out the contrast between every other cell; `gridPos.h` is now `16` (was `17`).
 
 ```sql
 SELECT
@@ -396,6 +398,45 @@ WHERE energy = 'E'
   AND period_from >= NOW() - INTERVAL 45 DAY
 GROUP BY HOUR(CONVERT_TZ(period_from, 'UTC', 'Europe/London'))
 ORDER BY time;
+```
+
+### Daily Average Unit Price (Rolling 7-Day Window) — timeseries, id 14
+
+The consumption-weighted effective price paid per kWh each day — `SUM(est_kwh * unit_rate) / SUM(est_kwh)`, excluding standing charge — rather than a flat average of the tariff's own rate across the day's half-hours. On the account's Agile tariff the unit rate varies per half-hour, so weighting by when power was actually used (not just what the tariff charged in the abstract) is what makes this track what Daily Average Cost is actually built from. Electricity only, matching its two siblings. `timeFrom: 45d`. Same day-completeness guard and 7-day `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` rolling average as those siblings. Reuses the Agile Prices panel's `p/kwh` unit and threshold bands (light-blue below 0p, green from 0p, yellow from 10p, semi-dark-orange from 20p, red from 25p) for visual consistency, since both show the same kind of value. `min: -1` allows the light-blue sub-zero band to render, matching Agile's own negative-pricing case. `decimals: 2`. Unlike its siblings, this panel divides by a data-dependent value (`SUM(est_kwh)`) rather than a constant — the day-completeness guard only checks row *count*, not that consumption summed to non-zero, so any day whose half-hourly readings net to exactly zero (meter offline with no draw, or — in principle — export exactly offsetting import) would divide by zero. MariaDB returns `NULL` for that day rather than erroring, and the rolling-average window function skips it, so this degrades to a gap in the line rather than a crash or a wrong value.
+
+Added as the leftmost of the three in the grid row (`x: 10, w: 5`), followed by Cost then Usage — left-to-right order Unit Price → Cost → Usage, per explicit direction during the grill session. Required narrowing both siblings to make room — Cost is now `x: 15, w: 4` (was `x: 10, w: 7`) and Usage is now `x: 19, w: 5` (was `x: 17, w: 7`) — so all three still exactly fill the row's `x: 10` to `x: 24` span.
+
+```sql
+SELECT
+  d AS time,
+  ROUND(AVG(daily_unit_price) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 2) AS rolling_avg_unit_price_p
+FROM (
+  SELECT
+    DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London')) AS d,
+    SUM(c.est_kwh * pr.unit_rate) / SUM(c.est_kwh) AS daily_unit_price
+  FROM consumption c
+  JOIN agreement a
+    ON a.energy = c.energy
+   AND c.period_from >= a.valid_from
+   AND c.period_from < COALESCE(a.valid_to, '9999-12-31 23:59:59')
+  JOIN product_rate pr
+    ON pr.id = (
+      SELECT pr2.id FROM product_rate pr2
+      WHERE pr2.product_code = a.product_code
+        AND pr2.region = '${region}'
+        AND pr2.valid_from <= c.period_from
+      ORDER BY pr2.valid_from DESC
+      LIMIT 1
+    )
+  WHERE c.energy = 'E'
+    AND c.period_from >= NOW() - INTERVAL 45 DAY
+  GROUP BY DATE(CONVERT_TZ(c.period_from, 'UTC', 'Europe/London'))
+  HAVING COUNT(*) = TIMESTAMPDIFF(MINUTE,
+    CONVERT_TZ(CAST(d AS DATETIME), 'Europe/London', 'UTC'),
+    CONVERT_TZ(CAST(d + INTERVAL 1 DAY AS DATETIME), 'Europe/London', 'UTC')
+  ) / 30
+) daily
+ORDER BY d;
 ```
 
 ### Daily Average Cost (Rolling 7-Day Window) — timeseries, id 8
@@ -465,7 +506,7 @@ Reads from `daily_consumption_summary`, exempt from the 45-day retention cap abo
 
 ### Monthly Total Consumption — timeseries, id 9
 
-`timeFrom: 400d`. Legend now shown (`showLegend: true`, previously hidden). Anchored to the first of the month 11 months ago via date arithmetic (`DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`), not `DATE_FORMAT(...)`, so `time` stays a real `DATE`-typed column rather than a string. `timeFrom` is deliberately wider than the query's nominal ~365-day lookback: the true span between "now" and the oldest bucket's timestamp ranges from ~334 to ~366 days depending on where in the current month "now" falls and whether the 12-month window crosses a leap day — a plain `365d` override left zero margin against that leap-year case and clipped the oldest bar.
+`timeFrom: 400d`. Legend hidden (`showLegend: false`) — briefly shown for a while, reverted back since (single-series panel, the legend added little). Anchored to the first of the month 11 months ago via date arithmetic (`DATE_SUB(date, INTERVAL DAYOFMONTH(date) - 1 DAY)`), not `DATE_FORMAT(...)`, so `time` stays a real `DATE`-typed column rather than a string. `timeFrom` is deliberately wider than the query's nominal ~365-day lookback: the true span between "now" and the oldest bucket's timestamp ranges from ~334 to ~366 days depending on where in the current month "now" falls and whether the 12-month window crosses a leap day — a plain `365d` override left zero margin against that leap-year case and clipped the oldest bar.
 
 ```sql
 SELECT
