@@ -36,6 +36,13 @@ class hive_auth_state(SQLBase):
 
 
 class job_run(SQLBase):
+    # Same table (octopus.job_run) as app/data/mysql/model.py's job_run --
+    # deliberately shared per the spec's shared-MariaDB-instance assumption
+    # (Wayfinder issue #492, still unresolved). Each app's Schema Sync only
+    # knows about its own SQLBase metadata, so a column added to one app's
+    # model here would NOT be added by the other app's schema sync -- keep
+    # both definitions identical, or add a column to both, if this ever
+    # changes.
     __tablename__ = "job_run"
     __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
         Index("ix_job_run_job_name_ran_at", "job_name", "ran_at"),

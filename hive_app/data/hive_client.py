@@ -22,6 +22,9 @@ _DEVICE_NOT_REMEMBERED_MESSAGE = (
     "Hive's remembered device is no longer recognized by Cognito; a live "
     "SMS 2FA code is needed to recover."
 )
+_LOGIN_REQUIRES_SMS_MESSAGE = (
+    "Hive login requires a live SMS 2FA code; a headless service cannot " "supply one."
+)
 
 
 class HiveApiSource:
@@ -71,10 +74,7 @@ class HiveApiSource:
         await self._start_session(
             hive,
             session_config=None,
-            reauth_message=(
-                "Hive login requires a live SMS 2FA code; a headless service "
-                "cannot supply one."
-            ),
+            reauth_message=_LOGIN_REQUIRES_SMS_MESSAGE,
         )
         return self._auth_state_from_session(hive)
 
@@ -142,19 +142,37 @@ class HiveApiSource:
         return asyncio.run(self._fetch_heating_status())
 
     async def _fetch_heating_status(self) -> HeatingStatus:
+        # Re-establishing the session on every poll (rather than reusing a
+        # long-lived Hive instance) can itself rotate the refresh token/
+        # device keys via Cognito's REFRESH_TOKEN_AUTH -- so the resulting
+        # state is always re-persisted below, not just at startup/resume,
+        # or a later restart could resume with tokens Cognito has already
+        # superseded.
         state = self._mariadb.read_hive_auth_state()
-        if state is None:
-            raise RuntimeError(
-                "fetch_heating_status called with no persisted Hive auth state "
-                "-- HiveAuthenticator.authenticate() must run before the "
-                "heating_refresh job starts polling."
-            )
         hive = self._new_hive()
-        await self._start_session(
-            hive,
-            session_config=self._resume_config(state),
-            reauth_message=_DEVICE_NOT_REMEMBERED_MESSAGE,
-        )
+        if state is None:
+            # No prior HiveAuthenticator.authenticate() run ever succeeded
+            # (e.g. it failed at startup). Falling back to a fresh login
+            # here -- rather than raising -- means each of this job's
+            # retry-with-backoff attempts is itself a recovery attempt,
+            # instead of a permanent failure loop until the process is
+            # restarted.
+            logger.info(
+                "No persisted Hive auth state during heating poll -- "
+                "attempting interactive login."
+            )
+            await self._start_session(
+                hive,
+                session_config=None,
+                reauth_message=_LOGIN_REQUIRES_SMS_MESSAGE,
+            )
+        else:
+            await self._start_session(
+                hive,
+                session_config=self._resume_config(state),
+                reauth_message=_DEVICE_NOT_REMEMBERED_MESSAGE,
+            )
+        self._mariadb.write_hive_auth_state(self._auth_state_from_session(hive))
 
         device = self._climate_device(hive)
         current_temp = await hive.heating.getCurrentTemperature(device)

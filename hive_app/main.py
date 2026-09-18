@@ -31,8 +31,7 @@ def _with_backoff_recording(
     """Returns a blocking callable that runs refresh_fn with retry-with-backoff,
     recording the outcome as a job_run. Never raises -- retry_with_exponential_backoff
     swallows the final failure after exhausting its attempts, so callers must check
-    the recorded job_run (e.g. via mariadb.latest_job_run_is_successful) to learn the
-    outcome, not exception handling."""
+    the recorded job_run rows to learn the outcome, not exception handling."""
 
     @retry_with_exponential_backoff()
     def attempt_with_backoff() -> None:

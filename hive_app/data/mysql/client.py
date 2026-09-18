@@ -193,25 +193,6 @@ class MariaDBClient:
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
 
-    def has_successful_job_run(self, job_name: str) -> bool:
-        with self.session_read_scope() as session:
-            return (
-                session.query(sql_model.job_run)
-                .filter_by(job_name=job_name, status="success")
-                .first()
-                is not None
-            )
-
-    def latest_job_run_is_successful(self, job_name: str) -> bool:
-        with self.session_read_scope() as session:
-            latest = (
-                session.query(sql_model.job_run)
-                .filter_by(job_name=job_name)
-                .order_by(sql_model.job_run.ran_at.desc(), sql_model.job_run.id.desc())
-                .first()
-            )
-            return latest is not None and latest.status == "success"
-
     def record_job_run(
         self, job_name: str, status: str, error: str | None = None
     ) -> None:
