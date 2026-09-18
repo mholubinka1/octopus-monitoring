@@ -21,6 +21,22 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+  hive-app:
+    container_name: hive-app
+    image: mholubinka1/hive-app:latest
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    volumes:
+      - /mnt/media/pi-media/containers/hive-app/config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 192.168.0.50
+      - 1.1.1.1
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
   mariadb:
     container_name: energy-monitor-db
     image: mariadb:latest

@@ -1,0 +1,25 @@
+hive:
+  username:
+  password:
+
+mariadb:
+  host:
+  port:
+  database:
+  username:
+  password:
+
+# Open-Meteo needs no API key -- only Weather Underground and ntfy.sh do.
+weather_underground:
+  api_key:
+  station_id:
+
+# Used only by hive-app's re-auth alert path (issue #509) -- not wired up yet.
+ntfy:
+  topic_url:
+
+# Household lat/long, used for weather queries (issue #508/#510) -- not used
+# by heating polling itself.
+location:
+  latitude:
+  longitude:

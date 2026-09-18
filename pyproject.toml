@@ -14,6 +14,7 @@ dependencies = [
     "schedule>=1.2.2",
     "pydantic>=2.13.4",
     "tzdata>=2026.3",
+    "pyhive-integration>=1.0.9",
 ]
 
 [tool.uv]
@@ -37,11 +38,11 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["app"]
+pythonpath = ["app", "."]
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "hive_app"]
 
 [tool.ruff.lint]
 # BLE001 (blind except Exception) is disabled repo-wide: every hit is a caller-supplied
@@ -54,7 +55,7 @@ ignore = ["BLE001", "I001"]
 
 [tool.pylint.main]
 ignore-paths = ["app/_deprecated"]
-source-roots = ["app"]
+source-roots = ["app", "."]
 
 [tool.pylint.design]
 # MonitoringClient (app/data/base.py) is a deliberate facade: it wires the Octopus API
