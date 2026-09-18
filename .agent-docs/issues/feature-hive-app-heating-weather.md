@@ -76,6 +76,8 @@ Extends `WeatherSource` with a `fetch_forecast()`/`persist_forecast()` verb pair
 
 ---
 
+> Work complete — PR #522 ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+
 ## octopus-app: generalize cost_forecast to gas (average-based projection) — [#507](https://github.com/mholubinka1/octopus-monitoring/issues/507)
 
 **Blocked by**: None
@@ -88,11 +90,11 @@ Extends `WeatherSource` with a `fetch_forecast()`/`persist_forecast()` verb pair
 
 ### Acceptance criteria
 
-- [ ] Given the `cost_forecast` table predates this change, when Schema Sync runs, then it adds the new `energy` column — pre-existing rows are left as-is (Schema Sync never backfills; the one-time manual `UPDATE cost_forecast SET energy = 'E'` on the live production database is a deployment step, not app behaviour, and is called out explicitly wherever this ships to production).
-- [ ] Given a gas meter with synced `agreement`/`product_rate` data, when `CostForecastRetriever.refresh()` runs, then a `cost_forecast` row with `energy = 'G'` is written, with `actual_cost_to_date` matching a hand-computed sum from `consumption ⋈ agreement ⋈ product_rate`.
-- [ ] Given the same gas data, when `projected_total_cost` is computed, then it matches the existing average-recent-consumption method's result (same formula currently used for non-Agile electricity) — proving no behavioural regression for electricity and correct reuse for gas.
-- [ ] The existing electricity `cost_forecast` row/tests are unaffected — `energy = 'E'` continues to compute exactly as before.
-- [ ] Extends `test_cost_forecast_*.py`'s existing seeded-SQLite pattern with gas fixtures.
+- [x] Given the `cost_forecast` table predates this change, when Schema Sync runs, then it adds the new `energy` column — pre-existing rows are left as-is (Schema Sync never backfills; the one-time manual `UPDATE cost_forecast SET energy = 'E'` on the live production database is a deployment step, not app behaviour, and is called out explicitly wherever this ships to production).
+- [x] Given a gas meter with synced `agreement`/`product_rate` data, when `CostForecastRetriever.refresh()` runs, then a `cost_forecast` row with `energy = 'G'` is written, with `actual_cost_to_date` matching a hand-computed sum from `consumption ⋈ agreement ⋈ product_rate`.
+- [x] Given the same gas data, when `projected_total_cost` is computed, then it matches the existing average-recent-consumption method's result (same formula currently used for non-Agile electricity) — proving no behavioural regression for electricity and correct reuse for gas.
+- [x] The existing electricity `cost_forecast` row/tests are unaffected — `energy = 'E'` continues to compute exactly as before.
+- [x] Extends `test_cost_forecast_*.py`'s existing seeded-SQLite pattern with gas fixtures.
 
 ---
 
