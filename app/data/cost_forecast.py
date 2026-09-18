@@ -103,6 +103,12 @@ class CostForecastRetriever:
         if as_of is None:
             as_of = datetime.now(UTC)
 
+        # Refreshed here (matching ConsumptionRetriever/PricingRetriever's
+        # convention) so a newly-added gas meter is picked up on the very
+        # next refresh rather than only after a container restart -- without
+        # this, self._client.meters could stay stale for the process
+        # lifetime and silently suppress the gas forecast below.
+        self._client.refresh_meters()
         billing_period = self._client.get_current_billing_period()
 
         # Electricity remains a hard requirement -- every account has an
