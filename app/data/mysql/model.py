@@ -108,7 +108,14 @@ class cost_forecast(SQLBase):
     actual_cost_to_date = Column(Numeric(9, 2), nullable=False)
     projected_total_cost = Column(Numeric(9, 2), nullable=False)
     computed_at = Column(DateTime, nullable=False)
-    energy = Column(String(1), nullable=False)
+    # Nullable, not nullable=False -- per ADR-0005, Schema Sync's additive
+    # ADD COLUMN would be rejected outright by MariaDB on this table's
+    # existing rows if declared NOT NULL with no server_default. The app
+    # itself always writes a real value (write_cost_forecast always passes
+    # one), so this only ever reads NULL on pre-migration rows until the
+    # manual backfill runs -- tightening to NOT NULL afterward is a
+    # deliberate manual step, out of scope for the automated tool.
+    energy = Column(String(1))
 
 
 class job_run(SQLBase):

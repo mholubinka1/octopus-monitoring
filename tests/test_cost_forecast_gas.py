@@ -71,6 +71,29 @@ class _RealCostForecastSource:
         self._mariadb.write_cost_forecast(forecast)
 
 
+class _MeterDiscoveringCostForecastSource(_RealCostForecastSource):
+    """Simulates a gas meter that only becomes visible after
+    `refresh_meters()` is called -- e.g. newly added to the account after
+    `CostForecastRetriever` was constructed -- so a test can prove
+    `refresh_meters()` is actually wired into `refresh()`, not merely
+    present as a no-op. Without that call, `self.meters` would stay at
+    `initial_meters` (electricity only) for the process lifetime."""
+
+    def __init__(
+        self,
+        mariadb: MariaDBClient,
+        billing_period_client: BillingPeriodClient,
+        initial_meters: list[Meter],
+        discovered_meters: list[Meter],
+        region_code: str,
+    ) -> None:
+        super().__init__(mariadb, billing_period_client, initial_meters, region_code)
+        self._discovered_meters = discovered_meters
+
+    def refresh_meters(self) -> None:
+        self.meters = self._discovered_meters
+
+
 def _seed_complete_day(
     s: Session, day: date, est_kwh_per_slot: str, energy: str = "E"
 ) -> None:
@@ -268,3 +291,32 @@ def test_gas_projected_total_cost_uses_the_same_average_consumption_formula_as_e
     assert (
         gas_row.projected_total_cost == gas_row.actual_cost_to_date + expected_remaining
     )
+
+
+@responses.activate
+def test_a_gas_meter_added_after_construction_is_picked_up_via_refresh_meters(
+    mariadb_client: MariaDBClient,
+) -> None:
+    _mock_billing_period("2026-07-07", "2026-08-07")
+
+    with mariadb_client.session_write_scope() as s:
+        _seed_electricity_and_gas_fixtures(s)
+
+    settings = OctopusAPISettings(account_number="A-1234ABCD", api_key="sk_live_test")
+    source = _MeterDiscoveringCostForecastSource(
+        mariadb_client,
+        BillingPeriodClient(settings, KrakenTransport()),
+        initial_meters=[_make_electricity_meter()],
+        discovered_meters=[_make_electricity_meter(), _make_gas_meter()],
+        region_code=REGION,
+    )
+
+    retriever = CostForecastRetriever(source)
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
+
+    with mariadb_client.session_read_scope() as session:
+        energies = {row.energy for row in session.query(model.cost_forecast).all()}
+
+    # If refresh() failed to call refresh_meters() first, self.meters would
+    # stay at initial_meters (electricity only) and this would be {"E"}.
+    assert energies == {"E", "G"}
