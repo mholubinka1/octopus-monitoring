@@ -43,9 +43,13 @@ class HiveApplicationSettings(BaseModel):
 
     hive: HiveSettings
     mariadb: MariaDBSettings
-    weather_underground: WeatherUndergroundSettings
-    ntfy: NtfySettings
-    location: LocationSettings
+    # Optional: not yet consumed by this container (weather polling is
+    # #508/#510, re-auth alerting is #509). Required once that code lands --
+    # left optional for now so a #506-only deployment doesn't need to
+    # populate config for capabilities that don't exist yet.
+    weather_underground: WeatherUndergroundSettings | None = None
+    ntfy: NtfySettings | None = None
+    location: LocationSettings | None = None
 
 
 def get_settings(

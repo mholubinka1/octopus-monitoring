@@ -70,25 +70,38 @@ class HiveApiSource:
 
     async def _login(self) -> HiveAuthState:
         hive = self._new_hive()
-        logger.info("No persisted Hive auth state -- starting interactive login.")
-        await self._start_session(
-            hive,
-            session_config=None,
-            reauth_message=_LOGIN_REQUIRES_SMS_MESSAGE,
-        )
+        await self._establish_session(hive, None)
         return self._auth_state_from_session(hive)
 
     async def _resume(self, state: HiveAuthState) -> HiveAuthState:
         hive = self._new_hive()
-        logger.info(
-            "Persisted Hive auth state found -- resuming via token/device refresh."
-        )
-        await self._start_session(
-            hive,
-            session_config=self._resume_config(state),
-            reauth_message=_DEVICE_NOT_REMEMBERED_MESSAGE,
-        )
+        await self._establish_session(hive, state)
         return self._auth_state_from_session(hive)
+
+    @staticmethod
+    async def _establish_session(hive: Hive, state: HiveAuthState | None) -> None:
+        """Starts hive's Cognito session: a fresh interactive login if no
+        auth state is available, otherwise a resume via token/device
+        refresh. Shared by _login/_resume (HiveAuthenticator's startup path)
+        and _fetch_heating_status's own self-healing fallback (poll path)
+        so this state-is-None branching lives in exactly one place."""
+        if state is None:
+            logger.info("No persisted Hive auth state -- starting interactive login.")
+            await HiveApiSource._start_session(
+                hive,
+                session_config=None,
+                reauth_message=_LOGIN_REQUIRES_SMS_MESSAGE,
+            )
+        else:
+            logger.info(
+                "Persisted Hive auth state found -- resuming via token/device "
+                "refresh."
+            )
+            await HiveApiSource._start_session(
+                hive,
+                session_config=HiveApiSource._resume_config(state),
+                reauth_message=_DEVICE_NOT_REMEMBERED_MESSAGE,
+            )
 
     @staticmethod
     async def _start_session(
@@ -149,29 +162,21 @@ class HiveApiSource:
         # or a later restart could resume with tokens Cognito has already
         # superseded.
         state = self._mariadb.read_hive_auth_state()
+        # If state is None, no prior HiveAuthenticator.authenticate() run
+        # ever succeeded (e.g. it failed at startup). _establish_session
+        # falling back to a fresh login in that case -- rather than this
+        # method raising -- means each of this job's retry-with-backoff
+        # attempts is itself a recovery attempt, instead of a permanent
+        # failure loop until the process is restarted.
         hive = self._new_hive()
-        if state is None:
-            # No prior HiveAuthenticator.authenticate() run ever succeeded
-            # (e.g. it failed at startup). Falling back to a fresh login
-            # here -- rather than raising -- means each of this job's
-            # retry-with-backoff attempts is itself a recovery attempt,
-            # instead of a permanent failure loop until the process is
-            # restarted.
-            logger.info(
-                "No persisted Hive auth state during heating poll -- "
-                "attempting interactive login."
-            )
-            await self._start_session(
-                hive,
-                session_config=None,
-                reauth_message=_LOGIN_REQUIRES_SMS_MESSAGE,
-            )
-        else:
-            await self._start_session(
-                hive,
-                session_config=self._resume_config(state),
-                reauth_message=_DEVICE_NOT_REMEMBERED_MESSAGE,
-            )
+        await self._establish_session(hive, state)
+        # Persisted immediately after the session starts, before the
+        # heating.get*() calls below -- if one of those triggers apyhiveapi's
+        # own internal 90%-lifetime token auto-refresh mid-poll, that
+        # rotation wouldn't be captured until the row is next re-read on the
+        # following poll. Negligible in practice (tokens were just minted
+        # moments earlier in this same call) and self-heals within one
+        # 120-second cycle either way.
         self._mariadb.write_hive_auth_state(self._auth_state_from_session(hive))
 
         device = self._climate_device(hive)

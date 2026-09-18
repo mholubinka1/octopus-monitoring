@@ -30,11 +30,25 @@ def test_valid_config_yaml_produces_correctly_typed_settings() -> None:
     assert settings.mariadb.host == "localhost"
     assert settings.mariadb.port == 3306
     assert settings.mariadb.database == "octopus"
+    assert settings.weather_underground is not None
     assert settings.weather_underground.api_key == "wu-test-key"
     assert settings.weather_underground.station_id == "IBECKE4"
+    assert settings.ntfy is not None
     assert settings.ntfy.topic_url == "https://ntfy.sh/hive-app-reauth"
+    assert settings.location is not None
     assert settings.location.latitude == 51.5
     assert settings.location.longitude == -0.1
+
+
+def test_config_without_the_not_yet_used_optional_sections_still_loads() -> None:
+    settings = HiveApplicationSettings.model_validate(
+        {"hive": VALID_CONFIG["hive"], "mariadb": VALID_CONFIG["mariadb"]}
+    )
+
+    assert settings.hive.username == "someone@example.com"
+    assert settings.weather_underground is None
+    assert settings.ntfy is None
+    assert settings.location is None
 
 
 def test_missing_required_config_field_raises_a_validation_error_naming_the_field() -> (
