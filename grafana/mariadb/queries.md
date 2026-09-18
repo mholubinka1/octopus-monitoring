@@ -109,6 +109,8 @@ Title interpolates the `${billing_period_start}`/`${billing_period_end}` dashboa
 
 `WHERE energy = 'E'` was added alongside issue #507's gas cost forecast — `cost_forecast` can now hold a gas row from the same refresh, computed at the same or a near-identical `computed_at`, so an unfiltered `ORDER BY computed_at DESC LIMIT 1` would nondeterministically surface either energy's figures on what was previously an implicitly-electricity-only panel.
 
+**Deployment ordering matters here.** `cost_forecast.energy` is nullable (see ADR-0016) — Schema Sync adds the column but never backfills it, so every pre-migration row reads `energy IS NULL` until the one-time manual `UPDATE` runs. If this dashboard version is imported into Grafana *before* the app has been redeployed with the #507 code (or before that redeploy's first `cost_forecast_refresh` has written a fresh `energy = 'E'` row), this filtered query returns zero rows and the panel goes blank instead of showing the last known forecast. Deploy the app first — its own eager startup sync (`run_initial_cost_forecast_sync`) writes a fresh electricity row before the scheduler even starts — then import this dashboard version.
+
 ```sql
 SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp
 FROM cost_forecast
