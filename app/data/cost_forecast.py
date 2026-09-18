@@ -83,7 +83,7 @@ class CostForecastSource(MeterSource, Protocol):
     ) -> list[AgileForecastReading]: ...
 
     def read_elapsed_billing_period_costs(
-        self, period_from: datetime, period_to: datetime, region: str
+        self, period_from: datetime, period_to: datetime, region: str, energy: Energy
     ) -> list[DailyCostSummary]: ...
 
     def read_current_product_rate(
@@ -103,7 +103,27 @@ class CostForecastRetriever:
         if as_of is None:
             as_of = datetime.now(UTC)
 
+        # Refreshed here (matching ConsumptionRetriever/PricingRetriever's
+        # convention) so a newly-added gas meter is picked up on the very
+        # next refresh rather than only after a container restart -- without
+        # this, self._client.meters could stay stale for the process
+        # lifetime and silently suppress the gas forecast below.
+        self._client.refresh_meters()
         billing_period = self._client.get_current_billing_period()
+
+        # Electricity remains a hard requirement -- every account has an
+        # electricity meter, so a missing one is a genuine error condition
+        # (see _current_agreement's RuntimeError). Gas is additive and
+        # optional: an electricity-only account simply has no gas meter, so
+        # that case is skipped silently below rather than raising.
+        self._refresh_for_energy(Energy.electricity, billing_period, as_of)
+
+        if any(m.energy == Energy.gas for m in self._client.meters):
+            self._refresh_for_energy(Energy.gas, billing_period, as_of)
+
+    def _refresh_for_energy(
+        self, energy: Energy, billing_period: BillingPeriod, as_of: datetime
+    ) -> None:
         elapsed_start = local_day.start_of_local_day(billing_period.start)
 
         # Assumes as_of falls within [billing_period.start, billing_period.
@@ -115,9 +135,9 @@ class CostForecastRetriever:
         # over, and not guarded against here since it's outside Kraken's
         # documented behavior rather than a case this code can meaningfully
         # detect or correct for.
-        agreement = self._current_electricity_agreement(as_of)
+        agreement = self._current_agreement(energy, as_of)
         daily_costs = self._client.read_elapsed_billing_period_costs(
-            elapsed_start, as_of, self._client.region_code
+            elapsed_start, as_of, self._client.region_code, energy
         )
         daily_costs = self._fill_zero_consumption_days(
             billing_period.start, as_of, agreement, daily_costs
@@ -134,21 +154,21 @@ class CostForecastRetriever:
             actual_cost_to_date=actual_cost_to_date,
             projected_total_cost=actual_cost_to_date + remaining_cost,
             computed_at=as_of,
+            energy=energy,
         )
         self._client.persist_cost_forecast(forecast)
         logger.info(
-            f"Cost forecast refresh: billing period {billing_period.start}-"
-            f"{billing_period.end}, actual to date £{actual_cost_to_date}, "
-            f"projected total £{forecast.projected_total_cost}."
+            f"Cost forecast refresh: {energy.name} billing period "
+            f"{billing_period.start}-{billing_period.end}, actual to date "
+            f"£{actual_cost_to_date}, projected total "
+            f"£{forecast.projected_total_cost}."
         )
 
-    def _current_electricity_agreement(self, as_of: datetime) -> Agreement:
-        electricity_meter = next(
-            (m for m in self._client.meters if m.energy == Energy.electricity), None
-        )
-        if electricity_meter is None:
+    def _current_agreement(self, energy: Energy, as_of: datetime) -> Agreement:
+        meter = next((m for m in self._client.meters if m.energy == energy), None)
+        if meter is None:
             raise RuntimeError(
-                "No electricity meter found -- cannot compute a cost forecast."
+                f"No {energy.name} meter found -- cannot compute a cost forecast."
             )
         # "Current" = the agreement whose [valid_from, valid_to) range
         # contains as_of, with valid_to=None treated as unbounded -- not
@@ -163,15 +183,15 @@ class CostForecastRetriever:
         agreement = next(
             (
                 a
-                for a in electricity_meter.agreements
+                for a in meter.agreements
                 if a.valid_from <= as_of and (a.valid_to is None or as_of < a.valid_to)
             ),
             None,
         )
         if agreement is None:
             raise RuntimeError(
-                "No current agreement found for the electricity meter as of "
-                f"{as_of} -- cannot compute a cost forecast."
+                f"No current agreement found for the {energy.name} meter as "
+                f"of {as_of} -- cannot compute a cost forecast."
             )
         return agreement
 

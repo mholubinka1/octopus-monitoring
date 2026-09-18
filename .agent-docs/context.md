@@ -155,3 +155,37 @@ _Avoid_: data lag, settlement delay (when referring to the guard itself, not the
 **Local Day**:
 The Europe/London calendar day used for every day-bucketed cost/consumption figure — `cost_forecast.py`, the weekly consumption-summarization job, and every Grafana panel that groups by day or hour. `consumption.period_from`/`period_to` are stored in UTC, so bucketing by day requires converting to local time first: `zoneinfo.ZoneInfo("Europe/London")` in app code, `CONVERT_TZ(period_from, 'UTC', 'Europe/London')` in the standalone Grafana reference queries (which have no SQLite-compatibility constraint, unlike the app's own test suite). See [ADR-0010](adr/0010-local-day-bucketing-python-vs-sql.md).
 _Avoid_: UTC day, calendar day (when the raw UTC date is meant instead of the app's local-day convention)
+
+### Home Monitoring Restructure (in progress)
+
+**Home Monitoring**:
+The planned rename of this repo (from `octopus-monitoring`) once it hosts more than one data-gathering container. Encompasses `octopus-app` (this repo's existing Octopus Energy container) and `hive-app` (planned), sharing one MariaDB instance for downstream visualization (Grafana). Scoping tracked on a Wayfinder map; not yet renamed.
+_Avoid_: octopus-monitoring (only the current, pre-rename name)
+
+**Data-Gathering Container**:
+An independently deployable service that polls one external data source and persists it to the shared MariaDB instance — the unit of composition under Home Monitoring. `octopus-app` is the first; `hive-app` is planned.
+_Avoid_: app, service (ambiguous once more than one container exists)
+
+**octopus-app**:
+The planned relocation of this repo's existing Octopus Energy data-gathering container (today's `app/` + `tests/`) once the Home Monitoring restructure lands — same responsibilities as today, just repackaged as one of several containers rather than the repo's sole app.
+_Avoid_: the app, main app (ambiguous once `hive-app` exists)
+
+**hive-app**:
+A planned data-gathering container for British Gas Hive heating data (current/target temperature, mode, state, boost, and the now/next/later schedule) and outdoor weather (current/historical observations and a forecast), alongside `octopus-app`. Scoped to heating only — no hot water, smart plugs, lights, or sensors, since none exist on the household's account. No code exists yet; see the `hive-app initial data scope` ticket on the Home Monitoring Wayfinder map (issue #494).
+_Avoid_: hive (ambiguous with Apache Hive)
+
+**Heating Status**:
+hive-app's poll of the Hive thermostat via the community `apyhiveapi` library (no official Hive API exists — see `.agent-docs/research/hive-api-access-approach.md`): current/target temperature, mode, state, and boost, polled every 120 seconds (the community-standard cadence both the library and Home Assistant's Hive integration default to). The now/next/later schedule is stored as a JSON column rather than flat columns, a deliberate deviation from this schema's usual style — see [ADR-0017](adr/0017-json-column-for-heating-schedule.md).
+_Avoid_: thermostat status, Hive state
+
+**Weather Observation / Weather Forecast**:
+hive-app's outdoor-temperature data, split into two concerns: **Weather Observation** is current/historical readings (temperature, humidity, pressure, wind, precipitation) polled hourly, sourced from the household's nearest Weather Underground personal weather station (`IBECKE4`, Beckenham) with Open-Meteo as fallback on failure — the same primary/fallback shape octopus-app's Agile Forecast Refresh already uses for Agile pricing. **Weather Forecast** is upcoming days' predicted max temperature, fetched hourly from Open-Meteo, feeding the Gas Cost Forecast's projection for remaining billing-period days. Both accumulate history only from hive-app's first successful poll onward — no backfill of pre-existing weather data.
+_Avoid_: weather data (ambiguous between the two)
+
+**Gas Cost Forecast**:
+The extension of octopus-app's `cost_forecast` (previously implicitly electricity-only — `cost_forecast.py` hard-coded `_current_electricity_agreement`) to also cover gas, distinguished by a new `energy` column on the existing table rather than a parallel table — see [ADR-0016](adr/0016-energy-column-on-cost-forecast.md). Its actual-cost-to-date figure reuses the existing Agreement/product_rate join. Its projected-total figure currently uses the same average-recent-consumption projection method as electricity's non-Agile branch (issue #507) — a planned upgrade (issue #511) will replace this with a live linear regression of daily gas kWh (from `daily_consumption_summary`) against daily max outdoor temperature, computed in Python on every forecast run (nothing persisted, consistent with [ADR-0010](adr/0010-local-day-bucketing-python-vs-sql.md)'s preference for Python over stored derived state) and applied to Weather Forecast's upcoming max-temp figures for the billing period's remaining days.
+_Avoid_: heating cost model, gas forecast (ambiguous with Weather Forecast)
+
+**Presence-Based Heating Control**:
+A deferred, explicitly last-phase capability: automatically preventing the heating from running when nobody is home, most likely via Hive's own geofencing/geolocation feature rather than a new integration (phone tracking, Home Assistant, etc.) — contingent on confirming `apyhiveapi` actually exposes that state, which is not yet known. Unlike every other Home Monitoring capability so far, this is control/actuation (writing to Hive), not passive data-gathering. Not yet started; tracked as a fog/research item on the Home Monitoring Wayfinder map.
+_Avoid_: smart heating, occupancy detection (until the actual signal is confirmed)

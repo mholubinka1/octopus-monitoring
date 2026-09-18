@@ -401,7 +401,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp\r\nFROM cost_forecast\r\nORDER BY computed_at DESC\r\nLIMIT 1;",
+          "rawSql": "SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp\r\nFROM cost_forecast\r\nWHERE energy = 'E'\r\nORDER BY computed_at DESC\r\nLIMIT 1;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1883,14 +1883,14 @@
           "type": "mysql",
           "uid": "${DS_MYSQL}"
         },
-        "definition": "SELECT DATE_FORMAT(billing_period_start, '%Y-%m-%d') AS billing_period_start\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "definition": "SELECT DATE_FORMAT(billing_period_start, '%Y-%m-%d') AS billing_period_start\nFROM cost_forecast WHERE energy = 'E' ORDER BY computed_at DESC LIMIT 1;",
         "description": "",
         "hide": 0,
         "includeAll": false,
         "multi": false,
         "name": "billing_period_start",
         "options": [],
-        "query": "SELECT DATE_FORMAT(billing_period_start, '%Y-%m-%d') AS billing_period_start\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "query": "SELECT DATE_FORMAT(billing_period_start, '%Y-%m-%d') AS billing_period_start\nFROM cost_forecast WHERE energy = 'E' ORDER BY computed_at DESC LIMIT 1;",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1903,13 +1903,13 @@
           "type": "mysql",
           "uid": "${DS_MYSQL}"
         },
-        "definition": "SELECT DATE_FORMAT(billing_period_end, '%Y-%m-%d') AS billing_period_end\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "definition": "SELECT DATE_FORMAT(billing_period_end, '%Y-%m-%d') AS billing_period_end\nFROM cost_forecast WHERE energy = 'E' ORDER BY computed_at DESC LIMIT 1;",
         "hide": 0,
         "includeAll": false,
         "multi": false,
         "name": "billing_period_end",
         "options": [],
-        "query": "SELECT DATE_FORMAT(billing_period_end, '%Y-%m-%d') AS billing_period_end\nFROM cost_forecast ORDER BY computed_at DESC LIMIT 1;",
+        "query": "SELECT DATE_FORMAT(billing_period_end, '%Y-%m-%d') AS billing_period_end\nFROM cost_forecast WHERE energy = 'E' ORDER BY computed_at DESC LIMIT 1;",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1926,6 +1926,6 @@
   "timezone": "browser",
   "title": "pi-desktop: octopus-energy",
   "uid": "afu5ghhf1e29sb",
-  "version": 36,
+  "version": 37,
   "weekStart": ""
 }

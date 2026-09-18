@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from data.local_day import LONDON
+from data.model import Energy
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from sqlalchemy.orm import Session
@@ -85,6 +86,7 @@ def test_a_full_local_day_spanning_a_utc_midnight_boundary_is_grouped_as_one_day
         _local_midnight(date(2026, 7, 5)),
         _local_midnight(date(2026, 7, 8)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -111,6 +113,7 @@ def test_the_uk_spring_forward_date_with_forty_six_rows_is_treated_as_complete(
         _local_midnight(date(2026, 3, 29)),
         _local_midnight(date(2026, 3, 31)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -133,6 +136,7 @@ def test_the_uk_fall_back_date_with_fifty_rows_is_treated_as_complete(
         _local_midnight(date(2026, 10, 25)),
         _local_midnight(date(2026, 10, 27)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -156,6 +160,7 @@ def test_days_either_side_of_a_clock_change_still_require_forty_eight_rows(
         _local_midnight(date(2026, 3, 28)),
         _local_midnight(date(2026, 3, 30)),
         REGION,
+        Energy.electricity,
     )
 
     assert results == []
@@ -178,6 +183,7 @@ def test_an_incomplete_past_day_is_excluded_from_the_result(
         datetime(2026, 7, 6, tzinfo=UTC),
         datetime(2026, 7, 7, tzinfo=UTC),
         REGION,
+        Energy.electricity,
     )
 
     assert results == []
@@ -198,6 +204,7 @@ def test_the_current_in_progress_day_is_included_regardless_of_row_count(
         datetime(2026, 7, 6, tzinfo=UTC),
         datetime(2026, 7, 6, 12, 0, tzinfo=UTC),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -227,6 +234,7 @@ def test_two_elapsed_days_with_consumption_on_a_stable_rate(
         _local_midnight(date(2026, 7, 6)),
         _local_midnight(date(2026, 7, 8)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -276,6 +284,7 @@ def test_a_rate_for_another_region_is_not_double_matched(
         _local_midnight(date(2026, 7, 6)),
         _local_midnight(date(2026, 7, 7)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -320,6 +329,7 @@ def test_a_mid_period_rate_change_is_reflected_per_half_hour_not_flattened(
         _local_midnight(date(2026, 7, 6)),
         _local_midnight(date(2026, 7, 7)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -349,6 +359,7 @@ def test_a_mid_day_standing_charge_change_uses_the_higher_of_the_two(
         _local_midnight(date(2026, 7, 6)),
         _local_midnight(date(2026, 7, 7)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}
@@ -375,6 +386,7 @@ def test_a_mid_day_standing_charge_change_uses_the_higher_regardless_of_row_orde
         _local_midnight(date(2026, 7, 6)),
         _local_midnight(date(2026, 7, 7)),
         REGION,
+        Energy.electricity,
     )
 
     by_date = {r.date: r for r in results}

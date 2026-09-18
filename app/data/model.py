@@ -67,6 +67,7 @@ class CostForecast:
     actual_cost_to_date: Decimal
     projected_total_cost: Decimal
     computed_at: datetime
+    energy: Energy
 
 
 def get_raw_unit(energy: Energy) -> Unit:

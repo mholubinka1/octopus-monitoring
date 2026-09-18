@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import ClassVar
 
@@ -7,7 +7,17 @@ from common.config import MariaDBSettings
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.mysql.model import SQLBase
-from sqlalchemy import Column, DateTime, Float, String, create_engine, inspect, text
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    Float,
+    Numeric,
+    String,
+    create_engine,
+    inspect,
+    text,
+)
 from sqlalchemy.dialects import mysql
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -28,6 +38,18 @@ class _StrippedConsumption(_StrippedBase):
     period_to = Column(DateTime, nullable=False)
     raw_value = Column(Float, nullable=False)
     est_kwh = Column(Float, nullable=False)
+
+
+class _StrippedCostForecast(_StrippedBase):
+    __tablename__ = "cost_forecast"
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+
+    id = Column(String, primary_key=True)
+    billing_period_start = Column(Date, nullable=False)
+    billing_period_end = Column(Date, nullable=False)
+    actual_cost_to_date = Column(Numeric(9, 2), nullable=False)
+    projected_total_cost = Column(Numeric(9, 2), nullable=False)
+    computed_at = Column(DateTime, nullable=False)
 
 
 def _sqlite_engine() -> Engine:
@@ -108,6 +130,53 @@ def test_a_column_missing_from_an_existing_table_is_added_on_startup(
         "unit",
         "est_kwh",
     }
+
+
+def test_a_cost_forecast_table_predating_the_energy_column_gets_it_added(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A pre-existing row is seeded before sync -- this is the scenario
+    # ADR-0016 depends on: the live production table already has rows when
+    # the energy column is added. If Schema Sync had emitted NOT NULL with
+    # no server_default here (the bug Copilot caught on PR #522), MariaDB
+    # would reject the ADD COLUMN outright and this row would never survive
+    # to be read back below.
+    engine = _sqlite_engine()
+    _StrippedBase.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    session.add(
+        _StrippedCostForecast(
+            id="pre-existing-row",
+            billing_period_start=date(2026, 7, 6),
+            billing_period_end=date(2026, 8, 6),
+            actual_cost_to_date=Decimal("42.50"),
+            projected_total_cost=Decimal("110.00"),
+            computed_at=datetime(2026, 7, 22, 4, 0, tzinfo=UTC),
+        )
+    )
+    session.commit()
+
+    _sync_against(engine, monkeypatch)
+
+    columns = {
+        column["name"]: column
+        for column in inspect(engine).get_columns("cost_forecast")
+    }
+    assert "energy" in columns
+    # nullable, not NOT NULL -- see ADR-0016/ADR-0005: a NOT NULL column
+    # with no server_default would be rejected outright by MariaDB's
+    # additive ADD COLUMN on a table that already has rows.
+    assert columns["energy"]["nullable"] is True
+
+    read_session = sessionmaker(bind=engine)()
+    row = read_session.query(model.cost_forecast).filter_by(id="pre-existing-row").one()
+
+    # Schema Sync never backfills -- the pre-existing row reads energy as
+    # NULL until the manual UPDATE runs, and every other field it already
+    # had survives the ADD COLUMN unchanged.
+    assert row.energy is None
+    assert row.actual_cost_to_date == Decimal("42.50")
+    assert row.projected_total_cost == Decimal("110.00")
 
 
 def test_an_index_missing_from_an_existing_table_is_created_on_startup(

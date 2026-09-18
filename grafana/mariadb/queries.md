@@ -7,7 +7,7 @@ One SQL block per panel, documenting the live dashboard. Reconciled directly aga
 Three Grafana dashboard variables are defined (`templating.list` in the JSON):
 
 - `${region}` — the account's GSP region code (see **Region Code / GSP** in `.agent-docs/context.md`). Query: `SELECT DISTINCT region FROM product_rate;`
-- `${billing_period_start}` / `${billing_period_end}` — pulled live from the most recent `cost_forecast` row (`ORDER BY computed_at DESC LIMIT 1`), formatted `YYYY-MM-DD`. Not consumed by any panel query — they're interpolated directly into the **Billing Period Progress** panel's title so the billing window is visible without a separate table panel. All three variables now refresh On Time Range Change (`refresh: 2`) — `${region}` previously refreshed On Dashboard Load only, but was switched to match the other two at some point after `version: 19`. Since the dashboard's time range is relative (`now-3h` to `now+120h`), every 30-minute auto-refresh tick counts as a time range change, so all three variables now resync on the same cadence as the panels' own value queries instead of only on page load.
+- `${billing_period_start}` / `${billing_period_end}` — pulled live from the most recent `cost_forecast` row for `energy = 'E'` (`ORDER BY computed_at DESC LIMIT 1`), formatted `YYYY-MM-DD`. The `energy` filter was added alongside the octopus-app gas cost forecast change (issue #507) — before that, `cost_forecast` held only electricity rows, so an unfiltered `ORDER BY computed_at DESC LIMIT 1` was implicitly electricity-only; once a gas row can be written in the same refresh, the same query without the filter would nondeterministically pick either energy's billing period. Not consumed by any panel query — they're interpolated directly into the **Billing Period Progress** panel's title so the billing window is visible without a separate table panel. All three variables now refresh On Time Range Change (`refresh: 2`) — `${region}` previously refreshed On Dashboard Load only, but was switched to match the other two at some point after `version: 19`. Since the dashboard's time range is relative (`now-3h` to `now+120h`), every 30-minute auto-refresh tick counts as a time range change, so all three variables now resync on the same cadence as the panels' own value queries instead of only on page load.
 
 Two built-in annotation markers are also defined (`annotations.list` in the JSON, alongside the default "Annotations & Alerts" query): a purple `+24h` line and a dark-purple `0h` ("now") line, both filtered to render on panel id 3 (Agile Prices) only.
 
@@ -15,7 +15,7 @@ Two built-in annotation markers are also defined (`annotations.list` in the JSON
 
 **Note on the lookahead figure**: this has moved twice since the dashboard's original 72-hour Agile Prices requirement — first to `+48h`, now to `+120h` (5 days), likely to match the Cheapest Time Window table's own 5-day forecast horizon. Each of these was a manual Grafana edit never reconciled back into this file until now — worth setting up a habit of re-exporting after any live dashboard change, rather than letting version drift accumulate (this sync jumped from `version: 19` to `version: 36`, 17 unreconciled edits). The Cheapest Time Window table's `5days` column still independently reaches 5 days out via `agile_forecast` regardless of this dashboard-level setting, since that panel is a Table with no time axis. (Its middle column was renamed `72hrs` → `3days` when the dashboard's own window was still 48h; see that panel below.)
 
-**Datasource portability fixed**: this export uses Grafana's "export for sharing externally" format — every panel references the datasource as `${DS_MYSQL}` (an `__inputs`-declared placeholder), not a hardcoded UID. Earlier exports hardcoded the literal datasource UID (`aftel9qlylts0e`), which would have broken on any Grafana instance where that UID didn't already exist (e.g. after a full rebuild where the MySQL datasource gets re-added with a new random UID, since it's not provisioned via YAML). Importing this JSON now prompts for a datasource mapping instead of silently failing. Dashboard `uid` is `afu5ghhf1e29sb`, `version: 36`.
+**Datasource portability fixed**: this export uses Grafana's "export for sharing externally" format — every panel references the datasource as `${DS_MYSQL}` (an `__inputs`-declared placeholder), not a hardcoded UID. Earlier exports hardcoded the literal datasource UID (`aftel9qlylts0e`), which would have broken on any Grafana instance where that UID didn't already exist (e.g. after a full rebuild where the MySQL datasource gets re-added with a new random UID, since it's not provisioned via YAML). Importing this JSON now prompts for a datasource mapping instead of silently failing. Dashboard `uid` is `afu5ghhf1e29sb`, `version: 37`.
 
 ## Schema assumed
 
@@ -28,7 +28,7 @@ job_run                   (existing) id, job_name, status, ran_at, error_message
 daily_consumption_summary (existing) energy, date PK(energy, date), total_kwh
 agile_forecast             (live) id, region, period_from, period_to, forecast_unit_rate, fetched_at
 cost_forecast               (live) id, billing_period_start, billing_period_end, actual_cost_to_date,
-                                    projected_total_cost, computed_at
+                                    projected_total_cost, computed_at, energy
 ```
 
 `agile_forecast` caches the raw half-hourly AgilePredict response (real 14-day forecast only) for charting. `cost_forecast` is the billing-period-level summary the app computes once daily (actual cost so far + full-period projection, using tiled forecast data internally beyond day 14 — that tiling isn't persisted point-by-point, only the summary is).
@@ -107,9 +107,14 @@ ORDER BY time;
 
 Title interpolates the `${billing_period_start}`/`${billing_period_end}` dashboard variables directly — this is what replaced the separate "Current Billing Period" table panel from earlier drafts of this dashboard. `Display mode: Gradient` (was `LCD`), `Value mode: Color`, reduced with `Calcs: Max`. Field overrides rename `billing_period_cost_gbp` → "Current Spend" and `projected_cost_gbp` → "Projected Spend". Thresholds: green / yellow (£60) / semi-dark-orange (£80) / dark-red (£100). Has a `configFromData` transformation that derives the gauge's max from `billing_period_cost_gbp` via a `max` reducer, followed by `filterFieldsByName`.
 
+`WHERE energy = 'E'` was added alongside issue #507's gas cost forecast — `cost_forecast` can now hold a gas row from the same refresh, computed at the same or a near-identical `computed_at`, so an unfiltered `ORDER BY computed_at DESC LIMIT 1` would nondeterministically surface either energy's figures on what was previously an implicitly-electricity-only panel.
+
+**Deployment ordering matters here.** `cost_forecast.energy` is nullable (see ADR-0016) — Schema Sync adds the column but never backfills it, so every pre-migration row reads `energy IS NULL` until the one-time manual `UPDATE` runs. If this dashboard version is imported into Grafana *before* the app has been redeployed with the #507 code (or before that redeploy's first `cost_forecast_refresh` has written a fresh `energy = 'E'` row), this filtered query returns zero rows and the panel goes blank instead of showing the last known forecast. Deploy the app first — its own eager startup sync (`run_initial_cost_forecast_sync`) writes a fresh electricity row before the scheduler even starts — then import this dashboard version.
+
 ```sql
 SELECT actual_cost_to_date AS billing_period_cost_gbp, projected_total_cost AS projected_cost_gbp
 FROM cost_forecast
+WHERE energy = 'E'
 ORDER BY computed_at DESC
 LIMIT 1;
 ```
