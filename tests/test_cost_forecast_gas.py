@@ -1,7 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-import pytest
 import responses
 from common.config import OctopusAPISettings
 from data.cost_forecast import CostForecastRetriever
@@ -15,6 +14,7 @@ from data.octopus.model import (
     Agreement,
     BillingPeriod,
     Electricity,
+    Gas,
     Meter,
     Rate,
 )
@@ -22,14 +22,15 @@ from sqlalchemy.orm import Session
 
 GRAPHQL_ENDPOINT = "https://api.octopus.energy/v1/graphql/"
 PRODUCT_CODE = "VAR-24-10-01"
+GAS_PRODUCT_CODE = "VAR-22-11-01"
 REGION = "H"
 
 
 class _RealCostForecastSource:
     """Real MariaDBClient/BillingPeriodClient underneath -- HTTP calls
     mocked via `responses`, DB is the real SQLite fixture -- with meters
-    fixed up front so tests don't need to mock the account
-    meter-information endpoint too."""
+    fixed up front so tests don't need to mock the account meter-information
+    endpoint too."""
 
     def __init__(
         self,
@@ -96,13 +97,25 @@ def _make_electricity_meter(
     tariff_code: str = f"E-1R-{PRODUCT_CODE}-{REGION}",
     valid_from: datetime = datetime(2022, 1, 1, tzinfo=UTC),
     valid_to: datetime | None = None,
-    prior_agreements: list[Agreement] | None = None,
 ) -> Electricity:
     return Electricity(
         mpan="1234567890123",
         serial_number="00A1234567",
-        agreements=(prior_agreements or [])
-        + [
+        agreements=[
+            Agreement(tariff_code=tariff_code, valid_from=valid_from, valid_to=valid_to)
+        ],
+    )
+
+
+def _make_gas_meter(
+    tariff_code: str = f"G-1R-{GAS_PRODUCT_CODE}-{REGION}",
+    valid_from: datetime = datetime(2022, 1, 1, tzinfo=UTC),
+    valid_to: datetime | None = None,
+) -> Gas:
+    return Gas(
+        mprn="1234567890",
+        serial_number="G00A123456",
+        agreements=[
             Agreement(tariff_code=tariff_code, valid_from=valid_from, valid_to=valid_to)
         ],
     )
@@ -143,44 +156,7 @@ def _source(mariadb: MariaDBClient, meters: list[Meter]) -> _RealCostForecastSou
     )
 
 
-@responses.activate
-def test_no_electricity_meter_raises_a_clear_error(
-    mariadb_client: MariaDBClient,
-) -> None:
-    _mock_billing_period("2026-07-07", "2026-08-07")
-    retriever = CostForecastRetriever(_source(mariadb_client, []))
-
-    with pytest.raises(RuntimeError, match="[Nn]o electricity meter"):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
-
-
-@responses.activate
-def test_no_current_agreement_raises_a_clear_error(
-    mariadb_client: MariaDBClient,
-) -> None:
-    _mock_billing_period("2026-07-07", "2026-08-07")
-    lapsed_meter = Electricity(
-        mpan="1234567890123",
-        serial_number="00A1234567",
-        agreements=[
-            Agreement(
-                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2020, 1, 1, tzinfo=UTC),
-                valid_to=datetime(2021, 1, 1, tzinfo=UTC),
-            )
-        ],
-    )
-    retriever = CostForecastRetriever(_source(mariadb_client, [lapsed_meter]))
-
-    with pytest.raises(RuntimeError, match="[Nn]o current .*agreement"):
-        retriever.refresh(as_of=datetime(2026, 7, 7, tzinfo=UTC))
-
-
-def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
-    # Feeds read_elapsed_billing_period_costs's DB-level consumption-to-
-    # agreement join only -- unrelated to _current_electricity_agreement's
-    # in-memory selection, which reads solely from the Electricity meter's
-    # Agreement list passed to CostForecastRetriever.
+def _seed_electricity_and_gas_fixtures(s: Session) -> None:
     s.add(
         model.agreement(
             id="E20220101000000",
@@ -202,87 +178,93 @@ def _seed_fixed_tariff_agreement_and_rate(s: Session) -> None:
             standing_charge=Decimal("48.00"),
         )
     )
-    # Elapsed day (Jul6), strictly before as_of's date (Jul7) in both
-    # callers of this helper -- needs a full 48-slot day, 4.8 kWh total.
-    _seed_complete_day(s, date(2026, 7, 6), "0.1")
+    _seed_complete_day(s, date(2026, 7, 6), "0.1", energy="E")
+
+    s.add(
+        model.agreement(
+            id="G20220101000000",
+            energy="G",
+            product_code=GAS_PRODUCT_CODE,
+            tariff_code=f"G-1R-{GAS_PRODUCT_CODE}-{REGION}",
+            valid_from=datetime(2022, 1, 1, tzinfo=UTC),
+            valid_to=None,
+        )
+    )
+    s.add(
+        model.product_rate(
+            id=f"{GAS_PRODUCT_CODE}_{REGION}_202601010000",
+            product_code=GAS_PRODUCT_CODE,
+            region=REGION,
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            valid_to=None,
+            unit_rate=Decimal("7.00"),
+            standing_charge=Decimal("29.00"),
+        )
+    )
+    # One elapsed day (2026-07-06), a full 48-slot day totalling 48.0 kWh.
+    _seed_complete_day(s, date(2026, 7, 6), "1.0", energy="G")
 
 
 @responses.activate
-def test_current_agreement_with_a_bounded_valid_to_still_matches(
+def test_gas_actual_cost_is_computed_and_written_as_its_own_energy_row(
     mariadb_client: MariaDBClient,
 ) -> None:
-    # Regression test: real Agile contracts renew as fixed one-year terms, so
-    # Octopus's API never returns valid_to=None even for the currently-active
-    # agreement. Mirrors the real account's shape (a lapsed prior agreement
-    # plus a bounded current one) so the current one is proven to be selected
-    # by range, not merely "the only agreement present".
     _mock_billing_period("2026-07-07", "2026-08-07")
 
     with mariadb_client.session_write_scope() as s:
-        _seed_fixed_tariff_agreement_and_rate(s)
+        _seed_electricity_and_gas_fixtures(s)
 
-    electricity_meter = _make_electricity_meter(
-        valid_from=datetime(2026, 5, 24, tzinfo=UTC),
-        valid_to=datetime(2027, 5, 24, tzinfo=UTC),
-        prior_agreements=[
-            Agreement(
-                tariff_code=f"E-1R-{PRODUCT_CODE}-{REGION}",
-                valid_from=datetime(2025, 5, 24, tzinfo=UTC),
-                valid_to=datetime(2026, 5, 24, tzinfo=UTC),
-            )
-        ],
+    retriever = CostForecastRetriever(
+        _source(mariadb_client, [_make_electricity_meter(), _make_gas_meter()])
     )
-    retriever = CostForecastRetriever(_source(mariadb_client, [electricity_meter]))
     retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
     with mariadb_client.session_read_scope() as session:
-        stored = session.query(model.cost_forecast).all()
+        gas_row = session.query(model.cost_forecast).filter_by(energy="G").one()
+        electricity_row = session.query(model.cost_forecast).filter_by(energy="E").one()
 
-    assert len(stored) == 1
-    assert stored[0].actual_cost_to_date == Decimal("1.44")
+    # 48 slots * 1.0 kWh/slot = 48.0 kWh @ 7.00p + 29.00p standing =
+    # 336.00p + 29.00p = 365.00p -> £3.65
+    assert gas_row.actual_cost_to_date == Decimal("3.65")
+    # (4.8 kWh @ 20.00p) + 48.00p standing charge = 144.00p -> £1.44,
+    # unaffected by gas now also being computed.
+    assert electricity_row.actual_cost_to_date == Decimal("1.44")
 
 
 @responses.activate
-@pytest.mark.parametrize(
-    "valid_from, valid_to, should_match",
-    [
-        pytest.param(
-            datetime(2026, 7, 7, tzinfo=UTC),
-            datetime(2027, 7, 7, tzinfo=UTC),
-            True,
-            id="valid_from_boundary_is_inclusive",
-        ),
-        pytest.param(
-            datetime(2022, 1, 1, tzinfo=UTC),
-            datetime(2026, 7, 7, tzinfo=UTC),
-            False,
-            id="valid_to_boundary_is_exclusive",
-        ),
-    ],
-)
-def test_current_agreement_half_open_interval_boundaries(
+def test_gas_projected_total_cost_uses_the_same_average_consumption_formula_as_electricity(
     mariadb_client: MariaDBClient,
-    valid_from: datetime,
-    valid_to: datetime,
-    should_match: bool,
 ) -> None:
-    # valid_from is inclusive, valid_to is exclusive -- otherwise a renewal's
-    # first instant would match both the expiring and incoming agreement.
+    # Gas has no Agile tariff, so its projection must go through the exact
+    # same average-recent-consumption, non-Agile formula electricity already
+    # uses -- mirrors test_fixed_tariff_actual_cost_and_projection's
+    # arithmetic (in test_cost_forecast_retriever.py), but for a gas
+    # meter/tariff. Electricity fixtures are the minimal shape needed to
+    # satisfy refresh()'s hard electricity requirement; the assertions below
+    # are all about the gas row.
     _mock_billing_period("2026-07-07", "2026-08-07")
-    as_of = datetime(2026, 7, 7, tzinfo=UTC)
 
     with mariadb_client.session_write_scope() as s:
-        _seed_fixed_tariff_agreement_and_rate(s)
+        _seed_electricity_and_gas_fixtures(s)
 
-    electricity_meter = _make_electricity_meter(
-        valid_from=valid_from, valid_to=valid_to
+    retriever = CostForecastRetriever(
+        _source(mariadb_client, [_make_electricity_meter(), _make_gas_meter()])
     )
-    retriever = CostForecastRetriever(_source(mariadb_client, [electricity_meter]))
+    retriever.refresh(as_of=start_of_local_day(date(2026, 7, 7)))
 
-    if should_match:
-        retriever.refresh(as_of=as_of)
-        with mariadb_client.session_read_scope() as session:
-            assert session.query(model.cost_forecast).count() == 1
-    else:
-        with pytest.raises(RuntimeError, match="[Nn]o current .*agreement"):
-            retriever.refresh(as_of=as_of)
+    with mariadb_client.session_read_scope() as session:
+        gas_row = session.query(model.cost_forecast).filter_by(energy="G").one()
+
+    # (48.0 kWh @ 7.00p) + 29.00p standing charge = 365.00p -> £3.65
+    assert gas_row.actual_cost_to_date == Decimal("3.65")
+    # total_period_days = Jul6..Aug6 inclusive = 32; remaining_days = 32 - 1
+    # elapsed day (Jul6) = 31, at 48.0 kWh/day average, same 7.00p rate +
+    # 29.00p standing charge/day -- identical formula to the electricity
+    # case in test_fixed_tariff_actual_cost_and_projection.
+    remaining_days = 31
+    expected_remaining = (
+        remaining_days * (Decimal("48.0") * Decimal("7.00") + Decimal("29.00")) / 100
+    )
+    assert (
+        gas_row.projected_total_cost == gas_row.actual_cost_to_date + expected_remaining
+    )

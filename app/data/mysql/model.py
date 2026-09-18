@@ -108,6 +108,7 @@ class cost_forecast(SQLBase):
     actual_cost_to_date = Column(Numeric(9, 2), nullable=False)
     projected_total_cost = Column(Numeric(9, 2), nullable=False)
     computed_at = Column(DateTime, nullable=False)
+    energy = Column(String(1), nullable=False)
 
 
 class job_run(SQLBase):

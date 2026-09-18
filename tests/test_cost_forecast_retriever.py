@@ -7,7 +7,7 @@ from common.config import OctopusAPISettings
 from common.exceptions import APIError
 from data.cost_forecast import CostForecastRetriever
 from data.local_day import start_of_local_day
-from data.model import CostForecast, DailyCostSummary
+from data.model import CostForecast, DailyCostSummary, Energy
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.octopus.kraken import BillingPeriodClient, KrakenTransport
@@ -58,10 +58,10 @@ class _RealCostForecastSource:
         return self._mariadb.read_agile_forecast(region, as_of)
 
     def read_elapsed_billing_period_costs(
-        self, period_from: datetime, period_to: datetime, region: str
+        self, period_from: datetime, period_to: datetime, region: str, energy: Energy
     ) -> list[DailyCostSummary]:
         return self._mariadb.read_elapsed_billing_period_costs(
-            period_from, period_to, region
+            period_from, period_to, region, energy
         )
 
     def read_current_product_rate(
@@ -910,6 +910,7 @@ def test_kraken_unreachable_leaves_a_previous_row_unchanged(
         actual_cost_to_date=Decimal("10.00"),
         projected_total_cost=Decimal("20.00"),
         computed_at=datetime(2026, 7, 6, tzinfo=UTC),
+        energy=Energy.electricity,
     )
     mariadb_client.write_cost_forecast(previous)
     responses.add(

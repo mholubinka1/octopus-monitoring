@@ -30,6 +30,18 @@ class _StrippedConsumption(_StrippedBase):
     est_kwh = Column(Float, nullable=False)
 
 
+class _StrippedCostForecast(_StrippedBase):
+    __tablename__ = "cost_forecast"
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+
+    id = Column(String, primary_key=True)
+    billing_period_start = Column(DateTime, nullable=False)
+    billing_period_end = Column(DateTime, nullable=False)
+    actual_cost_to_date = Column(Float, nullable=False)
+    projected_total_cost = Column(Float, nullable=False)
+    computed_at = Column(DateTime, nullable=False)
+
+
 def _sqlite_engine() -> Engine:
     return create_engine(
         "sqlite://",
@@ -108,6 +120,20 @@ def test_a_column_missing_from_an_existing_table_is_added_on_startup(
         "unit",
         "est_kwh",
     }
+
+
+def test_a_cost_forecast_table_predating_the_energy_column_gets_it_added(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _sqlite_engine()
+    _StrippedBase.metadata.create_all(engine)
+
+    _sync_against(engine, monkeypatch)
+
+    columns = {
+        column["name"] for column in inspect(engine).get_columns("cost_forecast")
+    }
+    assert "energy" in columns
 
 
 def test_an_index_missing_from_an_existing_table_is_created_on_startup(

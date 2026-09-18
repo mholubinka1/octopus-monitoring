@@ -285,6 +285,7 @@ class MariaDBClient:
             actual_cost_to_date=forecast.actual_cost_to_date,
             projected_total_cost=forecast.projected_total_cost,
             computed_at=forecast.computed_at,
+            energy=as_energy_char(forecast.energy),
         )
         self._write_all([record], "Cost forecast data")
 
@@ -345,7 +346,7 @@ class MariaDBClient:
         ]
 
     def read_elapsed_billing_period_costs(
-        self, period_from: datetime, period_to: datetime, region: str
+        self, period_from: datetime, period_to: datetime, region: str, energy: Energy
     ) -> list[DailyCostSummary]:
         # Joins each half-hourly consumption row to whichever agreement and
         # product_rate actually applied at that moment (not just the
@@ -383,7 +384,7 @@ class MariaDBClient:
                     ),
                 )
                 .filter(
-                    c.energy == as_energy_char(Energy.electricity),
+                    c.energy == as_energy_char(energy),
                     c.period_from >= period_from,
                     c.period_from < period_to,
                 )
