@@ -47,7 +47,13 @@ class HiveApiSource:
     unit-tested against a live or mocked Cognito flow -- nothing in this
     repo does that today, and it would mean re-implementing SRP math in
     tests. It's exercised only by construction/wiring; HeatingRetriever and
-    HiveAuthenticator are tested against a fake HiveSource instead.
+    HiveAuthenticator are tested against a fake HiveSource instead. This
+    extends to this class's small non-auth helpers too (_climate_device,
+    the boost/schedule field mapping in _fetch_heating_status) -- they're
+    private implementation details of the one HiveSource verb this repo's
+    own conventions test only through its public interface (mirroring
+    PricingRetriever/test_pricing_retrieval.py's seam shape), not because
+    they individually need Cognito to exercise.
     """
 
     def __init__(self, settings: HiveSettings, mariadb: MariaDBClient) -> None:

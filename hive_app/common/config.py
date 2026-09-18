@@ -3,7 +3,7 @@ import sys
 from logging import Logger, getLogger
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from hive_app.common.logging import APP_LOGGER_NAME, config
 
@@ -39,8 +39,6 @@ class LocationSettings(BaseModel):
 
 
 class HiveApplicationSettings(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
     hive: HiveSettings
     mariadb: MariaDBSettings
     # Optional: not yet consumed by this container (weather polling is
