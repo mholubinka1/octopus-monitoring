@@ -104,7 +104,13 @@ class MariaDBClient:
         loser's CREATE TABLE failing "table already exists". Retrying once
         (checkfirst now sees the winner's table and skips it) recovers from
         exactly that race without weakening the check for a genuine schema
-        problem, which would fail identically on the retry too."""
+        problem, which would fail identically on the retry too.
+
+        app/data/mysql/client.py carries an identical copy of this method
+        and _is_table_already_exists_error (the two packages' schema-sync
+        logic is deliberately independent, see job_run's own comment) --
+        keep both in sync if this retry logic is ever extended, e.g. to
+        tolerate another error code."""
         try:
             SQLBase.metadata.create_all(engine, checkfirst=True)
         except (OperationalError, ProgrammingError) as e:
