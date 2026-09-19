@@ -13,6 +13,7 @@ jobs:
     env:
       DOCKER_REGISTRY: docker.io
       DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/octopus-monitoring
+      HIVE_APP_DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/hive-app
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -56,6 +57,7 @@ jobs:
         id: prepare
         run: |
           echo "docker_image=${DOCKER_REGISTRY}/${DOCKER_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "hive_app_docker_image=${DOCKER_REGISTRY}/${HIVE_APP_DOCKER_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Docker info
         run: |
@@ -94,3 +96,24 @@ jobs:
             # confirmed root cause of a transient CI failure investigated in a sibling repo's
             # CI hardening pass. Keep this command literal; do not add extra build flags.
             docker buildx build --push --tag "$TAG" .
+
+      - name: Docker Login, Build, and Push (hive-app)
+        if: success() && github.event_name == 'push'
+        uses: nick-fields/retry@v4
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAG: ${{ steps.prepare.outputs.hive_app_docker_image }}:${{ steps.tag.outputs.tag }}
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 15
+          timeout_minutes: 5
+          shell: bash
+          command: |
+            set -euo pipefail
+            trap 'docker logout "$DOCKER_REGISTRY" || true' EXIT
+            echo "$DOCKERHUB_TOKEN" | docker login "$DOCKER_REGISTRY" --username "$DOCKERHUB_USERNAME" --password-stdin
+            # Same local-checkout-context rationale as the app image build above
+            # (avoids the remote git#{sha} context that caused a transient CI
+            # failure in a sibling repo) -- keep this command literal too.
+            docker buildx build --push --tag "$TAG" -f Dockerfile.hive-app .

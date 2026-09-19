@@ -1,5 +1,7 @@
 # Issues: feature/hive-app-heating-weather
 
+> Work complete on #506 — [PR #525](https://github.com/mholubinka1/octopus-monitoring/pull/525) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+
 ## hive-app: skeleton, Hive auth, and heating status polling — [#506](https://github.com/mholubinka1/octopus-monitoring/issues/506)
 
 **Blocked by**: None
@@ -12,11 +14,11 @@ The walking skeleton for hive-app: a config-driven entrypoint with a scheduler l
 
 ### Acceptance criteria
 
-- [ ] Given valid Hive credentials in config, when hive-app starts for the first time, then it completes an interactive Cognito login, persists a `hive_auth_state` row (refresh token, device group key, device key), and the `heating_refresh` job begins running on a 120-second interval.
-- [ ] Given a `hive_auth_state` row already exists from a prior run, when hive-app restarts, then it resumes via token/device refresh — no interactive login is attempted.
-- [ ] Given a successful heating poll, when it completes, then a `heating_status` row is written with current temp, target temp, mode, state, boost fields, and the schedule as JSON, and a `job_run` row records success for `heating_refresh`.
-- [ ] Given a transient poll failure (e.g. a network error, not an auth failure), when it occurs, then it's recorded as a `job_run` failure with retry-with-backoff, mirroring `_schedule_refresh_job`'s existing behaviour — no crash, no special handling beyond what every other job already gets.
-- [ ] `HeatingRetriever` is tested against a fake `HiveSource` (Protocol implementation, no live or mocked Cognito flow) — mirrors `test_pricing_retrieval.py`'s seam for `PricingSource`.
+- [x] Given valid Hive credentials in config, when hive-app starts for the first time, then it completes an interactive Cognito login, persists a `hive_auth_state` row (refresh token, device group key, device key, device password), and the `heating_refresh` job begins running on a 120-second interval.
+- [x] Given a `hive_auth_state` row already exists from a prior run, when hive-app restarts, then it resumes via token/device refresh — no interactive login is attempted.
+- [x] Given a successful heating poll, when it completes, then a `heating_status` row is written with current temp, target temp, mode, state, boost fields, and the schedule as JSON, and a `job_run` row records success for `heating_refresh`.
+- [x] Given a transient poll failure (e.g. a network error, not an auth failure), when it occurs, then it's recorded as a `job_run` failure with retry-with-backoff, mirroring `_schedule_refresh_job`'s existing behaviour — no crash, no special handling beyond what every other job already gets.
+- [x] `HeatingRetriever` is tested against a fake `HiveSource` (Protocol implementation, no live or mocked Cognito flow) — mirrors `test_pricing_retrieval.py`'s seam for `PricingSource`.
 
 ---
 
