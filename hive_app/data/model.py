@@ -20,4 +20,9 @@ class HiveAuthState:
     refresh_token: str
     device_group_key: str
     device_key: str
+    # apyhiveapi's device SRP flow (DEVICE_SRP_AUTH) requires this alongside
+    # device_group_key/device_key -- omitting it (e.g. leaving it blank)
+    # means a resume/refresh can never actually authenticate as the
+    # remembered device, even with a valid refresh token.
+    device_password: str
     updated_at: datetime

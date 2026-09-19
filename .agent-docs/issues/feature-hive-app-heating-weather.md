@@ -12,7 +12,7 @@ The walking skeleton for hive-app: a config-driven entrypoint with a scheduler l
 
 ### Acceptance criteria
 
-- [ ] Given valid Hive credentials in config, when hive-app starts for the first time, then it completes an interactive Cognito login, persists a `hive_auth_state` row (refresh token, device group key, device key), and the `heating_refresh` job begins running on a 120-second interval.
+- [ ] Given valid Hive credentials in config, when hive-app starts for the first time, then it completes an interactive Cognito login, persists a `hive_auth_state` row (refresh token, device group key, device key, device password), and the `heating_refresh` job begins running on a 120-second interval.
 - [ ] Given a `hive_auth_state` row already exists from a prior run, when hive-app restarts, then it resumes via token/device refresh — no interactive login is attempted.
 - [ ] Given a successful heating poll, when it completes, then a `heating_status` row is written with current temp, target temp, mode, state, boost fields, and the schedule as JSON, and a `job_run` row records success for `heating_refresh`.
 - [ ] Given a transient poll failure (e.g. a network error, not an auth failure), when it occurs, then it's recorded as a `job_run` failure with retry-with-backoff, mirroring `_schedule_refresh_job`'s existing behaviour — no crash, no special handling beyond what every other job already gets.

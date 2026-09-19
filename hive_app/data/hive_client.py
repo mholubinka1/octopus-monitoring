@@ -1,9 +1,12 @@
 import asyncio
 import logging.config
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from logging import Logger, getLogger
 from typing import Any
 
+from aiohttp import ClientSession
 from apyhiveapi import Hive
 from apyhiveapi.helper.hive_exceptions import (
     HiveReauthRequired as ApyHiveReauthRequired,
@@ -75,14 +78,14 @@ class HiveApiSource:
         self._mariadb.write_hive_auth_state(state)
 
     async def _login(self) -> HiveAuthState:
-        hive = self._new_hive()
-        await self._establish_session(hive, None)
-        return self._auth_state_from_session(hive)
+        async with self._hive_session() as hive:
+            await self._establish_session(hive, None)
+            return self._auth_state_from_session(hive)
 
     async def _resume(self, state: HiveAuthState) -> HiveAuthState:
-        hive = self._new_hive()
-        await self._establish_session(hive, state)
-        return self._auth_state_from_session(hive)
+        async with self._hive_session() as hive:
+            await self._establish_session(hive, state)
+            return self._auth_state_from_session(hive)
 
     @staticmethod
     async def _establish_session(hive: Hive, state: HiveAuthState | None) -> None:
@@ -126,8 +129,25 @@ class HiveApiSource:
         except ApyHiveReauthRequired as e:
             raise HiveReauthRequired(reauth_message) from e
 
-    def _new_hive(self) -> Hive:
-        return Hive(username=self._settings.username, password=self._settings.password)
+    @asynccontextmanager
+    async def _hive_session(self) -> AsyncIterator[Hive]:
+        """Constructs a Hive bound to an explicitly-owned aiohttp
+        ClientSession and closes that session on exit. Hive/HiveAsyncApi
+        create their own ClientSession internally when none is passed
+        (apyhiveapi/api/hive_async_api.py) with no way to close it
+        afterward -- constructing our own and passing it in as `websession`
+        is the only way to actually release it, since a fresh session is
+        needed every call anyway (see this class's docstring on why one
+        asyncio.run() per call, not a long-lived Hive instance)."""
+        session = ClientSession()
+        try:
+            yield Hive(
+                username=self._settings.username,
+                password=self._settings.password,
+                websession=session,
+            )
+        finally:
+            await session.close()
 
     @staticmethod
     def _resume_config(state: HiveAuthState) -> dict[str, Any]:
@@ -143,7 +163,11 @@ class HiveApiSource:
                 "refreshToken": state.refresh_token,
                 "accessToken": "",  # nosec B105 -- same as "token" above
             },
-            "device_data": (state.device_group_key, state.device_key, ""),
+            "device_data": (
+                state.device_group_key,
+                state.device_key,
+                state.device_password,
+            ),
         }
 
     @staticmethod
@@ -152,6 +176,7 @@ class HiveApiSource:
             refresh_token=hive.tokens.tokenData.get("refreshToken", ""),
             device_group_key=hive.auth.device_group_key or "",
             device_key=hive.auth.device_key or "",
+            device_password=hive.auth.device_password or "",
             updated_at=datetime.now(UTC),
         )
 
@@ -174,24 +199,24 @@ class HiveApiSource:
         # method raising -- means each of this job's retry-with-backoff
         # attempts is itself a recovery attempt, instead of a permanent
         # failure loop until the process is restarted.
-        hive = self._new_hive()
-        await self._establish_session(hive, state)
-        # Persisted immediately after the session starts, before the
-        # heating.get*() calls below -- if one of those triggers apyhiveapi's
-        # own internal 90%-lifetime token auto-refresh mid-poll, that
-        # rotation wouldn't be captured until the row is next re-read on the
-        # following poll. Negligible in practice (tokens were just minted
-        # moments earlier in this same call) and self-heals within one
-        # 120-second cycle either way.
-        self._mariadb.write_hive_auth_state(self._auth_state_from_session(hive))
+        async with self._hive_session() as hive:
+            await self._establish_session(hive, state)
+            # Persisted immediately after the session starts, before the
+            # heating.get*() calls below -- if one of those triggers
+            # apyhiveapi's own internal 90%-lifetime token auto-refresh
+            # mid-poll, that rotation wouldn't be captured until the row is
+            # next re-read on the following poll. Negligible in practice
+            # (tokens were just minted moments earlier in this same call)
+            # and self-heals within one 120-second cycle either way.
+            self._mariadb.write_hive_auth_state(self._auth_state_from_session(hive))
 
-        device = self._climate_device(hive)
-        current_temp = await hive.heating.getCurrentTemperature(device)
-        target_temp = await hive.heating.getTargetTemperature(device)
-        mode = await hive.heating.getMode(device)
-        heating_state = await hive.heating.getState(device)
-        boost_status = await hive.heating.getBoostStatus(device)
-        schedule = await hive.heating.getScheduleNowNextLater(device) or {}
+            device = self._climate_device(hive)
+            current_temp = await hive.heating.getCurrentTemperature(device)
+            target_temp = await hive.heating.getTargetTemperature(device)
+            mode = await hive.heating.getMode(device)
+            heating_state = await hive.heating.getState(device)
+            boost_status = await hive.heating.getBoostStatus(device)
+            schedule = await hive.heating.getScheduleNowNextLater(device) or {}
 
         return HeatingStatus(
             polled_at=datetime.now(UTC),

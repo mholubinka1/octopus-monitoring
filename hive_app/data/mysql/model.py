@@ -28,10 +28,22 @@ class hive_auth_state(SQLBase):
     # Single-row table (see ADR context in hive_app/data/mysql/client.py's
     # HIVE_AUTH_STATE_ID): the id is always the same fixed value, so every
     # write upserts the same row rather than accumulating history.
+    #
+    # All columns below are safely nullable=False despite ADR-0005's
+    # additive-only Schema Sync caveat (see cost_forecast.energy in
+    # app/data/mysql/model.py for the case where that caveat DOES apply):
+    # this table is brand new, introduced in this same PR, never deployed
+    # to production before -- create_all() creates it with every column
+    # already present on first real deploy, so _sync_missing_columns'
+    # ALTER-TABLE-on-an-existing-table path is never exercised for it. If a
+    # future column is ever added to this already-live table, that new
+    # column would need the same nullable/backfill treatment cost_forecast
+    # used.
     id = Column(Integer, primary_key=True)
     refresh_token = Column(String(2000), nullable=False)
     device_group_key = Column(String(200), nullable=False)
     device_key = Column(String(200), nullable=False)
+    device_password = Column(String(200), nullable=False)
     updated_at = Column(DateTime, nullable=False)
 
 

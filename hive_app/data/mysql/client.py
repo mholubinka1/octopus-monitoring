@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.reflection import Inspector
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -26,6 +26,14 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 # spec's "Auth state" section) -- every write targets this same fixed id
 # rather than accumulating a row per login/refresh.
 HIVE_AUTH_STATE_ID = 1
+
+# MySQL/MariaDB error 1050: "Table '...' already exists".
+_TABLE_ALREADY_EXISTS_ERROR_CODE = 1050
+
+
+def _is_table_already_exists_error(exc: OperationalError | ProgrammingError) -> bool:
+    orig_args: tuple[object, ...] = getattr(exc.orig, "args", ())
+    return bool(orig_args) and orig_args[0] == _TABLE_ALREADY_EXISTS_ERROR_CODE
 
 
 def upsert(s: Session, record: Any) -> None:
@@ -72,7 +80,7 @@ class MariaDBClient:
         engine = self._session_builder.engine
         existing_tables = set(inspect(engine).get_table_names())
 
-        SQLBase.metadata.create_all(engine, checkfirst=True)
+        self._create_all_tolerating_concurrent_creation(engine)
 
         created_tables = {
             table.name for table in SQLBase.metadata.tables.values()
@@ -85,6 +93,29 @@ class MariaDBClient:
         inspector = inspect(engine)
         with engine.begin() as connection:
             self._sync_missing_columns(connection, inspector)
+
+    @staticmethod
+    def _create_all_tolerating_concurrent_creation(engine: Engine) -> None:
+        """create_all's own checkfirst existence check and the CREATE TABLE
+        statement it issues aren't atomic -- if app/ and hive_app/ (which
+        share octopus.job_run, see the job_run model's own comment) both
+        start against a freshly-initialized database at the same time, both
+        can see that table as absent and race to create it, with the
+        loser's CREATE TABLE failing "table already exists". Retrying once
+        (checkfirst now sees the winner's table and skips it) recovers from
+        exactly that race without weakening the check for a genuine schema
+        problem, which would fail identically on the retry too."""
+        try:
+            SQLBase.metadata.create_all(engine, checkfirst=True)
+        except (OperationalError, ProgrammingError) as e:
+            if not _is_table_already_exists_error(e):
+                raise
+            logger.info(
+                "Schema sync: table creation raced with another process "
+                "(e.g. app/hive_app starting concurrently) -- retrying now "
+                "that the table exists."
+            )
+            SQLBase.metadata.create_all(engine, checkfirst=True)
 
     def _sync_missing_columns(
         self, connection: Connection, inspector: Inspector
@@ -169,6 +200,7 @@ class MariaDBClient:
             refresh_token=state.refresh_token,
             device_group_key=state.device_group_key,
             device_key=state.device_key,
+            device_password=state.device_password,
             updated_at=state.updated_at,
         )
         self._write_all([record], "Hive auth state")
@@ -190,6 +222,7 @@ class MariaDBClient:
             refresh_token=row.refresh_token,
             device_group_key=row.device_group_key,
             device_key=row.device_key,
+            device_password=row.device_password,
             updated_at=row.updated_at.replace(tzinfo=UTC),
         )
 

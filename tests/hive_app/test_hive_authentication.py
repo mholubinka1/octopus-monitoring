@@ -32,6 +32,7 @@ class _FakeAuthHiveSource:
             refresh_token="fresh-refresh-token",
             device_group_key="fresh-device-group-key",
             device_key="fresh-device-key",
+            device_password="fresh-device-password",
             updated_at=datetime(2026, 9, 18, 12, 0, tzinfo=UTC),
         )
 
@@ -67,6 +68,7 @@ def test_existing_auth_state_takes_only_the_resume_path(
         refresh_token="existing-refresh-token",
         device_group_key="existing-device-group-key",
         device_key="existing-device-key",
+        device_password="existing-device-password",
         updated_at=datetime(2026, 9, 17, 8, 0, tzinfo=UTC),
     )
     mariadb_client.write_hive_auth_state(existing_state)
