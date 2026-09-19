@@ -1,9 +1,13 @@
 import asyncio
+import json
 import logging.config
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime
 from logging import Logger, getLogger
+from pathlib import Path
 from typing import Any
 
 from aiohttp import ClientSession
@@ -59,14 +63,33 @@ class HiveApiSource:
     they individually need Cognito to exercise.
     """
 
-    def __init__(self, settings: HiveSettings, mariadb: MariaDBClient) -> None:
+    def __init__(
+        self, settings: HiveSettings, mariadb: MariaDBClient, auth_state_path: str
+    ) -> None:
         self._settings = settings
         self._mariadb = mariadb
+        self._auth_state_path = Path(auth_state_path)
 
     # -- HiveSource: auth --
 
     def read_auth_state(self) -> HiveAuthState | None:
-        return self._mariadb.read_hive_auth_state()
+        if not self._auth_state_path.exists():
+            return None
+        try:
+            raw = json.loads(self._auth_state_path.read_text(encoding="utf-8"))
+            return HiveAuthState(
+                refresh_token=raw["refresh_token"],
+                device_group_key=raw["device_group_key"],
+                device_key=raw["device_key"],
+                device_password=raw["device_password"],
+                updated_at=datetime.fromisoformat(raw["updated_at"]),
+            )
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning(
+                f"Hive auth state file at {self._auth_state_path} is unreadable "
+                f"or malformed -- treating as no prior successful login: {e}"
+            )
+            return None
 
     def login(self) -> HiveAuthState:
         return asyncio.run(self._login())
@@ -75,7 +98,11 @@ class HiveApiSource:
         return asyncio.run(self._resume(state))
 
     def persist_auth_state(self, state: HiveAuthState) -> None:
-        self._mariadb.write_hive_auth_state(state)
+        payload = asdict(state)
+        payload["updated_at"] = state.updated_at.isoformat()
+        self._auth_state_path.write_text(json.dumps(payload), encoding="utf-8")
+        if os.name != "nt":
+            os.chmod(self._auth_state_path, 0o600)
 
     async def _login(self) -> HiveAuthState:
         async with self._hive_session() as hive:
@@ -192,7 +219,7 @@ class HiveApiSource:
         # state is always re-persisted below, not just at startup/resume,
         # or a later restart could resume with tokens Cognito has already
         # superseded.
-        state = self._mariadb.read_hive_auth_state()
+        state = self.read_auth_state()
         # If state is None, no prior HiveAuthenticator.authenticate() run
         # ever succeeded (e.g. it failed at startup). _establish_session
         # falling back to a fresh login in that case -- rather than this
@@ -208,7 +235,7 @@ class HiveApiSource:
             # next re-read on the following poll. Negligible in practice
             # (tokens were just minted moments earlier in this same call)
             # and self-heals within one 120-second cycle either way.
-            self._mariadb.write_hive_auth_state(self._auth_state_from_session(hive))
+            self.persist_auth_state(self._auth_state_from_session(hive))
 
             device = self._climate_device(hive)
             current_temp = await hive.heating.getCurrentTemperature(device)

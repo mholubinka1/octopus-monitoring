@@ -15,17 +15,12 @@ from sqlalchemy.schema import CreateColumn
 from hive_app.common.config import MariaDBSettings
 from hive_app.common.exceptions import MariaDBError
 from hive_app.common.logging import APP_LOGGER_NAME, config
-from hive_app.data.model import HeatingStatus, HiveAuthState
+from hive_app.data.model import HeatingStatus
 from hive_app.data.mysql import model as sql_model
 from hive_app.data.mysql.model import SQLBase
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
-
-# hive_auth_state is a single-row, upserted table (see ADR context in the
-# spec's "Auth state" section) -- every write targets this same fixed id
-# rather than accumulating a row per login/refresh.
-HIVE_AUTH_STATE_ID = 1
 
 # MySQL/MariaDB error 1050: "Table '...' already exists".
 _TABLE_ALREADY_EXISTS_ERROR_CODE = 1050
@@ -199,38 +194,6 @@ class MariaDBClient:
             schedule=status.schedule,
         )
         self._write_all([record], "Heating status data")
-
-    def write_hive_auth_state(self, state: HiveAuthState) -> None:
-        record = sql_model.hive_auth_state(
-            id=HIVE_AUTH_STATE_ID,
-            refresh_token=state.refresh_token,
-            device_group_key=state.device_group_key,
-            device_key=state.device_key,
-            device_password=state.device_password,
-            updated_at=state.updated_at,
-        )
-        self._write_all([record], "Hive auth state")
-
-    def read_hive_auth_state(self) -> HiveAuthState | None:
-        with self.session_read_scope() as session:
-            row = (
-                session.query(sql_model.hive_auth_state)
-                .filter_by(id=HIVE_AUTH_STATE_ID)
-                .first()
-            )
-        if row is None:
-            return None
-        # DATETIME columns come back tz-naive regardless of backend -- every
-        # value stored here is UTC by convention (see read_agile_forecast's
-        # identical reattachment in app/data/mysql/client.py), so it's
-        # reattached here rather than left for callers to guess.
-        return HiveAuthState(
-            refresh_token=row.refresh_token,
-            device_group_key=row.device_group_key,
-            device_key=row.device_key,
-            device_password=row.device_password,
-            updated_at=row.updated_at.replace(tzinfo=UTC),
-        )
 
     def record_job_run(
         self, job_name: str, status: str, error: str | None = None

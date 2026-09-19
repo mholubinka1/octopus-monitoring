@@ -14,6 +14,7 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 class HiveSettings(BaseModel):
     username: str
     password: str
+    auth_state_path: str = "/config/hive_auth_state.json"
 
 
 class MariaDBSettings(BaseModel):

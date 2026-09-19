@@ -1,6 +1,9 @@
 hive:
   username:
   password:
+  # Optional -- the default (/config/hive_auth_state.json) is fine for most
+  # deployments; hive-app's /config bind mount already exists.
+  # auth_state_path: /config/hive_auth_state.json
 
 mariadb:
   host:
