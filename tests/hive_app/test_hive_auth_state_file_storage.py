@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,6 +56,75 @@ def test_corrupt_file_returns_none_and_logs_a_warning(
     assert any(
         record.levelname == "WARNING" for record in caplog.records
     ), "expected a warning to be logged for a corrupt auth state file"
+
+
+def test_file_missing_a_required_key_returns_none_and_logs_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A file from an older/partial schema (missing a field this version
+    expects) must degrade to the same fallback as a missing file, not raise
+    an uncaught KeyError."""
+    auth_state_path = tmp_path / "hive_auth_state.json"
+    auth_state_path.write_text(
+        json.dumps({"refresh_token": "refresh-token"}), encoding="utf-8"
+    )
+    source = _make_source(auth_state_path)
+
+    with caplog.at_level("WARNING"):
+        result = source.read_auth_state()
+
+    assert result is None
+    assert any(
+        record.levelname == "WARNING" for record in caplog.records
+    ), "expected a warning to be logged for a file missing a required key"
+
+
+def test_file_with_an_unparsable_timestamp_returns_none_and_logs_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """updated_at that isn't a valid ISO-8601 string must degrade to the
+    same fallback as a missing file, not raise an uncaught ValueError."""
+    auth_state_path = tmp_path / "hive_auth_state.json"
+    auth_state_path.write_text(
+        json.dumps(
+            {
+                "refresh_token": "refresh-token",
+                "device_group_key": "device-group-key",
+                "device_key": "device-key",
+                "device_password": "device-password",
+                "updated_at": "not-a-timestamp",
+            }
+        ),
+        encoding="utf-8",
+    )
+    source = _make_source(auth_state_path)
+
+    with caplog.at_level("WARNING"):
+        result = source.read_auth_state()
+
+    assert result is None
+    assert any(
+        record.levelname == "WARNING" for record in caplog.records
+    ), "expected a warning to be logged for an unparsable timestamp"
+
+
+def test_file_containing_valid_json_that_is_not_an_object_returns_none_and_logs_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Valid JSON that isn't an object (e.g. a bare list or null) must
+    degrade to the same fallback as a missing file, not raise an uncaught
+    TypeError from indexing into it."""
+    auth_state_path = tmp_path / "hive_auth_state.json"
+    auth_state_path.write_text(json.dumps([]), encoding="utf-8")
+    source = _make_source(auth_state_path)
+
+    with caplog.at_level("WARNING"):
+        result = source.read_auth_state()
+
+    assert result is None
+    assert any(
+        record.levelname == "WARNING" for record in caplog.records
+    ), "expected a warning to be logged for JSON that isn't an object"
 
 
 def test_unreadable_file_returns_none_and_logs_a_warning(
