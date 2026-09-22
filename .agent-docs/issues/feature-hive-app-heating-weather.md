@@ -20,6 +20,8 @@ The walking skeleton for hive-app: a config-driven entrypoint with a scheduler l
 - [x] Given a transient poll failure (e.g. a network error, not an auth failure), when it occurs, then it's recorded as a `job_run` failure with retry-with-backoff, mirroring `_schedule_refresh_job`'s existing behaviour — no crash, no special handling beyond what every other job already gets.
 - [x] `HeatingRetriever` is tested against a fake `HiveSource` (Protocol implementation, no live or mocked Cognito flow) — mirrors `test_pricing_retrieval.py`'s seam for `PricingSource`.
 
+> The two `hive_auth_state` criteria above describe this issue's original MariaDB-table design, which shipped and was reviewed as part of this same PR. That design was superseded before merge — see [ADR-0019](../adr/0019-file-based-hive-auth-state-storage.md) and the spec's "`hive_auth_state` file-based storage" section — `hive_auth_state` is now a JSON file in hive-app's `/config` volume, not a MariaDB row. Left unedited above as the historical record of what this issue originally asked for; the criteria remain satisfied in spirit (persist-then-resume-via-refresh), just not via the literal mechanism described.
+
 ---
 
 ## hive-app: active alert on unrecoverable Hive re-auth — [#509](https://github.com/mholubinka1/octopus-monitoring/issues/509)

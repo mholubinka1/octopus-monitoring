@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging.config
 import os
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -63,12 +64,10 @@ class HiveApiSource:
     they individually need Cognito to exercise.
     """
 
-    def __init__(
-        self, settings: HiveSettings, mariadb: MariaDBClient, auth_state_path: str
-    ) -> None:
+    def __init__(self, settings: HiveSettings, mariadb: MariaDBClient) -> None:
         self._settings = settings
         self._mariadb = mariadb
-        self._auth_state_path = Path(auth_state_path)
+        self._auth_state_path = Path(settings.auth_state_path)
 
     # -- HiveSource: auth --
 
@@ -84,7 +83,7 @@ class HiveApiSource:
                 device_password=raw["device_password"],
                 updated_at=datetime.fromisoformat(raw["updated_at"]),
             )
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+        except (OSError, json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(
                 f"Hive auth state file at {self._auth_state_path} is unreadable "
                 f"or malformed -- treating as no prior successful login: {e}"
@@ -98,11 +97,29 @@ class HiveApiSource:
         return asyncio.run(self._resume(state))
 
     def persist_auth_state(self, state: HiveAuthState) -> None:
+        # Written to a temp file in the same directory (so the rename below
+        # is atomic, not cross-filesystem) then renamed into place, rather
+        # than written directly to auth_state_path -- this avoids both a
+        # crash-mid-write leaving a truncated/corrupt file, and a window
+        # where the file briefly exists at the umask-default (potentially
+        # world-readable) mode before permissions are tightened. mkstemp
+        # creates the temp file already restricted to the owner (0o600 on
+        # POSIX), so the target inherits that mode across the rename with
+        # no separate chmod step needed.
         payload = asdict(state)
         payload["updated_at"] = state.updated_at.isoformat()
-        self._auth_state_path.write_text(json.dumps(payload), encoding="utf-8")
-        if os.name != "nt":
-            os.chmod(self._auth_state_path, 0o600)
+        tmp_fd, tmp_name = tempfile.mkstemp(
+            dir=self._auth_state_path.parent,
+            prefix=f".{self._auth_state_path.name}.",
+        )
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as file:
+                file.write(json.dumps(payload))
+            os.replace(tmp_path, self._auth_state_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     async def _login(self) -> HiveAuthState:
         async with self._hive_session() as hive:

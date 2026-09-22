@@ -134,7 +134,7 @@ def main() -> None:
         sys.exit(1)
 
     mariadb = MariaDBClient(settings.mariadb)
-    hive_source = HiveApiSource(settings.hive, mariadb, settings.hive.auth_state_path)
+    hive_source = HiveApiSource(settings.hive, mariadb)
     heating = HeatingRetriever(hive_source)
     authenticator = HiveAuthenticator(hive_source)
 
