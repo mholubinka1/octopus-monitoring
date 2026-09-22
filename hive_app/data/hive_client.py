@@ -76,19 +76,35 @@ class HiveApiSource:
             return None
         try:
             raw = json.loads(self._auth_state_path.read_text(encoding="utf-8"))
-            return HiveAuthState(
-                refresh_token=raw["refresh_token"],
-                device_group_key=raw["device_group_key"],
-                device_key=raw["device_key"],
-                device_password=raw["device_password"],
+            state = HiveAuthState(
+                refresh_token=self._require_str(raw, "refresh_token"),
+                device_group_key=self._require_str(raw, "device_group_key"),
+                device_key=self._require_str(raw, "device_key"),
+                device_password=self._require_str(raw, "device_password"),
                 updated_at=datetime.fromisoformat(raw["updated_at"]),
             )
+            return state
         except (OSError, KeyError, ValueError, TypeError) as e:
             logger.warning(
                 f"Hive auth state file at {self._auth_state_path} is unreadable "
                 f"or malformed -- treating as no prior successful login: {e}"
             )
             return None
+
+    @staticmethod
+    def _require_str(raw: dict[str, Any], key: str) -> str:
+        # A plain isinstance check, not just key presence -- a hand-edited
+        # or truncated auth state file can contain valid JSON with the
+        # right keys but the wrong value types (e.g. a list or number where
+        # a token string belongs), which would otherwise construct a
+        # HiveAuthState that later fails Cognito's SRP flow unpredictably
+        # instead of taking the clean corrupt-file fallback below.
+        value = raw[key]
+        if not isinstance(value, str):
+            raise TypeError(
+                f"expected '{key}' to be a string, got {type(value).__name__}"
+            )
+        return value
 
     def login(self) -> HiveAuthState:
         return asyncio.run(self._login())

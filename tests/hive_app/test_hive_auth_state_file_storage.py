@@ -108,6 +108,37 @@ def test_file_with_an_unparsable_timestamp_returns_none_and_logs_a_warning(
     ), "expected a warning to be logged for an unparsable timestamp"
 
 
+def test_field_with_the_wrong_json_type_returns_none_and_logs_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A field present with the right key but the wrong JSON type (e.g. a
+    list instead of a token string) must degrade to the same fallback as a
+    missing file, not silently construct a HiveAuthState that later fails
+    Cognito's SRP flow unpredictably."""
+    auth_state_path = tmp_path / "hive_auth_state.json"
+    auth_state_path.write_text(
+        json.dumps(
+            {
+                "refresh_token": [],
+                "device_group_key": "device-group-key",
+                "device_key": "device-key",
+                "device_password": "device-password",
+                "updated_at": "2026-09-19T10:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    source = _make_source(auth_state_path)
+
+    with caplog.at_level("WARNING"):
+        result = source.read_auth_state()
+
+    assert result is None
+    assert any(
+        record.levelname == "WARNING" for record in caplog.records
+    ), "expected a warning to be logged for a field with the wrong JSON type"
+
+
 def test_file_containing_valid_json_that_is_not_an_object_returns_none_and_logs_a_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
