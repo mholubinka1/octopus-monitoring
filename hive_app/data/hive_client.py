@@ -83,7 +83,7 @@ class HiveApiSource:
                 device_password=raw["device_password"],
                 updated_at=datetime.fromisoformat(raw["updated_at"]),
             )
-        except (OSError, json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+        except (OSError, KeyError, ValueError, TypeError) as e:
             logger.warning(
                 f"Hive auth state file at {self._auth_state_path} is unreadable "
                 f"or malformed -- treating as no prior successful login: {e}"
