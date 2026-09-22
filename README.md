@@ -12,10 +12,22 @@ see `.agent-docs/specs/` for the roadmap.
 - **`app/`** — polls the Octopus API on a configurable interval and writes consumption
   readings to MariaDB (`data.consumption.ConsumptionRetriever` /
   `data.mysql.client.MariaDBClient`).
-- **MariaDB** — the persistence layer. Schema lives solely in `app/data/mysql/model.py`;
-  `data.mysql.client.MariaDBClient` syncs it into the live database automatically on every
-  app startup (creating missing tables/columns only — see
-  `.agent-docs/adr/0005-additive-only-schema-sync.md`).
+- **`hive_app/`** — a second, independently deployable poller: authenticates to a
+  British Gas Hive account (Cognito-SRP via the community `apyhiveapi` library, no
+  official Hive API exists) and writes heating status to the same shared MariaDB
+  instance every 120 seconds. See
+  `.agent-docs/research/hive-api-access-approach.md` for why this auth approach was
+  chosen, and `.agent-docs/specs/feature-hive-app-heating-weather.md` for the wider
+  heating/weather feature this is the first slice of. Deployed via
+  `Dockerfile.hive-app` and the `hive-app` service in `docker-compose.yml`, configured
+  from `hive-config.yml.template`.
+- **MariaDB** — the shared persistence layer for both containers. Each app's schema
+  lives solely in its own `data/mysql/model.py` (`app/` and `hive_app/` respectively);
+  each app's own `MariaDBClient` syncs its own tables into the live database
+  automatically on startup (creating missing tables/columns only — see
+  `.agent-docs/adr/0005-additive-only-schema-sync.md`). The two apps' schema syncs run
+  independently against the same database — see the comment on `job_run` in
+  `hive_app/data/mysql/model.py` for the one table both currently share.
 - **Grafana** (not included in this repo) — point its MySQL data source at the MariaDB
   instance to build dashboards.
 

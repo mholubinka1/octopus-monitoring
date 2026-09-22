@@ -26,7 +26,7 @@ from data.octopus.model import AgileForecastReading, Agreement, Meter, Product, 
 from sqlalchemy import and_, create_engine, inspect, or_, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.reflection import Inspector
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -34,6 +34,14 @@ SUMMARIZATION_WINDOW_DAYS = 14
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
+
+# MySQL/MariaDB error 1050: "Table '...' already exists".
+_TABLE_ALREADY_EXISTS_ERROR_CODE = 1050
+
+
+def _is_table_already_exists_error(exc: OperationalError | ProgrammingError) -> bool:
+    orig_args: tuple[object, ...] = getattr(exc.orig, "args", ())
+    return bool(orig_args) and orig_args[0] == _TABLE_ALREADY_EXISTS_ERROR_CODE
 
 
 @dataclass
@@ -100,7 +108,7 @@ class MariaDBClient:
         engine = self._session_builder.engine
         existing_tables = set(inspect(engine).get_table_names())
 
-        SQLBase.metadata.create_all(engine, checkfirst=True)
+        self._create_all_tolerating_concurrent_creation(engine)
 
         created_tables = {
             table.name for table in SQLBase.metadata.tables.values()
@@ -118,6 +126,36 @@ class MariaDBClient:
         with engine.begin() as connection:
             self._sync_missing_columns(connection, inspector)
             self._sync_missing_indexes(connection, inspector)
+
+    @staticmethod
+    def _create_all_tolerating_concurrent_creation(engine: Engine) -> None:
+        """create_all's own checkfirst existence check and the CREATE TABLE
+        statement it issues aren't atomic -- if app/ and hive_app/ (which
+        share octopus.job_run, see the job_run model's own comment in
+        hive_app/data/mysql/model.py) both start against a freshly-
+        initialized database at the same time, both can see that table as
+        absent and race to create it, with the loser's CREATE TABLE failing
+        "table already exists". Retrying once (checkfirst now sees the
+        winner's table and skips it) recovers from exactly that race
+        without weakening the check for a genuine schema problem, which
+        would fail identically on the retry too.
+
+        hive_app/data/mysql/client.py carries an identical copy of this
+        method and _is_table_already_exists_error (the two packages'
+        schema-sync logic is deliberately independent, see job_run's own
+        comment) -- keep both in sync if this retry logic is ever
+        extended, e.g. to tolerate another error code."""
+        try:
+            SQLBase.metadata.create_all(engine, checkfirst=True)
+        except (OperationalError, ProgrammingError) as e:
+            if not _is_table_already_exists_error(e):
+                raise
+            logger.info(
+                "Schema sync: table creation raced with another process "
+                "(e.g. app/hive_app starting concurrently) -- retrying now "
+                "that the table exists."
+            )
+            SQLBase.metadata.create_all(engine, checkfirst=True)
 
     def _sync_missing_columns(
         self, connection: Connection, inspector: Inspector
