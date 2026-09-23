@@ -174,3 +174,64 @@ def test_refresh_still_raises_the_original_reauth_error_when_notifying_fails() -
         HiveReauthRequired, match="Hive's remembered device is no longer recognized."
     ):
         HeatingRetriever(source, notifier).refresh()
+
+
+def test_refresh_notifies_only_once_across_repeated_reauth_failures() -> None:
+    source = _ReauthRequiredHiveSource()
+    notifier = _SpyReauthNotifier()
+    retriever = HeatingRetriever(source, notifier)
+
+    for _ in range(3):
+        with pytest.raises(HiveReauthRequired):
+            retriever.refresh()
+
+    assert notifier.calls == 1
+
+
+class _ScriptedHiveSource:
+    """A fake HiveSource that plays back a fixed sequence of outcomes, one
+    per fetch_heating_status() call -- proves HeatingRetriever resets its
+    notify-once state after a recovery, so a later, distinct reauth
+    incident is notified again rather than being silently deduplicated."""
+
+    def __init__(self, mariadb: MariaDBClient, outcomes: list[bool]) -> None:
+        self._mariadb = mariadb
+        self._outcomes = list(outcomes)
+
+    def fetch_heating_status(self) -> HeatingStatus:
+        if self._outcomes.pop(0):
+            raise HiveReauthRequired(
+                "Hive's remembered device is no longer recognized."
+            )
+        return _make_status()
+
+    def persist_heating_status(self, status: HeatingStatus) -> None:
+        self._mariadb.write_heating_status(status)
+
+    def read_auth_state(self) -> HiveAuthState | None:
+        raise NotImplementedError
+
+    def login(self) -> HiveAuthState:
+        raise NotImplementedError
+
+    def resume(self, state: HiveAuthState) -> HiveAuthState:
+        raise NotImplementedError
+
+    def persist_auth_state(self, state: HiveAuthState) -> None:
+        raise NotImplementedError
+
+
+def test_refresh_notifies_again_after_a_recovery_and_a_new_reauth_failure(
+    mariadb_client: MariaDBClient,
+) -> None:
+    source = _ScriptedHiveSource(mariadb_client, outcomes=[True, False, True])
+    notifier = _SpyReauthNotifier()
+    retriever = HeatingRetriever(source, notifier)
+
+    with pytest.raises(HiveReauthRequired):
+        retriever.refresh()
+    retriever.refresh()
+    with pytest.raises(HiveReauthRequired):
+        retriever.refresh()
+
+    assert notifier.calls == 2

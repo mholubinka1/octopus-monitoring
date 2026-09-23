@@ -8,11 +8,11 @@ from logging import Logger, getLogger
 
 from schedule import Job, Scheduler, default_scheduler
 
-from hive_app.common.config import get_settings
+from hive_app.common.config import NtfySettings, get_settings
 from hive_app.common.decorator import retry_with_exponential_backoff
 from hive_app.common.logging import APP_LOGGER_NAME, config
 from hive_app.data.auth import HiveAuthenticator
-from hive_app.data.heating import HeatingRetriever
+from hive_app.data.heating import HeatingRetriever, HiveSource
 from hive_app.data.hive_client import HiveApiSource
 from hive_app.data.mysql.client import MariaDBClient
 from hive_app.data.notify import NtfyReauthNotifier, ReauthNotifier
@@ -131,6 +131,13 @@ def _build_reauth_notifier(topic_url: str | None) -> ReauthNotifier | None:
     return NtfyReauthNotifier(topic_url)
 
 
+def _build_heating_retriever(
+    hive_source: HiveSource, ntfy: NtfySettings | None
+) -> HeatingRetriever:
+    reauth_notifier = _build_reauth_notifier(ntfy.topic_url if ntfy else None)
+    return HeatingRetriever(hive_source, reauth_notifier)
+
+
 def main() -> None:
     logger.info("Starting hive-app.")
 
@@ -146,10 +153,7 @@ def main() -> None:
 
     mariadb = MariaDBClient(settings.mariadb)
     hive_source = HiveApiSource(settings.hive, mariadb)
-    reauth_notifier = _build_reauth_notifier(
-        settings.ntfy.topic_url if settings.ntfy else None
-    )
-    heating = HeatingRetriever(hive_source, reauth_notifier)
+    heating = _build_heating_retriever(hive_source, settings.ntfy)
     authenticator = HiveAuthenticator(hive_source)
 
     authenticate_at_startup(authenticator)
