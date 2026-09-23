@@ -87,9 +87,12 @@ one small overlap remains rather than being engineered away. `MARIADB_DATABASE` 
      to `/docker-entrypoint-initdb.d/init.sql`)
 2. **Create `config.yml`** from `config.yml.template` (see Configuration above) and
    place it at the path you chose for the app's config bind mount.
-3. **Create `.env`** from `.env.template` in the same directory as
-   `deployments/docker-compose.yml`, filling in `MARIADB_USER`/`MARIADB_PASSWORD` to
-   match the values you put in `config.yml`.
+3. **Create `.env`** from `.env.template` in the repository root — the directory you'll
+   run `docker compose` from in the next step. Compose reads `.env` relative to the
+   current working directory it's invoked from, not relative to the `-f` compose file,
+   so it must live at the root even though the compose file itself is under
+   `deployments/`. Fill in `MARIADB_USER`/`MARIADB_PASSWORD` to match the values you put
+   in `config.yml`.
 4. **Start the stack** (the combined `deployments/docker-compose.yml` `include:`s the
    three per-service files above — this is the file to actually run):
 
