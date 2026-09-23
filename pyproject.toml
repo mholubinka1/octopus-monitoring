@@ -38,18 +38,29 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["apps/octopus-app", "."]
-testpaths = ["apps/octopus-app/tests", "tests", "libs/common/tests"]
-# Three independent test packages (apps/octopus-app/tests, tests, libs/common/tests)
-# all share the basename "tests" -- the default "prepend" import mode binds each to
-# the same top-level sys.modules["tests"] entry, so the second and third collected
-# collide with the first. importlib mode keys each test module by its fully
-# qualified file path instead, so same-named packages in different directories
-# don't clash.
+pythonpath = ["apps/octopus-app", "apps/hive-app", "."]
+testpaths = ["apps/octopus-app/tests", "apps/hive-app/tests", "libs/common/tests"]
+# Independent test packages (apps/octopus-app/tests, apps/hive-app/tests,
+# libs/common/tests) all share the basename "tests" -- the default "prepend"
+# import mode binds each to the same top-level sys.modules["tests"] entry, so
+# the second and third collected collide with the first. importlib mode keys
+# each test module by its fully qualified file path instead, so same-named
+# packages in different directories don't clash.
+#
+# That alone isn't enough for apps/octopus-app/tests and apps/hive-app/tests
+# specifically: both "octopus-app" and "hive-app" contain a hyphen, so pytest
+# can't qualify their "tests" package under a namespace-package dotted name
+# (e.g. "apps.octopus-app.tests" isn't a valid module path) and falls back to
+# the shallow name "tests" for both -- resolved via each directory's own
+# pythonpath entry, so they'd still collide with each other even under
+# importlib mode. apps/hive-app/tests therefore has no __init__.py (unlike
+# apps/octopus-app/tests, kept as committed in #528): without an __init__.py
+# chain to walk, pytest treats each of its modules as rootless and assigns it
+# a unique name derived from its full file path instead.
 addopts = ["--import-mode=importlib"]
 
 [tool.coverage.run]
-source = ["apps/octopus-app/octopus_app", "hive_app", "libs/common/common"]
+source = ["apps/octopus-app/octopus_app", "apps/hive-app/hive_app", "libs/common/common"]
 
 [tool.ruff.lint]
 # BLE001 (blind except Exception) is disabled repo-wide: every hit is a caller-supplied
@@ -62,7 +73,12 @@ ignore = ["BLE001", "I001"]
 
 [tool.pylint.main]
 ignore-paths = ["apps/octopus-app/octopus_app/_deprecated"]
-source-roots = ["apps/octopus-app", "."]
+source-roots = ["apps/octopus-app", "apps/hive-app", "."]
+# apps/hive-app/tests has no __init__.py (see the pytest addopts comment above for
+# why), but pylint's default directory handling expects a target directory to be a
+# regular package and refuses to lint it, treating the missing __init__.py as a
+# parse error, unless told to walk it recursively instead of requiring that file.
+recursive = true
 
 [tool.pylint.design]
 # MonitoringClient (app/data/base.py) is a deliberate facade: it wires the Octopus API

@@ -5,6 +5,7 @@ from hive_app.common.logging import APP_LOGGER_NAME, config
 from hive_app.data.model import HeatingStatus
 from hive_app.data.mysql import model as sql_model
 from hive_app.data.mysql.model import SQLBase
+
 from libs.common.common.config import MariaDBSettings
 from libs.common.common.mariadb.client import MariaDBClientBase
 

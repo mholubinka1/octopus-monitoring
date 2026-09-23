@@ -3,9 +3,9 @@ import sys
 from logging import Logger, getLogger
 
 import yaml
+from hive_app.common.logging import APP_LOGGER_NAME, config
 from pydantic import BaseModel, ValidationError
 
-from hive_app.common.logging import APP_LOGGER_NAME, config
 from libs.common.common.config import MariaDBSettings
 
 logging.config.dictConfig(config)

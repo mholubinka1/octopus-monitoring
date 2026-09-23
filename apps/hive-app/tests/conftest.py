@@ -1,9 +1,9 @@
 import pytest
+from hive_app.data.mysql.client import MariaDBClient
+from hive_app.data.mysql.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-from hive_app.data.mysql.client import MariaDBClient
-from hive_app.data.mysql.model import SQLBase
 from libs.common.common.config import MariaDBSettings
 
 

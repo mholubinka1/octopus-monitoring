@@ -3,9 +3,8 @@ from typing import Any
 
 import pytest
 import yaml
-from pydantic import ValidationError
-
 from hive_app.common.config import HiveApplicationSettings, get_settings
+from pydantic import ValidationError
 
 VALID_CONFIG: dict[str, Any] = {
     "hive": {"username": "someone@example.com", "password": "hunter2"},

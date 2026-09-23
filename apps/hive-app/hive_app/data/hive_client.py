@@ -16,7 +16,6 @@ from apyhiveapi import Hive
 from apyhiveapi.helper.hive_exceptions import (
     HiveReauthRequired as ApyHiveReauthRequired,
 )
-
 from hive_app.common.config import HiveSettings
 from hive_app.common.exceptions import HiveReauthRequired
 from hive_app.common.logging import APP_LOGGER_NAME, config

@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-
 from hive_app.data.heating import HeatingRetriever
 from hive_app.data.model import HeatingStatus, HiveAuthState
 from hive_app.data.mysql import model

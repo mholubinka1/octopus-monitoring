@@ -6,8 +6,6 @@ import time
 from collections.abc import Callable
 from logging import Logger, getLogger
 
-from schedule import Job, Scheduler, default_scheduler
-
 from hive_app.common.config import get_settings
 from hive_app.common.decorator import retry_with_exponential_backoff
 from hive_app.common.logging import APP_LOGGER_NAME, config
@@ -15,6 +13,7 @@ from hive_app.data.auth import HiveAuthenticator
 from hive_app.data.heating import HeatingRetriever
 from hive_app.data.hive_client import HiveApiSource
 from hive_app.data.mysql.client import MariaDBClient
+from schedule import Job, Scheduler, default_scheduler
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
