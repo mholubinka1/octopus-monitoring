@@ -38,11 +38,18 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["app", "."]
-testpaths = ["tests"]
+pythonpath = ["apps/octopus-app", "."]
+testpaths = ["apps/octopus-app/tests", "tests", "libs/common/tests"]
+# Three independent test packages (apps/octopus-app/tests, tests, libs/common/tests)
+# all share the basename "tests" -- the default "prepend" import mode binds each to
+# the same top-level sys.modules["tests"] entry, so the second and third collected
+# collide with the first. importlib mode keys each test module by its fully
+# qualified file path instead, so same-named packages in different directories
+# don't clash.
+addopts = ["--import-mode=importlib"]
 
 [tool.coverage.run]
-source = ["app", "hive_app"]
+source = ["apps/octopus-app/octopus_app", "hive_app", "libs/common/common"]
 
 [tool.ruff.lint]
 # BLE001 (blind except Exception) is disabled repo-wide: every hit is a caller-supplied
@@ -54,8 +61,8 @@ source = ["app", "hive_app"]
 ignore = ["BLE001", "I001"]
 
 [tool.pylint.main]
-ignore-paths = ["app/_deprecated"]
-source-roots = ["app", "."]
+ignore-paths = ["apps/octopus-app/octopus_app/_deprecated"]
+source-roots = ["apps/octopus-app", "."]
 
 [tool.pylint.design]
 # MonitoringClient (app/data/base.py) is a deliberate facade: it wires the Octopus API

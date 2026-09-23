@@ -31,7 +31,7 @@ _DEVICE_NOT_REMEMBERED_MESSAGE = (
     "SMS 2FA code is needed to recover."
 )
 _LOGIN_REQUIRES_SMS_MESSAGE = (
-    "Hive login requires a live SMS 2FA code; a headless service cannot " "supply one."
+    "Hive login requires a live SMS 2FA code; a headless service cannot supply one."
 )
 
 
