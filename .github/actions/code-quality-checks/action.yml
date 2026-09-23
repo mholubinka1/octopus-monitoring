@@ -62,15 +62,15 @@ runs:
 
     - name: Check import ordering with isort
       shell: bash
-      run: uv run isort --check-only --profile black apps/ libs/ tests/
+      run: uv run isort --check-only --profile black apps/ libs/
 
     - name: Check code formatting with black
       shell: bash
-      run: uv run black --check apps/ libs/ tests/
+      run: uv run black --check apps/ libs/
 
     - name: Check linting with ruff
       shell: bash
-      run: uv run ruff check --no-fix apps/ libs/ tests/
+      run: uv run ruff check --no-fix apps/ libs/
 
     - name: Check linting with pylint
       shell: bash

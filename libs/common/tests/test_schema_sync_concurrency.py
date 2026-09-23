@@ -31,7 +31,7 @@ def _settings() -> MariaDBSettings:
 def test_schema_sync_recovers_from_a_concurrent_table_creation_race(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Given app/ and hive_app/ (which share octopus.job_run) start against a
+    """Given octopus-app and hive-app (which share octopus.job_run) start against a
     freshly-initialized database at the same moment, both can see that table
     as absent and race to create it -- the loser's CREATE TABLE fails
     "already exists". Constructing MariaDBClientBase (its public interface)

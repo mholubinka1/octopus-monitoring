@@ -64,8 +64,8 @@ class MariaDBClientBase:
         self,
         settings: MariaDBSettings,
         # sqlalchemy-stubs (a pre-2.0 stub package -- see the repo-wide caveat
-        # in tests/test_schema_sync.py and hive_app/data/mysql/client.py)
-        # can't express the metaclass of a declarative_base()-produced class
+        # in apps/octopus-app/tests/test_schema_sync.py) can't express the
+        # metaclass of a declarative_base()-produced class
         # precisely, so this is typed loosely rather than fought with
         # per-call-site type: ignore comments.
         declarative_base: type[Any],
@@ -101,8 +101,8 @@ class MariaDBClientBase:
 
     def _create_all_tolerating_concurrent_creation(self, engine: Engine) -> None:
         """create_all's own checkfirst existence check and the CREATE TABLE
-        statement it issues aren't atomic -- if app/ and hive_app/ (which
-        share octopus.job_run, see the job_run model's own comment in
+        statement it issues aren't atomic -- if octopus-app and hive-app
+        (which share octopus.job_run, see the job_run model's own comment in
         libs/common/common/mariadb/model.py) both start against a freshly-
         initialized database at the same time, both can see that table as
         absent and race to create it, with the loser's CREATE TABLE failing
@@ -112,9 +112,9 @@ class MariaDBClientBase:
         would fail identically on the retry too.
 
         This lives once here in libs/common now (it used to be duplicated
-        between app/data/mysql/client.py and hive_app/data/mysql/client.py,
-        which had to be kept in sync by hand) -- keep this in mind if the
-        retry logic is ever extended, e.g. to tolerate another error code."""
+        between each app's own mysql/client.py, which had to be kept in sync
+        by hand) -- keep this in mind if the retry logic is ever extended,
+        e.g. to tolerate another error code."""
         metadata = self._declarative_base.metadata
         try:
             metadata.create_all(engine, checkfirst=True)
@@ -123,7 +123,7 @@ class MariaDBClientBase:
                 raise
             self._logger.info(
                 "Schema sync: table creation raced with another process "
-                "(e.g. app/hive_app starting concurrently) -- retrying now "
+                "(e.g. octopus-app/hive-app starting concurrently) -- retrying now "
                 "that the table exists."
             )
             metadata.create_all(engine, checkfirst=True)
