@@ -1,7 +1,3 @@
-class MariaDBError(Exception):
-    pass
-
-
 class ConfigurationFileError(Exception):
     pass
 

@@ -6,6 +6,7 @@ import yaml
 from pydantic import BaseModel, ValidationError
 
 from hive_app.common.logging import APP_LOGGER_NAME, config
+from libs.common.common.config import MariaDBSettings
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -15,14 +16,6 @@ class HiveSettings(BaseModel):
     username: str
     password: str
     auth_state_path: str = "/config/hive_auth_state.json"
-
-
-class MariaDBSettings(BaseModel):
-    host: str
-    port: int
-    database: str
-    username: str
-    password: str
 
 
 class WeatherUndergroundSettings(BaseModel):

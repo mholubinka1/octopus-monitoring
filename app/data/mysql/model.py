@@ -2,9 +2,10 @@ from typing import ClassVar
 
 from sqlalchemy import Column, Date, DateTime, Index, Integer, Numeric, String
 from sqlalchemy.dialects.mysql import DECIMAL
-from sqlalchemy.ext.declarative import declarative_base
 
-SQLBase = declarative_base()
+from libs.common.common.mariadb.model import SQLBase, job_run
+
+__all__ = ["SQLBase", "job_run"]
 
 
 class consumption(SQLBase):
@@ -116,17 +117,3 @@ class cost_forecast(SQLBase):
     # manual backfill runs -- tightening to NOT NULL afterward is a
     # deliberate manual step, out of scope for the automated tool.
     energy = Column(String(1))
-
-
-class job_run(SQLBase):
-    __tablename__ = "job_run"
-    __table_args__: ClassVar[tuple[Index, dict[str, str]]] = (
-        Index("ix_job_run_job_name_ran_at", "job_name", "ran_at"),
-        {"schema": "octopus"},
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    job_name = Column(String(100), nullable=False)
-    status = Column(String(20), nullable=False)
-    ran_at = Column(DateTime, nullable=False)
-    error_message = Column(String(1000))

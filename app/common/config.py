@@ -6,6 +6,8 @@ import yaml
 from common.logging import APP_LOGGER_NAME, config
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from libs.common.common.config import MariaDBSettings
+
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
@@ -13,14 +15,6 @@ logger: Logger = getLogger(APP_LOGGER_NAME)
 class OctopusAPISettings(BaseModel):
     account_number: str
     api_key: str
-
-
-class MariaDBSettings(BaseModel):
-    host: str
-    port: int
-    database: str
-    username: str
-    password: str
 
 
 class RefreshSettings(BaseModel):

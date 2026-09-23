@@ -76,7 +76,7 @@ repos:
       - id: bandit
         args: ["-c", "pyproject.toml"]
         additional_dependencies: ["bandit[toml]"]
-        exclude: ^tests/
+        exclude: (^|/)tests/
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:

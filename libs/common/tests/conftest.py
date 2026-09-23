@@ -1,17 +1,19 @@
+import logging
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-from hive_app.data.mysql.client import MariaDBClient
-from hive_app.data.mysql.model import SQLBase
 from libs.common.common.config import MariaDBSettings
+from libs.common.common.mariadb.client import MariaDBClientBase
+from libs.common.common.mariadb.model import SQLBase
 
 
 @pytest.fixture
-def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
-    """A hive_app MariaDBClient backed by an in-memory SQLite database.
+def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClientBase:
+    """A MariaDBClientBase backed by an in-memory SQLite database.
 
-    Tables are declared with schema="octopus" for real MariaDB, which SQLite
+    job_run is declared with schema="octopus" for real MariaDB, which SQLite
     has no equivalent for, so the schema is translated away for this engine.
     """
     engine = create_engine(
@@ -19,7 +21,6 @@ def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     ).execution_options(schema_translate_map={"octopus": None})
-    SQLBase.metadata.create_all(engine)
 
     monkeypatch.setattr(
         "libs.common.common.mariadb.client.create_engine",
@@ -33,4 +34,6 @@ def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
         username="test",
         password="test",
     )
-    return MariaDBClient(settings)
+    return MariaDBClientBase(
+        settings, declarative_base=SQLBase, logger=logging.getLogger("test")
+    )

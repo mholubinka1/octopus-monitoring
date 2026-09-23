@@ -1,9 +1,10 @@
 import pytest
-from common.config import MariaDBSettings
 from data.mysql.client import MariaDBClient
 from data.mysql.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
+
+from libs.common.common.config import MariaDBSettings
 
 
 @pytest.fixture
@@ -21,7 +22,8 @@ def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
     SQLBase.metadata.create_all(engine)
 
     monkeypatch.setattr(
-        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
+        "libs.common.common.mariadb.client.create_engine",
+        lambda *args, **kwargs: engine,
     )
 
     settings = MariaDBSettings(

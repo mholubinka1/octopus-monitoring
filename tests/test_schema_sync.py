@@ -3,7 +3,6 @@ from decimal import Decimal
 from typing import ClassVar
 
 import pytest
-from common.config import MariaDBSettings
 from data.mysql import model
 from data.mysql.client import MariaDBClient
 from data.mysql.model import SQLBase
@@ -24,6 +23,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import CreateIndex, CreateTable
+
+from libs.common.common.config import MariaDBSettings
 
 _StrippedBase = declarative_base()
 
@@ -72,7 +73,8 @@ def _settings() -> MariaDBSettings:
 
 def _sync_against(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
     monkeypatch.setattr(
-        "data.mysql.client.create_engine", lambda *args, **kwargs: engine
+        "libs.common.common.mariadb.client.create_engine",
+        lambda *args, **kwargs: engine,
     )
     return MariaDBClient(_settings())
 

@@ -1,9 +1,10 @@
 import pytest
-from data.mysql.client import upsert
 from sqlalchemy import Column, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from libs.common.common.mariadb.client import upsert
 
 _TestBase = declarative_base()
 

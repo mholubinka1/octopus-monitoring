@@ -6,10 +6,6 @@ class InfluxDBError(Exception):
     pass
 
 
-class MariaDBError(Exception):
-    pass
-
-
 class ArgumentError(ValueError):
     pass
 

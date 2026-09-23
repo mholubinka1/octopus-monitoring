@@ -1,28 +1,5 @@
-APP_LOGGER_NAME = "hive-monitor"
-LOG_LEVEL = "INFO"
+from libs.common.common.logging import logging_config
 
-config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "std_out",
-            "stream": "ext://sys.stdout",
-            "level": LOG_LEVEL,
-        },
-    },
-    "formatters": {
-        "std_out": {
-            "format": "%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
-        },
-    },
-    "loggers": {
-        APP_LOGGER_NAME: {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        }
-    },
-}
+APP_LOGGER_NAME = "hive-monitor"
+
+config = logging_config(APP_LOGGER_NAME)
