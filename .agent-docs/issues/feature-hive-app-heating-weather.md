@@ -30,15 +30,17 @@ The walking skeleton for hive-app: a config-driven entrypoint with a scheduler l
 
 **User stories**: 7, 8
 
+> Work complete — [PR #526](https://github.com/mholubinka1/octopus-monitoring/pull/526) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+
 ### What to build
 
 A narrowly-scoped `notify_reauth_required()` helper, called only from the heating-poll job's failure path when Cognito no longer recognizes the remembered device and a live SMS 2FA code is needed (a genuinely unrecoverable state for a headless service — see `.agent-docs/research/hive-api-access-approach.md`). It POSTs to a configured ntfy.sh topic URL. Every other hive-app failure — weather source outages, ordinary transient Hive poll failures — continues to rely solely on the existing `job_run`/Grafana-staleness pattern; this helper is not wired into generic failure handling (see [ADR-0018](../adr/0018-ntfy-for-hive-reauth-alerting.md)).
 
 ### Acceptance criteria
 
-- [ ] Given a `HiveSource` poll raises the specific "device not recognized, needs live SMS" error, when `HeatingRetriever` handles that failure, then `notify_reauth_required()` is called and POSTs to the configured ntfy.sh topic.
-- [ ] Given a `HiveSource` poll raises any other error (network failure, transient API error), when `HeatingRetriever` handles that failure, then `notify_reauth_required()` is **not** called — it still records a `job_run` failure as normal.
-- [ ] The ntfy.sh POST is mocked at the HTTP boundary (`responses`-style) in tests, matching this repo's existing seam conventions.
+- [x] Given a `HiveSource` poll raises the specific "device not recognized, needs live SMS" error, when `HeatingRetriever` handles that failure, then `notify_reauth_required()` is called and POSTs to the configured ntfy.sh topic.
+- [x] Given a `HiveSource` poll raises any other error (network failure, transient API error), when `HeatingRetriever` handles that failure, then `notify_reauth_required()` is **not** called — it still records a `job_run` failure as normal.
+- [x] The ntfy.sh POST is mocked at the HTTP boundary (`responses`-style) in tests, matching this repo's existing seam conventions.
 
 ---
 
