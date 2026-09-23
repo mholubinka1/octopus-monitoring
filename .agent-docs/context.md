@@ -60,9 +60,9 @@ _Avoid_: customer, user
 
 ### Data Storage
 
-**`home_monitoring` database** (was `octopus`):
-The single shared MariaDB database for both `octopus-app` and `hive-app`, on the same MariaDB instance. Holds `octopus-app`'s tables (`consumption`, `agreement`, `product`, `product_rate`, `daily_consumption_summary`, `agile_forecast`, `cost_forecast`) and `hive-app`'s (`heating_status`), plus the cross-app `job_run` table owned by `common`. Renamed from `octopus` once the database stopped being Octopus-only — see [ADR-0022](adr/0022-single-shared-home-monitoring-database.md).
-_Avoid_: the database, mysql db, the octopus database (stale name predating hive-app)
+**`octopus` database** (planned rename: `home_monitoring`):
+The single shared MariaDB database for both `octopus-app` and `hive-app`, on the same MariaDB instance. Holds `octopus-app`'s tables (`consumption`, `agreement`, `product`, `product_rate`, `daily_consumption_summary`, `agile_forecast`, `cost_forecast`) and `hive-app`'s (`heating_status`), plus the cross-app `job_run` table owned by `common`. Still named `octopus` today, predating hive-app — the rename to `home_monitoring` is a deliberate, deferred decision ([ADR-0022](adr/0022-single-shared-home-monitoring-database.md)), executed as a one-time migration during a future, explicitly-confirmed Pi cutover, not part of the code-only apps/libs/data/deployments restructure.
+_Avoid_: home_monitoring database (not the current name — see the planned-rename note above), the database, mysql db
 
 **Schema Sync**:
 The additive-only schema reconciliation each app's MariaDB client runs automatically on startup — creates any table missing from the live database, adds any column missing from an existing table, and creates any index missing from an existing table, diffed against that app's own SQLAlchemy models. Never drops or alters an existing column or index; that stays a deliberate manual action. The mechanism itself (engine/session plumbing, the diff-and-create logic) lives in `common` and is shared, but each app's Schema Sync run only ever diffs against its own models — the database is shared, not the schema-sync run. See [ADR-0005](adr/0005-additive-only-schema-sync.md) and [ADR-0022](adr/0022-single-shared-home-monitoring-database.md).
@@ -159,11 +159,11 @@ _Avoid_: UTC day, calendar day (when the raw UTC date is meant instead of the ap
 ### Home Monitoring Restructure (in progress)
 
 **Home Monitoring**:
-The rename of this repo (from `octopus-monitoring`) once it hosts more than one data-gathering container. Encompasses `octopus-app` and `hive-app`, sharing one MariaDB instance/database (`home_monitoring`) for downstream visualization (Grafana). Repo layout: `apps/` (deployable containers only — `octopus-app`, `hive-app`), `libs/` (`common`, no container of its own), `data/` (`grafana/`, `mariadb/`), `deployments/` (each app's Dockerfile and compose file, plus a combined top-level compose file — see **Combined Compose File**). Scoping tracked on a Wayfinder map ([#490](https://github.com/mholubinka1/octopus-monitoring/issues/490)).
+The planned rename of this repo (from `octopus-monitoring`, not yet executed) now that it hosts more than one data-gathering container. Encompasses `octopus-app` and `hive-app`, sharing one MariaDB instance/database (still named `octopus` — see that term's entry for the planned `home_monitoring` rename) for downstream visualization (Grafana). Repo layout, already landed: `apps/` (deployable containers only — `octopus-app`, `hive-app`), `libs/` (`common`, no container of its own), `data/` (`grafana/`, `mariadb/`), `deployments/` (each app's Dockerfile and compose file, plus a combined top-level compose file — see **Combined Compose File**). Scoping tracked on a Wayfinder map ([#490](https://github.com/mholubinka1/octopus-monitoring/issues/490)).
 _Avoid_: octopus-monitoring (only the pre-rename name)
 
 **Data-Gathering Container**:
-An independently deployable service, packaged under `apps/`, that polls one external data source and persists it to the shared `home_monitoring` database — the unit of composition under Home Monitoring. `octopus-app` and `hive-app` are the two so far.
+An independently deployable service, packaged under `apps/`, that polls one external data source and persists it to the shared `octopus` database (see that term's entry). `octopus-app` and `hive-app` are the two so far.
 _Avoid_: app, service (ambiguous once more than one container exists)
 
 **`common`**:
@@ -175,11 +175,11 @@ _Avoid_: utils, shared (ambiguous outside this glossary entry)
 _Avoid_: the compose file (ambiguous once four compose files exist)
 
 **octopus-app**:
-The planned relocation of this repo's existing Octopus Energy data-gathering container (today's `app/` + `tests/`) once the Home Monitoring restructure lands — same responsibilities as today, just repackaged as one of several containers rather than the repo's sole app.
+The Octopus Energy data-gathering container, at `apps/octopus-app/octopus_app/` (relocated from this repo's former `app/` + `tests/` by the apps/libs/data/deployments restructure) — same responsibilities as before, just repackaged as one of several containers rather than the repo's sole app.
 _Avoid_: the app, main app (ambiguous once `hive-app` exists)
 
 **hive-app**:
-A planned data-gathering container for British Gas Hive heating data (current/target temperature, mode, state, boost, and the now/next/later schedule) and outdoor weather (current/historical observations and a forecast), alongside `octopus-app`. Scoped to heating only — no hot water, smart plugs, lights, or sensors, since none exist on the household's account. No code exists yet; see the `hive-app initial data scope` ticket on the Home Monitoring Wayfinder map (issue #494).
+A data-gathering container for British Gas Hive heating data (current/target temperature, mode, state, boost, and the now/next/later schedule) and outdoor weather (current/historical observations and a forecast), alongside `octopus-app`, at `apps/hive-app/hive_app/`. Scoped to heating only — no hot water, smart plugs, lights, or sensors, since none exist on the household's account. Weather observation/forecast polling is not yet built (issues #508/#510); see the `hive-app initial data scope` ticket on the Home Monitoring Wayfinder map (issue #494) for the full scope.
 _Avoid_: hive (ambiguous with Apache Hive)
 
 **Heating Status**:
