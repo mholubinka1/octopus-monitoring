@@ -1,5 +1,7 @@
 # Issues: chore-repo-restructure-apps-libs-deployments
 
+> Work complete — PR ready to merge.
+
 ## Extract libs/common (engine/session/schema-sync/job_run)
 
 **GitHub issue**: #527
@@ -16,12 +18,12 @@ Apps stay at their current `app/` and `hive_app/` locations in this slice — on
 
 ### Acceptance criteria
 
-- [ ] `libs/common/common/mariadb/client.py` provides engine/session/schema-sync plumbing with no reference to either app's own models
-- [ ] `libs/common/common/mariadb/model.py` holds the single `job_run` model; both apps' own `model.py` no longer define it
-- [ ] `libs/common/common/logging.py` provides the logging config dict, parameterized by logger name
-- [ ] `libs/common/tests/` covers schema-sync (including the concurrent-create race) and `job_run` CRUD — adapted from `tests/test_schema_sync.py`, `tests/test_schema_sync_concurrency.py`, `tests/test_job_run_recording.py`
-- [ ] Both `app/` and `hive_app/` build on the shared base for engine/session/schema-sync/`job_run`/logging; their own domain models and CRUD are unchanged in behavior
-- [ ] Full existing test suite (both apps) passes unchanged
+- [x] `libs/common/common/mariadb/client.py` provides engine/session/schema-sync plumbing with no reference to either app's own models
+- [x] `libs/common/common/mariadb/model.py` holds the single `job_run` model; both apps' own `model.py` no longer define it
+- [x] `libs/common/common/logging.py` provides the logging config dict, parameterized by logger name
+- [x] `libs/common/tests/` covers schema-sync (including the concurrent-create race) and `job_run` CRUD — adapted from `tests/test_schema_sync.py`, `tests/test_schema_sync_concurrency.py`, `tests/test_job_run_recording.py`
+- [x] Both `app/` and `hive_app/` build on the shared base for engine/session/schema-sync/`job_run`/logging; their own domain models and CRUD are unchanged in behavior
+- [x] Full existing test suite (both apps) passes unchanged
 
 ---
 
@@ -39,11 +41,11 @@ Relocate `app/` to `apps/octopus-app/octopus_app/`, renaming the importable pack
 
 ### Acceptance criteria
 
-- [ ] `apps/octopus-app/octopus_app/` contains everything that was `app/`, importable as `octopus_app`
-- [ ] `apps/octopus-app/tests/` contains octopus-app's tests, all imports updated
-- [ ] `apps/octopus-app/pyproject.toml` declares only octopus-app's own dependencies plus a workspace dependency on `common`
-- [ ] `uv sync --package octopus-app` installs a dependency closure with no `pyhive-integration`
-- [ ] octopus-app's test suite passes unchanged from its new location
+- [x] `apps/octopus-app/octopus_app/` contains everything that was `app/`, importable as `octopus_app`
+- [x] `apps/octopus-app/tests/` contains octopus-app's tests, all imports updated
+- [x] `apps/octopus-app/pyproject.toml` declares only octopus-app's own dependencies plus a workspace dependency on `common`
+- [x] `uv sync --package octopus-app` installs a dependency closure with no `pyhive-integration`
+- [x] octopus-app's test suite passes unchanged from its new location
 
 ---
 
@@ -61,10 +63,10 @@ Relocate `hive_app/` to `apps/hive-app/hive_app/` (package import name `hive_app
 
 ### Acceptance criteria
 
-- [ ] `apps/hive-app/hive_app/` contains everything that was `hive_app/`, importable as `hive_app`
-- [ ] `apps/hive-app/tests/` contains hive-app's tests, all imports updated
-- [ ] `apps/hive-app/pyproject.toml` declares only hive-app's own dependencies plus a workspace dependency on `common`
-- [ ] hive-app's test suite passes unchanged from its new location
+- [x] `apps/hive-app/hive_app/` contains everything that was `hive_app/`, importable as `hive_app`
+- [x] `apps/hive-app/tests/` contains hive-app's tests, all imports updated
+- [x] `apps/hive-app/pyproject.toml` declares only hive-app's own dependencies plus a workspace dependency on `common`
+- [x] hive-app's test suite passes unchanged from its new location
 
 ---
 
@@ -82,13 +84,13 @@ Relocate `grafana/` → `data/grafana/` and `mariadb/` → `data/mariadb/` (cont
 
 ### Acceptance criteria
 
-- [ ] `data/grafana/dashboard.json` and `data/mariadb/init.sql` exist; old `grafana/`/`mariadb/` removed
-- [ ] `deployments/octopus-app/Dockerfile` and `deployments/hive-app/Dockerfile` build successfully from a repo-root context
-- [ ] `deployments/mariadb/docker-compose.yml` validates independently (`docker compose -f <file> config`); `deployments/{octopus-app,hive-app}/docker-compose.yml` are include-only fragments (each `depends_on: mariadb`, a service only the combined file supplies) and validate as part of `deployments/docker-compose.yml`, not standalone
-- [ ] `deployments/docker-compose.yml` validates and resolves to the same three services as today's root file (`docker compose -f deployments/docker-compose.yml config`)
-- [ ] Root `pyproject.toml` is a valid uv workspace root; `uv sync` from the repo root succeeds
-- [ ] `pytest` from the repo root (no path args) discovers and runs all three packages' tests via `testpaths`
-- [ ] No `Dockerfile`, `Dockerfile.hive-app`, or `docker-compose.yml` remain at the repo root
+- [x] `data/grafana/dashboard.json` and `data/mariadb/init.sql` exist; old `grafana/`/`mariadb/` removed
+- [x] `deployments/octopus-app/Dockerfile` and `deployments/hive-app/Dockerfile` build successfully from a repo-root context
+- [x] `deployments/mariadb/docker-compose.yml` validates independently (`docker compose -f <file> config`); `deployments/{octopus-app,hive-app}/docker-compose.yml` are include-only fragments (each `depends_on: mariadb`, a service only the combined file supplies) and validate as part of `deployments/docker-compose.yml`, not standalone
+- [x] `deployments/docker-compose.yml` validates and resolves to the same three services as today's root file (`docker compose -f deployments/docker-compose.yml config`)
+- [x] Root `pyproject.toml` is a valid uv workspace root; `uv sync` from the repo root succeeds
+- [x] `pytest` from the repo root (no path args) discovers and runs all three packages' tests via `testpaths`
+- [x] No `Dockerfile`, `Dockerfile.hive-app`, or `docker-compose.yml` remain at the repo root
 
 ---
 
@@ -106,11 +108,11 @@ Extend `.github/actions/code-quality-checks/action.yml`'s mypy, isort, black, ru
 
 ### Acceptance criteria
 
-- [ ] mypy, isort, black, ruff, pylint all run against all three packages (octopus-app, hive-app, common) and their tests
-- [ ] `hive-app` now fails these checks the same way `octopus-app` always has, if it has violations (i.e. it's actually covered, not silently skipped)
-- [ ] Coverage step in `ci-arm64.yml` measures all three packages
-- [ ] Both Docker build steps in `ci-arm64.yml` reference the new Dockerfile paths and still build successfully
-- [ ] Coverage-baseline auto-commit behavior (`[skip ci]` push) is unchanged
-- [ ] Full CI pipeline (code-quality-checks + ci-arm64) passes green on this branch
+- [x] mypy, isort, black, ruff, pylint all run against all three packages (octopus-app, hive-app, common) and their tests
+- [x] `hive-app` now fails these checks the same way `octopus-app` always has, if it has violations (i.e. it's actually covered, not silently skipped)
+- [x] Coverage step in `ci-arm64.yml` measures all three packages
+- [x] Both Docker build steps in `ci-arm64.yml` reference the new Dockerfile paths and still build successfully
+- [x] Coverage-baseline auto-commit behavior (`[skip ci]` push) is unchanged
+- [x] Full CI pipeline (code-quality-checks + ci-arm64) passes green on this branch
 
 ---
