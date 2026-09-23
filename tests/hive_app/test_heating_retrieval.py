@@ -156,3 +156,21 @@ def test_refresh_does_not_notify_reauth_required_for_an_ordinary_transient_failu
         HeatingRetriever(source, notifier).refresh()
 
     assert notifier.calls == 0
+
+
+class _FailingReauthNotifier:
+    """A fake notifier whose own POST fails -- proves a notifier failure
+    doesn't displace the original HiveReauthRequired that triggered it."""
+
+    def notify_reauth_required(self) -> None:
+        raise ConnectionError("ntfy.sh unreachable")
+
+
+def test_refresh_still_raises_the_original_reauth_error_when_notifying_fails() -> None:
+    source = _ReauthRequiredHiveSource()
+    notifier = _FailingReauthNotifier()
+
+    with pytest.raises(
+        HiveReauthRequired, match="Hive's remembered device is no longer recognized."
+    ):
+        HeatingRetriever(source, notifier).refresh()

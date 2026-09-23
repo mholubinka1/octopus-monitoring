@@ -1,6 +1,13 @@
+import logging.config
+from logging import Logger, getLogger
 from typing import Protocol
 
 import requests
+
+from hive_app.common.logging import APP_LOGGER_NAME, config
+
+logging.config.dictConfig(config)
+logger: Logger = getLogger(APP_LOGGER_NAME)
 
 REQUEST_TIMEOUT_SECONDS = 10
 REAUTH_REQUIRED_MESSAGE = (
@@ -28,3 +35,4 @@ class NtfyReauthNotifier:
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
+        logger.info("Sent Hive re-auth alert to the configured ntfy.sh topic.")

@@ -39,7 +39,17 @@ class HeatingRetriever:
         try:
             status = self._client.fetch_heating_status()
         except HiveReauthRequired:
-            if self._notifier is not None:
-                self._notifier.notify_reauth_required()
+            self._notify_reauth_required()
             raise
         self._client.persist_heating_status(status)
+
+    def _notify_reauth_required(self) -> None:
+        if self._notifier is None:
+            return
+        try:
+            self._notifier.notify_reauth_required()
+        except Exception:
+            logger.exception(
+                "Failed to send Hive re-auth alert; the original "
+                "HiveReauthRequired error still propagates."
+            )
