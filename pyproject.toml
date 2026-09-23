@@ -78,7 +78,7 @@ source-roots = ["apps/octopus-app", "apps/hive-app", "."]
 recursive = true
 
 [tool.pylint.design]
-# MonitoringClient (app/data/base.py) is a deliberate facade: it wires the Octopus API
+# MonitoringClient (apps/octopus-app/octopus_app/data/base.py) is a deliberate facade: it wires the Octopus API
 # client, MariaDB client, and one private client per external data source (Kraken
 # billing period, Agile Predict, x2r.uk) together, so its attribute count grows by one
 # each time a new external source is added -- a structural property of the facade, not
@@ -102,8 +102,9 @@ disable = [
     # Small data/config/model classes (Pydantic settings, SQLAlchemy models, dataclass-style
     # value objects) are intentionally simple and don't need >=2 public methods.
     "too-few-public-methods",
-    # The retry()/API-wrapper architecture (common/decorator.py, data/octopus/api.py,
-    # data/mysql/client.py) deliberately catches/raises bare Exception as its error boundary.
+    # The retry()/API-wrapper architecture (octopus_app/common/decorator.py,
+    # octopus_app/data/octopus/api.py, octopus_app/data/mysql/client.py) deliberately
+    # catches/raises bare Exception as its error boundary.
     "broad-exception-caught",
     "broad-exception-raised",
     # f-string logging is this codebase's consistent existing convention; the lazy-%
