@@ -122,7 +122,7 @@ def authenticate_at_startup(authenticator: HiveAuthenticator) -> None:
 
 
 def _build_reauth_notifier(topic_url: str | None) -> ReauthNotifier | None:
-    if topic_url is None:
+    if not topic_url:
         logger.warning(
             "ntfy is not configured; hive-app will not send a live alert if "
             "Hive re-authentication is required (see job_run for failures)."
