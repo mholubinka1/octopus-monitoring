@@ -47,25 +47,25 @@ class HeatingRetriever:
         self._client.persist_heating_status(status)
 
     def _notify_reauth_required(self) -> None:
-        # Only the first failure of a reauth incident notifies -- every
-        # retry attempt and subsequent scheduled run raises the same
-        # HiveReauthRequired until someone completes the live SMS login, so
-        # without this guard one incident would page repeatedly instead of
-        # once (see ADR-0018's "narrowly-scoped, not a general alert
-        # channel" framing). refresh() clears the flag on the next
-        # successful poll, so a later, distinct incident notifies again.
-        if self._reauth_notified:
-            return
-        # Marks the incident as seen even with no notifier configured, so a
-        # later `ntfy` config change mid-incident doesn't retroactively fire
-        # a notification for a failure that already happened once.
-        self._reauth_notified = True
-        if self._notifier is None:
+        # Only the first *successful* notification of a reauth incident
+        # sets the flag -- every retry attempt and subsequent scheduled run
+        # raises the same HiveReauthRequired until someone completes the
+        # live SMS login, so without this guard one incident would page
+        # repeatedly instead of once (see ADR-0018's "narrowly-scoped, not a
+        # general alert channel" framing). refresh() clears the flag on the
+        # next successful poll, so a later, distinct incident notifies
+        # again. A failed delivery attempt does NOT set the flag, so it is
+        # retried on the next failure rather than being permanently
+        # suppressed.
+        if self._reauth_notified or self._notifier is None:
             return
         try:
             self._notifier.notify_reauth_required()
         except Exception:
             logger.exception(
-                "Failed to send Hive re-auth alert; the original "
-                "HiveReauthRequired error still propagates."
+                "Failed to send Hive re-auth alert; will retry on the next "
+                "reauth failure. The original HiveReauthRequired error "
+                "still propagates."
             )
+            return
+        self._reauth_notified = True

@@ -176,6 +176,37 @@ def test_refresh_still_raises_the_original_reauth_error_when_notifying_fails() -
         HeatingRetriever(source, notifier).refresh()
 
 
+class _NotifierThatFailsOnce:
+    """A fake notifier whose first call raises, and whose later calls
+    succeed -- proves a failed delivery attempt is retried on the next
+    reauth failure rather than being permanently suppressed."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self._raised_once = False
+
+    def notify_reauth_required(self) -> None:
+        self.calls += 1
+        if not self._raised_once:
+            self._raised_once = True
+            raise ConnectionError("ntfy.sh unreachable")
+
+
+def test_refresh_retries_notifying_after_a_failed_delivery_attempt() -> None:
+    source = _ReauthRequiredHiveSource()
+    notifier = _NotifierThatFailsOnce()
+    retriever = HeatingRetriever(source, notifier)
+
+    with pytest.raises(HiveReauthRequired):
+        retriever.refresh()
+    with pytest.raises(HiveReauthRequired):
+        retriever.refresh()
+    with pytest.raises(HiveReauthRequired):
+        retriever.refresh()
+
+    assert notifier.calls == 2
+
+
 def test_refresh_notifies_only_once_across_repeated_reauth_failures() -> None:
     source = _ReauthRequiredHiveSource()
     notifier = _SpyReauthNotifier()
