@@ -9,7 +9,7 @@ services:
     image: mholubinka1/hive-app:latest
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    # The image runs as non-root UID 999 (Dockerfile.hive-app), and this
+    # The image runs as non-root UID 999 (deployments/hive-app/Dockerfile), and this
     # directory now needs to be *writable* by that UID, not just readable --
     # hive_auth_state.json (see ADR-0019) is created/rewritten here on every
     # login/refresh, not just read like hive-config.yml. Provision the host
