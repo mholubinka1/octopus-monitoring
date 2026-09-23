@@ -1,8 +1,7 @@
 from typing import ClassVar
 
+from common.mariadb.model import SQLBase, job_run
 from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, String
-
-from libs.common.common.mariadb.model import SQLBase, job_run
 
 __all__ = ["SQLBase", "job_run"]
 

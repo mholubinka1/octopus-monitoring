@@ -31,11 +31,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# libs/common is deliberately not on pythonpath here: every import site uses
-# the fully-qualified libs.common.common.X form (resolved via the repo root
-# "." entry below), not a bare "common" import, so adding libs/common itself
-# would be a no-op for anything currently in the tree.
-pythonpath = ["apps/octopus-app", "apps/hive-app", "."]
+pythonpath = ["apps/octopus-app", "apps/hive-app", "libs/common"]
 testpaths = ["apps/octopus-app/tests", "apps/hive-app/tests", "libs/common/tests"]
 # Independent test packages (apps/octopus-app/tests, apps/hive-app/tests,
 # libs/common/tests) all share the basename "tests" -- the default "prepend"
@@ -44,16 +40,20 @@ testpaths = ["apps/octopus-app/tests", "apps/hive-app/tests", "libs/common/tests
 # each test module by its fully qualified file path instead, so same-named
 # packages in different directories don't clash.
 #
-# That alone isn't enough for apps/octopus-app/tests and apps/hive-app/tests
-# specifically: both "octopus-app" and "hive-app" contain a hyphen, so pytest
-# can't qualify their "tests" package under a namespace-package dotted name
-# (e.g. "apps.octopus-app.tests" isn't a valid module path) and falls back to
-# the shallow name "tests" for both -- resolved via each directory's own
-# pythonpath entry, so they'd still collide with each other even under
-# importlib mode. apps/hive-app/tests therefore has no __init__.py (unlike
-# apps/octopus-app/tests, kept as committed in #528): without an __init__.py
-# chain to walk, pytest treats each of its modules as rootless and assigns it
-# a unique name derived from its full file path instead.
+# That alone isn't enough when a "tests" dir's own parent is a pythonpath
+# entry: pytest then qualifies it under that entry's own root name, which
+# collides with any other "tests" dir resolved the same way. apps/octopus-app
+# and apps/hive-app both contain a hyphen, so pytest can't qualify their
+# "tests" package under a namespace-package dotted name at all (e.g.
+# "apps.octopus-app.tests" isn't a valid module path) and falls back to the
+# shallow name "tests" -- and once libs/common was added to pythonpath (for
+# the plain `common` import convention, not the fully-qualified
+# `libs.common.common` form the old comment here used to explain), its own
+# tests dir hit the identical collision. Only apps/octopus-app/tests keeps
+# its __init__.py (as committed in #528); apps/hive-app/tests and
+# libs/common/tests have none: without an __init__.py chain to walk, pytest
+# treats each of their modules as rootless and assigns it a unique name
+# derived from its full file path instead.
 addopts = ["--import-mode=importlib"]
 
 [tool.coverage.run]

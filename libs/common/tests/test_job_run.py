@@ -1,5 +1,5 @@
-from libs.common.common.mariadb.client import MariaDBClientBase
-from libs.common.common.mariadb.model import job_run
+from common.mariadb.client import MariaDBClientBase
+from common.mariadb.model import job_run
 
 
 def test_has_successful_job_run_is_false_when_no_run_has_ever_been_recorded(

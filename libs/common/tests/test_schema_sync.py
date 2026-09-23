@@ -2,14 +2,13 @@ import logging
 from typing import ClassVar
 
 import pytest
+from common.config import MariaDBSettings
+from common.mariadb.client import MariaDBClientBase
+from common.mariadb.model import SQLBase
 from sqlalchemy import Column, DateTime, Integer, String, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
-
-from libs.common.common.config import MariaDBSettings
-from libs.common.common.mariadb.client import MariaDBClientBase
-from libs.common.common.mariadb.model import SQLBase
 
 # Deliberately no Index in __table_args__ and no error_message column -- used
 # to seed a "table already exists but is missing a column/index" starting
@@ -50,7 +49,7 @@ def _sync_against(
     engine: Engine, base: type, monkeypatch: pytest.MonkeyPatch
 ) -> MariaDBClientBase:
     monkeypatch.setattr(
-        "libs.common.common.mariadb.client.create_engine",
+        "common.mariadb.client.create_engine",
         lambda *args, **kwargs: engine,
     )
     return MariaDBClientBase(

@@ -3,10 +3,9 @@ import sys
 from logging import Logger, getLogger
 
 import yaml
+from common.config import MariaDBSettings
 from octopus_app.common.logging import APP_LOGGER_NAME, config
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
-from libs.common.common.config import MariaDBSettings
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)

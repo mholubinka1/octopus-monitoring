@@ -29,10 +29,12 @@ RUN uv sync --frozen --no-dev --no-install-project --package hive-app
 RUN apk del .deps
 
 COPY apps/hive-app/hive_app ./apps/hive-app/hive_app
-COPY libs/__init__.py ./libs/__init__.py
-COPY libs/common/__init__.py ./libs/common/__init__.py
 
-ENV PYTHONPATH=/app/apps/hive-app:/app
+# common is editable-installed into the venv by uv sync above (a real workspace
+# dependency, resolved from its own pyproject.toml), so it's importable as a
+# plain top-level `common` without any extra PYTHONPATH entry -- only
+# hive_app needs one, since --no-install-project skipped installing it.
+ENV PYTHONPATH=/app/apps/hive-app
 
 RUN mkdir -p config
 VOLUME /config

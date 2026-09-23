@@ -4,16 +4,15 @@ from datetime import UTC, datetime
 from logging import Logger
 from typing import Any
 
+from common.config import MariaDBSettings
+from common.exceptions import MariaDBError
+from common.mariadb.model import job_run
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
-
-from libs.common.common.config import MariaDBSettings
-from libs.common.common.exceptions import MariaDBError
-from libs.common.common.mariadb.model import job_run
 
 # MySQL/MariaDB error 1050: "Table '...' already exists".
 _TABLE_ALREADY_EXISTS_ERROR_CODE = 1050
@@ -103,7 +102,7 @@ class MariaDBClientBase:
         """create_all's own checkfirst existence check and the CREATE TABLE
         statement it issues aren't atomic -- if octopus-app and hive-app
         (which share octopus.job_run, see the job_run model's own comment in
-        libs/common/common/mariadb/model.py) both start against a freshly-
+        common/mariadb/model.py) both start against a freshly-
         initialized database at the same time, both can see that table as
         absent and race to create it, with the loser's CREATE TABLE failing
         "table already exists". Retrying once (checkfirst now sees the

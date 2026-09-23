@@ -1,12 +1,11 @@
 import logging
 
 import pytest
+from common.config import MariaDBSettings
+from common.mariadb.client import MariaDBClientBase
+from common.mariadb.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
-
-from libs.common.common.config import MariaDBSettings
-from libs.common.common.mariadb.client import MariaDBClientBase
-from libs.common.common.mariadb.model import SQLBase
 
 
 @pytest.fixture
@@ -23,7 +22,7 @@ def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClientBase:
     ).execution_options(schema_translate_map={"octopus": None})
 
     monkeypatch.setattr(
-        "libs.common.common.mariadb.client.create_engine",
+        "common.mariadb.client.create_engine",
         lambda *args, **kwargs: engine,
     )
 

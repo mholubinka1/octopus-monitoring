@@ -2,14 +2,13 @@ import logging
 from unittest.mock import Mock
 
 import pytest
+from common.config import MariaDBSettings
+from common.mariadb.client import MariaDBClientBase
+from common.mariadb.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.pool import StaticPool
-
-from libs.common.common.config import MariaDBSettings
-from libs.common.common.mariadb.client import MariaDBClientBase
-from libs.common.common.mariadb.model import SQLBase
 
 
 def _mysql_error(code: int, message: str) -> OperationalError:
@@ -43,7 +42,7 @@ def test_schema_sync_recovers_from_a_concurrent_table_creation_race(
         poolclass=StaticPool,
     ).execution_options(schema_translate_map={"octopus": None})
     monkeypatch.setattr(
-        "libs.common.common.mariadb.client.create_engine",
+        "common.mariadb.client.create_engine",
         lambda *args, **kwargs: engine,
     )
 
@@ -74,7 +73,7 @@ def test_schema_sync_does_not_swallow_an_unrelated_schema_error(
         poolclass=StaticPool,
     ).execution_options(schema_translate_map={"octopus": None})
     monkeypatch.setattr(
-        "libs.common.common.mariadb.client.create_engine",
+        "common.mariadb.client.create_engine",
         lambda *args, **kwargs: engine,
     )
 

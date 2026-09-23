@@ -84,7 +84,7 @@ Relocate `grafana/` → `data/grafana/` and `mariadb/` → `data/mariadb/` (cont
 
 - [ ] `data/grafana/dashboard.json` and `data/mariadb/init.sql` exist; old `grafana/`/`mariadb/` removed
 - [ ] `deployments/octopus-app/Dockerfile` and `deployments/hive-app/Dockerfile` build successfully from a repo-root context
-- [ ] `deployments/{octopus-app,hive-app,mariadb}/docker-compose.yml` each validate independently (`docker compose -f <file> config`)
+- [ ] `deployments/mariadb/docker-compose.yml` validates independently (`docker compose -f <file> config`); `deployments/{octopus-app,hive-app}/docker-compose.yml` are include-only fragments (each `depends_on: mariadb`, a service only the combined file supplies) and validate as part of `deployments/docker-compose.yml`, not standalone
 - [ ] `deployments/docker-compose.yml` validates and resolves to the same three services as today's root file (`docker compose -f deployments/docker-compose.yml config`)
 - [ ] Root `pyproject.toml` is a valid uv workspace root; `uv sync` from the repo root succeeds
 - [ ] `pytest` from the repo root (no path args) discovers and runs all three packages' tests via `testpaths`

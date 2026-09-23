@@ -1,10 +1,9 @@
 import pytest
+from common.config import MariaDBSettings
 from octopus_app.data.mysql.client import MariaDBClient
 from octopus_app.data.mysql.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
-
-from libs.common.common.config import MariaDBSettings
 
 
 @pytest.fixture
@@ -22,7 +21,7 @@ def mariadb_client(monkeypatch: pytest.MonkeyPatch) -> MariaDBClient:
     SQLBase.metadata.create_all(engine)
 
     monkeypatch.setattr(
-        "libs.common.common.mariadb.client.create_engine",
+        "common.mariadb.client.create_engine",
         lambda *args, **kwargs: engine,
     )
 

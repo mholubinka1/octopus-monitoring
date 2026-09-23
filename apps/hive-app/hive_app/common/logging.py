@@ -1,4 +1,4 @@
-from libs.common.common.logging import logging_config
+from common.logging import logging_config
 
 APP_LOGGER_NAME = "hive-monitor"
 

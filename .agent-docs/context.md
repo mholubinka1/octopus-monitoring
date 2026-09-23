@@ -171,7 +171,7 @@ The shared library package (`libs/common/`) both `octopus-app` and `hive-app` de
 _Avoid_: utils, shared (ambiguous outside this glossary entry)
 
 **Combined Compose File**:
-`deployments/docker-compose.yml`, the file actually deployed on the Pi. Has no service definitions of its own — it `include:`s the three per-app compose files (`deployments/octopus-app/docker-compose.yml`, `deployments/hive-app/docker-compose.yml`, `deployments/mariadb/docker-compose.yml`), which are the single source of truth. See [ADR-0021](adr/0021-uv-workspace-packaging.md) for the equivalent per-package pattern on the Python packaging side.
+`deployments/docker-compose.yml`, prepared as the eventual deployment target for a future, explicitly-confirmed Pi cutover — not yet deployed there (the Pi's live stack is still its own separate `/home/pi/git/pi-desktop/docker/docker-compose.yml`, kept in sync by hand until that cutover happens). Has no service definitions of its own — it `include:`s the three per-app compose files (`deployments/octopus-app/docker-compose.yml`, `deployments/hive-app/docker-compose.yml`, `deployments/mariadb/docker-compose.yml`), which are the single source of truth. See [ADR-0021](adr/0021-uv-workspace-packaging.md) for the equivalent per-package pattern on the Python packaging side.
 _Avoid_: the compose file (ambiguous once four compose files exist)
 
 **octopus-app**:

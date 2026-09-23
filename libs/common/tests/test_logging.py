@@ -1,4 +1,4 @@
-from libs.common.common.logging import logging_config
+from common.logging import logging_config
 
 
 def test_logging_config_configures_a_logger_with_the_given_name() -> None:

@@ -108,7 +108,7 @@ Everything else — retry/backoff strategy (genuinely different: `octopus-app`'s
 ### Tests (per ADR-0021 and the confirmed test seam)
 
 - Tests move inside each package: `apps/octopus-app/tests/`, `apps/hive-app/tests/` (today's `tests/hive_app/`), `libs/common/tests/` (new — covers the extracted engine/session/schema-sync/`job_run` logic, since that logic currently has no dedicated tests of its own, only indirect coverage via each app's `mysql/client.py` tests).
-- One combined pytest run, not per-package: the workspace-root `pyproject.toml` owns `[tool.pytest.ini_options]` — `testpaths = ["apps/octopus-app/tests", "apps/hive-app/tests", "libs/common/tests"]`, `pythonpath = ["apps/octopus-app", "apps/hive-app", "libs/common", "."]`. A single `pytest` invocation from the repo root runs everything, same as today's single test run.
+- One combined pytest run, not per-package: the workspace-root `pyproject.toml` owns `[tool.pytest.ini_options]` — `testpaths = ["apps/octopus-app/tests", "apps/hive-app/tests", "libs/common/tests"]`, `pythonpath = ["apps/octopus-app", "apps/hive-app", "libs/common"]`. A single `pytest` invocation from the repo root runs everything, same as today's single test run.
 - `[tool.coverage.run] source = ["apps/octopus-app/octopus_app", "apps/hive-app/hive_app", "libs/common/common"]`.
 
 ### CI (per the design session's #495 resolution)
