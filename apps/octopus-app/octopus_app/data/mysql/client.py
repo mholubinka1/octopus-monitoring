@@ -163,7 +163,7 @@ class MariaDBClient(MariaDBClientBase):
                 # ever matched (bad upstream data), .first() with no ORDER
                 # BY is nondeterministic. Most-recently-started wins, same
                 # "ORDER BY valid_from DESC LIMIT 1" convention already used
-                # for current-rate lookups in grafana/mariadb/queries.md.
+                # for current-rate lookups in data/grafana/mariadb/queries.md.
                 .order_by(pr.valid_from.desc())
                 .first()
             )
