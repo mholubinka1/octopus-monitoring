@@ -5,20 +5,13 @@ description = ""
 authors = [{name = "Matt Holubinka", email = "meholubinka@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "requests>=2.33.1",
-    "cryptography==50.0.1",
-    "pyyaml>=6.0.3",
-    "sqlalchemy>=2.0.52",
-    "pymysql>=1.1.2",
-    "schedule>=1.2.2",
-    "pydantic>=2.13.4",
-    "tzdata>=2026.3",
-    "pyhive-integration>=1.0.9",
-]
+dependencies = []
 
 [tool.uv]
 package = false
+
+[tool.uv.workspace]
+members = ["apps/octopus-app", "apps/hive-app", "libs/common"]
 
 [dependency-groups]
 dev = [

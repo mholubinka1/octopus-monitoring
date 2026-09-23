@@ -1,0 +1,23 @@
+# NOTE: this file is a reference copy, not the deployment source of truth.
+# The actual deployed stack lives at /home/pi/git/pi-desktop/docker/docker-compose.yml
+# on pi-desktop (combined with other services, project name "docker"). Keep this file
+# in sync with that one manually until #495 (compose/CI/deployment structure) lands
+# a better mechanism.
+services:
+  energy-monitor:
+    container_name: energy-monitor
+    image: mholubinka1/octopus-monitoring:latest
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    volumes:
+      - /mnt/media/pi-media/containers/energy-monitor/config:/config
+      - /mnt/media/pi-media/containers/energy-monitor/log:/log
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 192.168.0.50
+      - 1.1.1.1
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy

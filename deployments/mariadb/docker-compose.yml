@@ -1,0 +1,29 @@
+# NOTE: this file is a reference copy, not the deployment source of truth.
+# The actual deployed stack lives at /home/pi/git/pi-desktop/docker/docker-compose.yml
+# on pi-desktop (combined with other services, project name "docker"). Keep this file
+# in sync with that one manually until #495 (compose/CI/deployment structure) lands
+# a better mechanism.
+services:
+  mariadb:
+    container_name: energy-monitor-db
+    image: mariadb:latest
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    environment:
+      MARIADB_RANDOM_ROOT_PASSWORD: 1
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_DATABASE: octopus
+    ports:
+      - "3306:3306"
+    volumes:
+      - /mnt/media/pi-media/containers/energy-monitor-db/data/:/var/lib/mysql/
+      - /mnt/media/pi-media/containers/energy-monitor-db/config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: "mariadb --user=$${MARIADB_USER} --password=$${MARIADB_PASSWORD} --execute \"SHOW DATABASES;\""
+      start_interval: 10s
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
