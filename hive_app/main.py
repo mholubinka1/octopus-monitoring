@@ -15,6 +15,7 @@ from hive_app.data.auth import HiveAuthenticator
 from hive_app.data.heating import HeatingRetriever
 from hive_app.data.hive_client import HiveApiSource
 from hive_app.data.mysql.client import MariaDBClient
+from hive_app.data.notify import NtfyReauthNotifier, ReauthNotifier
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -120,6 +121,16 @@ def authenticate_at_startup(authenticator: HiveAuthenticator) -> None:
         )
 
 
+def _build_reauth_notifier(topic_url: str | None) -> ReauthNotifier | None:
+    if topic_url is None:
+        logger.warning(
+            "ntfy is not configured; hive-app will not send a live alert if "
+            "Hive re-authentication is required (see job_run for failures)."
+        )
+        return None
+    return NtfyReauthNotifier(topic_url)
+
+
 def main() -> None:
     logger.info("Starting hive-app.")
 
@@ -135,7 +146,10 @@ def main() -> None:
 
     mariadb = MariaDBClient(settings.mariadb)
     hive_source = HiveApiSource(settings.hive, mariadb)
-    heating = HeatingRetriever(hive_source)
+    reauth_notifier = _build_reauth_notifier(
+        settings.ntfy.topic_url if settings.ntfy else None
+    )
+    heating = HeatingRetriever(hive_source, reauth_notifier)
     authenticator = HiveAuthenticator(hive_source)
 
     authenticate_at_startup(authenticator)

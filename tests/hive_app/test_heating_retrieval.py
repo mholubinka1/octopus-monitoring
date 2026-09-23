@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from hive_app.common.exceptions import HiveReauthRequired
 from hive_app.data.heating import HeatingRetriever
 from hive_app.data.model import HeatingStatus, HiveAuthState
 from hive_app.data.mysql import model
@@ -101,3 +102,57 @@ def test_refresh_propagates_a_transient_poll_failure_without_swallowing_it() -> 
 
     with pytest.raises(ConnectionError, match="Hive backend unreachable"):
         HeatingRetriever(source).refresh()
+
+
+class _ReauthRequiredHiveSource:
+    """A fake HiveSource whose poll raises the specific unrecoverable
+    re-auth error -- proves HeatingRetriever.refresh() notifies on this
+    error type specifically, distinct from ordinary transient failures."""
+
+    def fetch_heating_status(self) -> HeatingStatus:
+        raise HiveReauthRequired("Hive's remembered device is no longer recognized.")
+
+    def persist_heating_status(self, status: HeatingStatus) -> None:
+        raise AssertionError("persist_heating_status should never be reached")
+
+    def read_auth_state(self) -> HiveAuthState | None:
+        raise NotImplementedError
+
+    def login(self) -> HiveAuthState:
+        raise NotImplementedError
+
+    def resume(self, state: HiveAuthState) -> HiveAuthState:
+        raise NotImplementedError
+
+    def persist_auth_state(self, state: HiveAuthState) -> None:
+        raise NotImplementedError
+
+
+class _SpyReauthNotifier:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def notify_reauth_required(self) -> None:
+        self.calls += 1
+
+
+def test_refresh_notifies_reauth_required_when_hive_source_needs_live_sms() -> None:
+    source = _ReauthRequiredHiveSource()
+    notifier = _SpyReauthNotifier()
+
+    with pytest.raises(HiveReauthRequired):
+        HeatingRetriever(source, notifier).refresh()
+
+    assert notifier.calls == 1
+
+
+def test_refresh_does_not_notify_reauth_required_for_an_ordinary_transient_failure() -> (
+    None
+):
+    source = _FailingHiveSource()
+    notifier = _SpyReauthNotifier()
+
+    with pytest.raises(ConnectionError, match="Hive backend unreachable"):
+        HeatingRetriever(source, notifier).refresh()
+
+    assert notifier.calls == 0
