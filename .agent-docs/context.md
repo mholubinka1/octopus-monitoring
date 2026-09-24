@@ -60,12 +60,12 @@ _Avoid_: customer, user
 
 ### Data Storage
 
-**MariaDB `octopus` database**:
-The sole active persistence store for this app. The database itself is created by `mariadb/init.sql`; every table inside it is defined solely by `app/data/mysql/model.py` (see **Schema Sync**) and includes `consumption`, `agreement`, `product`, `product_rate`, `daily_consumption_summary`, `agile_forecast`, `cost_forecast`, and `job_run`.
-_Avoid_: the database, mysql db
+**`octopus` database** (planned rename: `home_monitoring`):
+The single shared MariaDB database for both `octopus-app` and `hive-app`, on the same MariaDB instance. Holds `octopus-app`'s tables (`consumption`, `agreement`, `product`, `product_rate`, `daily_consumption_summary`, `agile_forecast`, `cost_forecast`) and `hive-app`'s (`heating_status`), plus the cross-app `job_run` table owned by `common`. Still named `octopus` today, predating hive-app — the rename to `home_monitoring` is a deliberate, deferred decision ([ADR-0022](adr/0022-single-shared-home-monitoring-database.md)), executed as a one-time migration during a future, explicitly-confirmed Pi cutover, not part of the code-only apps/libs/data/deployments restructure.
+_Avoid_: home_monitoring database (not the current name — see the planned-rename note above), the database, mysql db
 
 **Schema Sync**:
-The additive-only schema reconciliation `MariaDBClient` runs automatically on every app startup — creates any table missing from the live database, adds any column missing from an existing table, and creates any index missing from an existing table, all diffed against `model.py`. Never drops or alters an existing column or index; that stays a deliberate manual action. See [ADR-0005](adr/0005-additive-only-schema-sync.md).
+The additive-only schema reconciliation each app's MariaDB client runs automatically on startup — creates any table missing from the live database, adds any column missing from an existing table, and creates any index missing from an existing table, diffed against that app's own SQLAlchemy models. Never drops or alters an existing column or index; that stays a deliberate manual action. The mechanism itself (engine/session plumbing, the diff-and-create logic) lives in `common` and is shared, but each app's Schema Sync run only ever diffs against its own models — the database is shared, not the schema-sync run. See [ADR-0005](adr/0005-additive-only-schema-sync.md) and [ADR-0022](adr/0022-single-shared-home-monitoring-database.md).
 _Avoid_: migration, schema migration (this project deliberately has no versioned migration tool)
 
 **InfluxDB (legacy)**:
@@ -133,7 +133,7 @@ A logged execution record (job name, status, timestamp) for each scheduled job �
 _Avoid_: job log, task run
 
 **Retention Window**:
-The 45-day period after which raw consumption and product-rate rows are pruned by `DataPruner` (`app/data/pruning.py`), a weekly job that runs Monday 04:00 immediately after the consumption-summary job, and only if that summary job's _this-cycle_ run succeeded — so raw data is never deleted before it has been safely rolled up. `agreement` rows are never pruned. `retention_days` (45) also bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `cost_forecast`, `daily_consumption_summary`) are exempt from pruning. Was briefly widened to 400 days as a stopgap to carry raw history for a not-yet-built summarization pass, then reverted to 45 once `feature/yearly-consumption-comparison` shipped a dedicated backfill (see Consumption Summary) that no longer depends on raw-data retention. See `.agent-docs/adr/0003-90-day-data-retention.md`.
+The 45-day period after which raw consumption and product-rate rows are pruned by `DataPruner` (`apps/octopus-app/octopus_app/data/pruning.py`), a weekly job that runs Monday 04:00 immediately after the consumption-summary job, and only if that summary job's _this-cycle_ run succeeded — so raw data is never deleted before it has been safely rolled up. `agreement` rows are never pruned. `retention_days` (45) also bounds the Startup Backfill's lookback. Derived/aggregated results (e.g. `cost_forecast`, `daily_consumption_summary`) are exempt from pruning. Was briefly widened to 400 days as a stopgap to carry raw history for a not-yet-built summarization pass, then reverted to 45 once `feature/yearly-consumption-comparison` shipped a dedicated backfill (see Consumption Summary) that no longer depends on raw-data retention. See `.agent-docs/adr/0003-90-day-data-retention.md`.
 _Avoid_: data expiry, TTL
 
 **Consumption Summary**:
@@ -159,19 +159,27 @@ _Avoid_: UTC day, calendar day (when the raw UTC date is meant instead of the ap
 ### Home Monitoring Restructure (in progress)
 
 **Home Monitoring**:
-The planned rename of this repo (from `octopus-monitoring`) once it hosts more than one data-gathering container. Encompasses `octopus-app` (this repo's existing Octopus Energy container) and `hive-app` (planned), sharing one MariaDB instance for downstream visualization (Grafana). Scoping tracked on a Wayfinder map; not yet renamed.
-_Avoid_: octopus-monitoring (only the current, pre-rename name)
+The planned rename of this repo (from `octopus-monitoring`, not yet executed) now that it hosts more than one data-gathering container. Encompasses `octopus-app` and `hive-app`, sharing one MariaDB instance/database (still named `octopus` — see that term's entry for the planned `home_monitoring` rename) for downstream visualization (Grafana). Repo layout, already landed: `apps/` (deployable containers only — `octopus-app`, `hive-app`), `libs/` (`common`, no container of its own), `data/` (`grafana/`, `mariadb/`), `deployments/` (each app's Dockerfile and compose file, plus a combined top-level compose file — see **Combined Compose File**). Scoping tracked on a Wayfinder map ([#490](https://github.com/mholubinka1/octopus-monitoring/issues/490)).
+_Avoid_: octopus-monitoring (only the pre-rename name)
 
 **Data-Gathering Container**:
-An independently deployable service that polls one external data source and persists it to the shared MariaDB instance — the unit of composition under Home Monitoring. `octopus-app` is the first; `hive-app` is planned.
+An independently deployable service, packaged under `apps/`, that polls one external data source and persists it to the shared `octopus` database (see that term's entry). `octopus-app` and `hive-app` are the two so far.
 _Avoid_: app, service (ambiguous once more than one container exists)
 
+**`common`**:
+The shared library package (`libs/common/`) both `octopus-app` and `hive-app` depend on: logging setup, MariaDB engine/session plumbing, the Schema Sync mechanism, and the cross-app `job_run` table. Not itself deployable — no Dockerfile, no entrypoint. Everything app-specific (domain models, retrieval/retry logic, config schema, CRUD beyond `job_run`) stays in that app rather than here. See [ADR-0020](adr/0020-shared-common-library.md).
+_Avoid_: utils, shared (ambiguous outside this glossary entry)
+
+**Combined Compose File**:
+`deployments/docker-compose.yml`, prepared as the eventual deployment target for a future, explicitly-confirmed Pi cutover — not yet deployed there (the Pi's live stack is still its own separate `/home/pi/git/pi-desktop/docker/docker-compose.yml`, kept in sync by hand until that cutover happens). Has no service definitions of its own — it `include:`s the three per-app compose files (`deployments/octopus-app/docker-compose.yml`, `deployments/hive-app/docker-compose.yml`, `deployments/mariadb/docker-compose.yml`), which are the single source of truth. See [ADR-0021](adr/0021-uv-workspace-packaging.md) for the equivalent per-package pattern on the Python packaging side.
+_Avoid_: the compose file (ambiguous once four compose files exist)
+
 **octopus-app**:
-The planned relocation of this repo's existing Octopus Energy data-gathering container (today's `app/` + `tests/`) once the Home Monitoring restructure lands — same responsibilities as today, just repackaged as one of several containers rather than the repo's sole app.
+The Octopus Energy data-gathering container, at `apps/octopus-app/octopus_app/` (relocated from this repo's former `app/` + `tests/` by the apps/libs/data/deployments restructure) — same responsibilities as before, just repackaged as one of several containers rather than the repo's sole app.
 _Avoid_: the app, main app (ambiguous once `hive-app` exists)
 
 **hive-app**:
-A planned data-gathering container for British Gas Hive heating data (current/target temperature, mode, state, boost, and the now/next/later schedule) and outdoor weather (current/historical observations and a forecast), alongside `octopus-app`. Scoped to heating only — no hot water, smart plugs, lights, or sensors, since none exist on the household's account. No code exists yet; see the `hive-app initial data scope` ticket on the Home Monitoring Wayfinder map (issue #494).
+A data-gathering container for British Gas Hive heating data (current/target temperature, mode, state, boost, and the now/next/later schedule) and outdoor weather (current/historical observations and a forecast), alongside `octopus-app`, at `apps/hive-app/hive_app/`. Scoped to heating only — no hot water, smart plugs, lights, or sensors, since none exist on the household's account. Weather observation/forecast polling is not yet built (issues #508/#510); see the `hive-app initial data scope` ticket on the Home Monitoring Wayfinder map (issue #494) for the full scope.
 _Avoid_: hive (ambiguous with Apache Hive)
 
 **Heating Status**:

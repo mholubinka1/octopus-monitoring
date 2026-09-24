@@ -26,14 +26,23 @@ jobs:
 
       - name: Install dependencies
         if: success()
-        run: uv sync --locked
+        # --all-packages: workspace root has no [project.dependencies] of its own,
+        # so a plain `uv sync` wouldn't install apps/octopus-app's, apps/hive-app's,
+        # or libs/common's own runtime deps -- pytest needs all three importable to
+        # run the combined test suite.
+        run: uv sync --locked --all-packages
 
       - name: Run tests
         if: success()
         shell: bash
         run: |
           BASELINE=$(cat .github/coverage-baseline.txt)
-          uv run pytest --cov=app --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under="$BASELINE"
+          # No explicit --cov=<path>: bare --cov reads [tool.coverage.run]'s source
+          # list from pyproject.toml, which already names all three packages
+          # (apps/octopus-app/octopus_app, apps/hive-app/hive_app,
+          # libs/common/common) -- verified locally, this produces the same
+          # combined coverage report as enumerating three --cov= flags would.
+          uv run pytest --cov --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under="$BASELINE"
 
       - name: Raise coverage baseline
         if: success() && github.event_name == 'push'
@@ -94,8 +103,10 @@ jobs:
             # Build from the local checkout rather than a remote git#{sha} context (the
             # previous docker/build-push-action default) — the remote-fetch path was the
             # confirmed root cause of a transient CI failure investigated in a sibling repo's
-            # CI hardening pass. Keep this command literal; do not add extra build flags.
-            docker buildx build --push --tag "$TAG" .
+            # CI hardening pass. Keep the build context (the trailing `.`) at the repo root
+            # so this Dockerfile's COPY paths can still reach apps/octopus-app/ and
+            # libs/common/; only the -f path changed for the #530 Dockerfile relocation.
+            docker buildx build --push --tag "$TAG" -f deployments/octopus-app/Dockerfile .
 
       - name: Docker Login, Build, and Push (hive-app)
         if: success() && github.event_name == 'push'
@@ -115,5 +126,7 @@ jobs:
             echo "$DOCKERHUB_TOKEN" | docker login "$DOCKER_REGISTRY" --username "$DOCKERHUB_USERNAME" --password-stdin
             # Same local-checkout-context rationale as the app image build above
             # (avoids the remote git#{sha} context that caused a transient CI
-            # failure in a sibling repo) -- keep this command literal too.
-            docker buildx build --push --tag "$TAG" -f Dockerfile.hive-app .
+            # failure in a sibling repo); build context stays the repo root for the
+            # same libs/common/-reachability reason. Only the -f path changed for
+            # the #530 Dockerfile relocation.
+            docker buildx build --push --tag "$TAG" -f deployments/hive-app/Dockerfile .

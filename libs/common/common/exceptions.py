@@ -1,0 +1,2 @@
+class MariaDBError(Exception):
+    pass

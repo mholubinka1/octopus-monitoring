@@ -35,11 +35,22 @@ runs:
 
     - name: Install project dependencies
       shell: bash
-      run: uv sync --locked
+      # --all-packages: this is a uv workspace (apps/octopus-app, apps/hive-app,
+      # libs/common) whose root has no [project.dependencies] of its own. A plain
+      # `uv sync` only installs the root project's (empty) closure, leaving every
+      # workspace member's own runtime deps (pydantic, sqlalchemy, pyhive-integration,
+      # ...) uninstalled -- which breaks mypy (can't resolve imports) and pytest
+      # (can't import the apps under test) further down this file.
+      run: uv sync --locked --all-packages
 
     - name: Validate pyproject.toml
       shell: bash
-      run: uv run --with 'validate-pyproject[all]' validate-pyproject pyproject.toml
+      run: >-
+        uv run --with 'validate-pyproject[all]' validate-pyproject
+        pyproject.toml
+        apps/octopus-app/pyproject.toml
+        apps/hive-app/pyproject.toml
+        libs/common/pyproject.toml
 
     - name: Audit dependencies for known vulnerabilities
       shell: bash
@@ -47,23 +58,23 @@ runs:
 
     - name: Type check with mypy
       shell: bash
-      run: uv run mypy app
+      run: uv run mypy apps/octopus-app/octopus_app apps/hive-app/hive_app libs/common/common
 
     - name: Check import ordering with isort
       shell: bash
-      run: uv run isort --check-only --profile black app tests
+      run: uv run isort --check-only --profile black apps/ libs/
 
     - name: Check code formatting with black
       shell: bash
-      run: uv run black --check app tests
+      run: uv run black --check apps/ libs/
 
     - name: Check linting with ruff
       shell: bash
-      run: uv run ruff check --no-fix app tests
+      run: uv run ruff check --no-fix apps/ libs/
 
     - name: Check linting with pylint
       shell: bash
-      run: uv run pylint app tests
+      run: uv run pylint apps libs
 
     - name: Check YAML style with yamllint
       shell: bash
@@ -94,7 +105,16 @@ runs:
 
     - name: Security analysis with bandit
       shell: bash
-      run: uv run --with 'bandit[toml]' bandit -r -c pyproject.toml app
+      # Scoped to non-test application code only, same as always: bandit's own
+      # assert-used/hardcoded-password checks are expected noise in test code
+      # (mirrors .pre-commit-config.yaml's bandit hook, which has
+      # `exclude: (^|/)tests/`). There's no [tool.bandit] table in pyproject.toml
+      # to carry that exclusion, and this is a raw `uv run bandit` invocation (not
+      # going through pre-commit here), so it's expressed as bandit's own --exclude
+      # flag instead, naming all three packages' test dirs explicitly.
+      run: >-
+        uv run --with 'bandit[toml]' bandit -r -c pyproject.toml apps libs
+        --exclude apps/octopus-app/tests,apps/hive-app/tests,libs/common/tests
 
     # gitleaks-action downloads to a fixed /tmp/gitleaks.tmp and unpacks to
     # /tmp/gitleaks-<version>/; on the persistent self-hosted runner a leftover
