@@ -3,7 +3,7 @@ from logging import Logger, getLogger
 from typing import Protocol
 
 from hive_app.common.logging import APP_LOGGER_NAME, config
-from hive_app.data.model import WeatherObservation
+from hive_app.data.model import WeatherForecastDay, WeatherObservation
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
@@ -15,6 +15,10 @@ class WeatherSource(Protocol):
     def fetch_current_observation_fallback(self) -> WeatherObservation: ...
 
     def persist_current_observation(self, observation: WeatherObservation) -> None: ...
+
+    def fetch_forecast(self) -> list[WeatherForecastDay]: ...
+
+    def persist_forecast(self, forecast: list[WeatherForecastDay]) -> None: ...
 
 
 class WeatherRetriever:
@@ -41,3 +45,12 @@ class WeatherRetriever:
         logger.info(
             f"Weather observation refresh: persisted from {observation.source}."
         )
+
+    def refresh_forecast(self) -> None:
+        # No try/except here, unlike refresh(): Open-Meteo is the only
+        # forecast source (AC2 -- no fallback source attempted), so any
+        # failure must propagate untouched to the generic job wrapper,
+        # which handles retry-with-backoff and job_run failure recording.
+        forecast = self._client.fetch_forecast()
+        self._client.persist_forecast(forecast)
+        logger.info(f"Weather forecast refresh: persisted {len(forecast)} day(s).")

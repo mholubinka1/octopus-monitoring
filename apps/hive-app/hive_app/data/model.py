@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 
@@ -24,6 +24,14 @@ class WeatherObservation:
     pressure: float
     wind_speed: float
     precipitation: float
+
+
+@dataclass
+class WeatherForecastDay:
+    source: str
+    target_date: date
+    max_temp: float
+    fetched_at: datetime
 
 
 @dataclass

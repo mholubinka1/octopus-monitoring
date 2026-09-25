@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 from schedule import Scheduler
 
-from hive_app.data.model import WeatherObservation
+from hive_app.data.model import WeatherForecastDay, WeatherObservation
 from hive_app.data.mysql import model
 from hive_app.data.mysql.client import MariaDBClient
 from hive_app.data.weather import WeatherRetriever
@@ -92,6 +92,12 @@ class _FallsBackToOpenMeteoSource:
 
     def persist_current_observation(self, observation: WeatherObservation) -> None:
         self._mariadb.write_weather_observation(observation)
+
+    def fetch_forecast(self) -> list[WeatherForecastDay]:
+        raise NotImplementedError
+
+    def persist_forecast(self, forecast: list[WeatherForecastDay]) -> None:
+        raise NotImplementedError
 
 
 def test_a_wunderground_failure_falls_back_and_the_job_still_records_success(

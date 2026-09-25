@@ -31,6 +31,8 @@ HEATING_REFRESH_JOB = "heating_refresh"
 HEATING_REFRESH_INTERVAL_SECONDS = 120
 WEATHER_OBSERVATION_REFRESH_JOB = "weather_observation_refresh"
 WEATHER_OBSERVATION_REFRESH_INTERVAL_MINUTES = 60
+WEATHER_FORECAST_REFRESH_JOB = "weather_forecast_refresh"
+WEATHER_FORECAST_REFRESH_INTERVAL_MINUTES = 60
 
 
 def _with_backoff_recording(
@@ -126,6 +128,20 @@ def register_weather_observation_refresh_job(
     )
 
 
+def register_weather_forecast_refresh_job(
+    scheduler: Scheduler,
+    weather: WeatherRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every(WEATHER_FORECAST_REFRESH_INTERVAL_MINUTES).minutes,
+        WEATHER_FORECAST_REFRESH_JOB,
+        weather.refresh_forecast,
+        mariadb,
+    )
+
+
 def run_pending_safely(scheduler: Scheduler) -> None:
     try:
         scheduler.run_pending()
@@ -202,6 +218,7 @@ def main() -> None:
     )
     if weather is not None:
         register_weather_observation_refresh_job(default_scheduler, weather, mariadb)
+        register_weather_forecast_refresh_job(default_scheduler, weather, mariadb)
 
     while True:
         run_pending_safely(default_scheduler)

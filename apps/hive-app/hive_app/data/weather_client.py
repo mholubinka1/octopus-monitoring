@@ -1,5 +1,5 @@
 from hive_app.common.config import LocationSettings, WeatherUndergroundSettings
-from hive_app.data.model import WeatherObservation
+from hive_app.data.model import WeatherForecastDay, WeatherObservation
 from hive_app.data.mysql.client import MariaDBClient
 from hive_app.data.open_meteo_client import OpenMeteoClient
 from hive_app.data.weather_underground_client import WeatherUndergroundClient
@@ -28,3 +28,9 @@ class WeatherApiSource:
 
     def persist_current_observation(self, observation: WeatherObservation) -> None:
         self._mariadb.write_weather_observation(observation)
+
+    def fetch_forecast(self) -> list[WeatherForecastDay]:
+        return self._open_meteo.get_forecast()
+
+    def persist_forecast(self, forecast: list[WeatherForecastDay]) -> None:
+        self._mariadb.write_weather_forecast(forecast)
