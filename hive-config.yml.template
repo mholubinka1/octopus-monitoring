@@ -16,16 +16,17 @@ mariadb:
 # #506-only deployment (heating status polling doesn't use any of them).
 # Open-Meteo needs no API key -- only Weather Underground and ntfy.sh do.
 
-# Not read until weather observation polling ships (issue #508).
+# Weather Underground station credentials, used by weather_observation_refresh.
 weather_underground:
   api_key:
   station_id:
 
-# Not read until hive-app's re-auth alert path ships (issue #509).
+# ntfy.sh topic used to alert on an unrecoverable Hive re-auth failure.
 ntfy:
   topic_url:
 
-# Household lat/long, not read until weather queries ship (issue #508/#510).
+# Household lat/long, used by weather_observation_refresh (and, once it
+# ships, weather forecast polling).
 location:
   latitude:
   longitude:

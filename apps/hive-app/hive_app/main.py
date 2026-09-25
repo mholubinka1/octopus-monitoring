@@ -8,7 +8,12 @@ from logging import Logger, getLogger
 
 from schedule import Job, Scheduler, default_scheduler
 
-from hive_app.common.config import NtfySettings, get_settings
+from hive_app.common.config import (
+    LocationSettings,
+    NtfySettings,
+    WeatherUndergroundSettings,
+    get_settings,
+)
 from hive_app.common.decorator import retry_with_exponential_backoff
 from hive_app.common.logging import APP_LOGGER_NAME, config
 from hive_app.data.auth import HiveAuthenticator
@@ -16,12 +21,16 @@ from hive_app.data.heating import HeatingRetriever, HiveSource
 from hive_app.data.hive_client import HiveApiSource
 from hive_app.data.mysql.client import MariaDBClient
 from hive_app.data.notify import NtfyReauthNotifier, ReauthNotifier
+from hive_app.data.weather import WeatherRetriever
+from hive_app.data.weather_client import WeatherApiSource
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
 
 HEATING_REFRESH_JOB = "heating_refresh"
 HEATING_REFRESH_INTERVAL_SECONDS = 120
+WEATHER_OBSERVATION_REFRESH_JOB = "weather_observation_refresh"
+WEATHER_OBSERVATION_REFRESH_INTERVAL_MINUTES = 60
 
 
 def _with_backoff_recording(
@@ -103,6 +112,20 @@ def register_heating_refresh_job(
     )
 
 
+def register_weather_observation_refresh_job(
+    scheduler: Scheduler,
+    weather: WeatherRetriever,
+    mariadb: MariaDBClient,
+) -> Job:
+    return _schedule_refresh_job(
+        scheduler,
+        lambda s: s.every(WEATHER_OBSERVATION_REFRESH_INTERVAL_MINUTES).minutes,
+        WEATHER_OBSERVATION_REFRESH_JOB,
+        weather.refresh,
+        mariadb,
+    )
+
+
 def run_pending_safely(scheduler: Scheduler) -> None:
     try:
         scheduler.run_pending()
@@ -138,6 +161,21 @@ def _build_heating_retriever(
     return HeatingRetriever(hive_source, reauth_notifier)
 
 
+def _build_weather_retriever(
+    wunderground: WeatherUndergroundSettings | None,
+    location: LocationSettings | None,
+    mariadb: MariaDBClient,
+) -> WeatherRetriever | None:
+    if wunderground is None or location is None:
+        logger.warning(
+            "weather_underground and/or location are not configured; "
+            "hive-app will not register weather_observation_refresh."
+        )
+        return None
+    weather_source = WeatherApiSource(wunderground, location, mariadb)
+    return WeatherRetriever(weather_source)
+
+
 def main() -> None:
     logger.info("Starting hive-app.")
 
@@ -158,6 +196,12 @@ def main() -> None:
 
     authenticate_at_startup(authenticator)
     register_heating_refresh_job(default_scheduler, heating, mariadb)
+
+    weather = _build_weather_retriever(
+        settings.weather_underground, settings.location, mariadb
+    )
+    if weather is not None:
+        register_weather_observation_refresh_job(default_scheduler, weather, mariadb)
 
     while True:
         run_pending_safely(default_scheduler)

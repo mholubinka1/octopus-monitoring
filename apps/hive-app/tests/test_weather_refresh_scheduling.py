@@ -1,0 +1,114 @@
+from datetime import UTC, datetime
+from unittest.mock import Mock
+
+import pytest
+from schedule import Scheduler
+
+from hive_app.data.model import WeatherObservation
+from hive_app.data.mysql import model
+from hive_app.data.mysql.client import MariaDBClient
+from hive_app.data.weather import WeatherRetriever
+from hive_app.main import register_weather_observation_refresh_job
+
+
+def test_weather_observation_refresh_job_runs_on_a_60_minute_interval(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+
+    job = register_weather_observation_refresh_job(
+        scheduler, Mock(spec=WeatherRetriever), mariadb_client
+    )
+
+    assert job.interval == 60
+    assert job.unit == "minutes"
+
+
+def test_a_successful_weather_observation_refresh_is_recorded_as_a_successful_job_run(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    weather = Mock(spec=WeatherRetriever)
+
+    job = register_weather_observation_refresh_job(scheduler, weather, mariadb_client)
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert len(runs) == 1
+    assert runs[0].job_name == "weather_observation_refresh"
+    assert runs[0].status == "success"
+    assert runs[0].error_message is None
+
+
+def test_a_persistently_failing_weather_observation_refresh_retries_with_backoff(
+    mariadb_client: MariaDBClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sleep_delays: list[int] = []
+    monkeypatch.setattr("hive_app.common.decorator.time.sleep", sleep_delays.append)
+    scheduler = Scheduler()
+    weather = Mock(spec=WeatherRetriever)
+    weather.refresh.side_effect = RuntimeError("api.weather.com unreachable")
+
+    job = register_weather_observation_refresh_job(scheduler, weather, mariadb_client)
+    job.run().join()
+
+    assert sleep_delays == [60, 120, 240, 480]
+    assert weather.refresh.call_count == 5
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+
+    assert len(runs) == 5
+    assert all(run.status == "failure" for run in runs)
+    assert all(run.error_message == "api.weather.com unreachable" for run in runs)
+
+
+class _FallsBackToOpenMeteoSource:
+    """A fake WeatherSource whose primary fetch fails and whose fallback
+    succeeds -- used (unlike the Mock-based tests above) to prove the
+    fallback path is actually wired end-to-end through job registration
+    into a recorded job_run success, not just that WeatherRetriever.refresh()
+    itself falls back correctly (already covered in isolation by
+    test_weather_retrieval.py)."""
+
+    def __init__(self, mariadb: MariaDBClient) -> None:
+        self._mariadb = mariadb
+
+    def fetch_current_observation(self) -> WeatherObservation:
+        raise ConnectionError("api.weather.com unreachable")
+
+    def fetch_current_observation_fallback(self) -> WeatherObservation:
+        return WeatherObservation(
+            source="open-meteo",
+            observed_at=datetime(2026, 9, 25, 12, 0, tzinfo=UTC),
+            temp=14.5,
+            humidity=72,
+            pressure=1012.3,
+            wind_speed=8.1,
+            precipitation=0.0,
+        )
+
+    def persist_current_observation(self, observation: WeatherObservation) -> None:
+        self._mariadb.write_weather_observation(observation)
+
+
+def test_a_wunderground_failure_falls_back_and_the_job_still_records_success(
+    mariadb_client: MariaDBClient,
+) -> None:
+    scheduler = Scheduler()
+    weather = WeatherRetriever(_FallsBackToOpenMeteoSource(mariadb_client))
+
+    job = register_weather_observation_refresh_job(scheduler, weather, mariadb_client)
+    job.run().join()
+
+    with mariadb_client.session_read_scope() as session:
+        runs = session.query(model.job_run).all()
+        observations = session.query(model.weather_observation).all()
+
+    assert len(runs) == 1
+    assert runs[0].job_name == "weather_observation_refresh"
+    assert runs[0].status == "success"
+    assert len(observations) == 1
+    assert observations[0].source == "open-meteo"
