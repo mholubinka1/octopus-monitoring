@@ -3,10 +3,6 @@ from decimal import Decimal
 from typing import ClassVar
 
 import pytest
-from common.config import MariaDBSettings
-from octopus_app.data.mysql import model
-from octopus_app.data.mysql.client import MariaDBClient
-from octopus_app.data.mysql.model import SQLBase
 from sqlalchemy import (
     Column,
     Date,
@@ -24,6 +20,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.schema import CreateIndex, CreateTable
+
+from common.config import MariaDBSettings
+from octopus_app.data.mysql import model
+from octopus_app.data.mysql.client import MariaDBClient
+from octopus_app.data.mysql.model import SQLBase
 
 _StrippedBase = declarative_base()
 

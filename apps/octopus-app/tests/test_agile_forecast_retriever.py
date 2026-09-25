@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 import responses
+
 from octopus_app.common.exceptions import APIError
 from octopus_app.data.agile_forecast import AgileForecastRetriever
 from octopus_app.data.mysql import model

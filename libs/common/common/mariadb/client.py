@@ -4,15 +4,16 @@ from datetime import UTC, datetime
 from logging import Logger
 from typing import Any
 
-from common.config import MariaDBSettings
-from common.exceptions import MariaDBError
-from common.mariadb.model import job_run
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.schema import CreateColumn
+
+from common.config import MariaDBSettings
+from common.exceptions import MariaDBError
+from common.mariadb.model import job_run
 
 # MySQL/MariaDB error 1050: "Table '...' already exists".
 _TABLE_ALREADY_EXISTS_ERROR_CODE = 1050

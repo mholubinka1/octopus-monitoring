@@ -3,8 +3,9 @@ from typing import Any
 
 import pytest
 import yaml
-from octopus_app.common.config import ApplicationSettings, get_settings
 from pydantic import ValidationError
+
+from octopus_app.common.config import ApplicationSettings, get_settings
 
 VALID_CONFIG: dict[str, Any] = {
     "octopus": {"account_number": "A-1234ABCD", "api_key": "sk_live_test"},

@@ -2,12 +2,13 @@ from datetime import date
 from typing import Any, TypeVar
 
 import requests
+from pydantic import BaseModel, Field
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.common.decorator import retry
 from octopus_app.common.exceptions import APIError
 from octopus_app.common.http import raise_for_http_error
 from octopus_app.data.octopus.model import BillingPeriod
-from pydantic import BaseModel, Field
 
 REQUEST_TIMEOUT_SECONDS = 30
 

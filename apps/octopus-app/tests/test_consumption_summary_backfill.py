@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.data.consumption_summary import ConsumptionSummaryBackfill
 from octopus_app.data.model import Consumption, ConsumptionSummary, Energy

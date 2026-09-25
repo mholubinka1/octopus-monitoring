@@ -1,4 +1,5 @@
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.data.mysql import model
 from octopus_app.data.mysql.client import MariaDBClient

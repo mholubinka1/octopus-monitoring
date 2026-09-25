@@ -1,11 +1,12 @@
 from unittest.mock import Mock
 
 import pytest
+from schedule import Scheduler
+
 from hive_app.data.heating import HeatingRetriever
 from hive_app.data.mysql import model
 from hive_app.data.mysql.client import MariaDBClient
 from hive_app.main import register_heating_refresh_job, run_pending_safely
-from schedule import Scheduler
 
 
 def test_heating_refresh_job_runs_on_a_120_second_interval(

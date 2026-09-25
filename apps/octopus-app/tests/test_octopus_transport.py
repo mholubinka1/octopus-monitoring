@@ -3,10 +3,11 @@ from typing import Any
 import pytest
 import requests
 import responses
+from pydantic import BaseModel
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.common.exceptions import APIError
 from octopus_app.data.octopus.transport import OctopusTransport
-from pydantic import BaseModel
 
 ENDPOINT = "https://api.octopus.energy/v1/widgets/"
 

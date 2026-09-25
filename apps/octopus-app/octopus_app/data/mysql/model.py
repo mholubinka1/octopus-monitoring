@@ -1,8 +1,9 @@
 from typing import ClassVar
 
-from common.mariadb.model import SQLBase, job_run
 from sqlalchemy import Column, Date, DateTime, Index, Integer, Numeric, String
 from sqlalchemy.dialects.mysql import DECIMAL
+
+from common.mariadb.model import SQLBase, job_run
 
 __all__ = ["SQLBase", "job_run"]
 

@@ -1,9 +1,10 @@
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
+
 from common.config import MariaDBSettings
 from hive_app.data.mysql.client import MariaDBClient
 from hive_app.data.mysql.model import SQLBase
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture

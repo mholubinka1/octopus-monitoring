@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.data.consumption import ConsumptionRetriever
 from octopus_app.data.model import Consumption, Energy

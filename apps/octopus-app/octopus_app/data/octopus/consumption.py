@@ -2,11 +2,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from pydantic import BaseModel
+
 from octopus_app.data.model import Consumption, Energy, get_raw_unit, to_estimated_kwh
 from octopus_app.data.octopus.model import Electricity, Gas, Meter
 from octopus_app.data.octopus.timestamps import to_utc_z
 from octopus_app.data.octopus.transport import OctopusTransport
-from pydantic import BaseModel
 
 DEFAULT_PAGE_SIZE = 100
 

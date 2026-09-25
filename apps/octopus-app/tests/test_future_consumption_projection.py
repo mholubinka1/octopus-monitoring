@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import pytest
+
 from octopus_app.data.cost_forecast import project_daily_average_consumption
 
 

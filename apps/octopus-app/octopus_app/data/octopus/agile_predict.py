@@ -2,11 +2,12 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 import requests
+from pydantic import BaseModel, RootModel
+
 from octopus_app.common.decorator import retry
 from octopus_app.common.exceptions import APIError
 from octopus_app.common.http import raise_for_http_error
 from octopus_app.data.octopus.model import AgileForecastReading
-from pydantic import BaseModel, RootModel
 
 REQUEST_TIMEOUT_SECONDS = 30
 HALF_HOUR = timedelta(minutes=30)

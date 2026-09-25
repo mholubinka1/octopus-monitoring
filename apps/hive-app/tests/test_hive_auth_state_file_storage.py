@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+
 from hive_app.common.config import HiveSettings
 from hive_app.data.hive_client import HiveApiSource
 from hive_app.data.model import HiveAuthState

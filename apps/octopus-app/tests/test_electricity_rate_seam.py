@@ -4,6 +4,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.common.exceptions import ArgumentError
 from octopus_app.data.octopus.api import OctopusEnergyAPIClient

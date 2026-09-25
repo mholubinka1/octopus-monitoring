@@ -1,11 +1,12 @@
 import re
 
+from pydantic import BaseModel
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.common.exceptions import APIError
 from octopus_app.common.utils import is_none_or_whitespace
 from octopus_app.data.octopus.model import Account, Electricity, Gas, Meter
 from octopus_app.data.octopus.transport import OctopusTransport
-from pydantic import BaseModel
 
 
 class MeterSerialInfo(BaseModel):

@@ -5,6 +5,8 @@ from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
+from schedule import Scheduler
+
 from octopus_app.common.config import RefreshSettings
 from octopus_app.data.agile_forecast import AgileForecastRetriever
 from octopus_app.data.consumption import ConsumptionRetriever
@@ -31,7 +33,6 @@ from octopus_app.main import (
     run_initial_pricing_sync,
     run_pending_safely,
 )
-from schedule import Scheduler
 
 REFRESH_CONFIG = RefreshSettings(refresh_interval=4, retention=45)
 

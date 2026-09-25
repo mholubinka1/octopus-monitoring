@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 import requests
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.data.octopus.api import OctopusEnergyAPIClient
 

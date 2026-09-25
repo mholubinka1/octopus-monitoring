@@ -1,6 +1,7 @@
 from typing import NoReturn
 
 import requests
+
 from octopus_app.common.exceptions import APIError
 
 

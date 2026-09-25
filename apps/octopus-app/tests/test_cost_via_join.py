@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+from sqlalchemy import and_, or_
+
 from octopus_app.data.mysql import model
 from octopus_app.data.mysql.client import MariaDBClient
-from sqlalchemy import and_, or_
 
 
 def _compute_total_cost(mariadb_client: MariaDBClient, energy: str) -> Decimal:

@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 import requests
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.common.exceptions import APIError
 from octopus_app.data.octopus.kraken import BillingPeriodClient, KrakenTransport

@@ -9,6 +9,8 @@ from datetime import datetime as dt
 from datetime import timedelta
 from logging import Logger, getLogger
 
+from schedule import Job, Scheduler, default_scheduler
+
 from octopus_app.common.config import RefreshSettings, get_settings
 from octopus_app.common.decorator import retry_with_exponential_backoff
 from octopus_app.common.logging import APP_LOGGER_NAME, config
@@ -23,7 +25,6 @@ from octopus_app.data.cost_forecast import CostForecastRetriever
 from octopus_app.data.mysql.client import MariaDBClient
 from octopus_app.data.pricing import PricingRetriever
 from octopus_app.data.pruning import DataPruner
-from schedule import Job, Scheduler, default_scheduler
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)

@@ -1,11 +1,12 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+from sqlalchemy.orm import Session
+
 from octopus_app.data.local_day import LONDON
 from octopus_app.data.model import Energy
 from octopus_app.data.mysql import model
 from octopus_app.data.mysql.client import MariaDBClient
-from sqlalchemy.orm import Session
 
 PRODUCT_CODE = "VAR-24-10-01"
 REGION = "H"

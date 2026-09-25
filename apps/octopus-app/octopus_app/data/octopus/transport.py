@@ -1,10 +1,11 @@
 from typing import Any, TypeVar
 
 import requests
+from pydantic import BaseModel
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.common.decorator import retry
 from octopus_app.common.http import raise_for_http_error
-from pydantic import BaseModel
 
 REQUEST_TIMEOUT_SECONDS = 30
 

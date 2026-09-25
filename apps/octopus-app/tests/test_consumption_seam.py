@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 import responses
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.data.model import Energy
 from octopus_app.data.mysql import model

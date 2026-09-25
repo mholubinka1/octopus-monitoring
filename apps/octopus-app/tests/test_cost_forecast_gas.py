@@ -2,6 +2,8 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import responses
+from sqlalchemy.orm import Session
+
 from octopus_app.common.config import OctopusAPISettings
 from octopus_app.data.cost_forecast import CostForecastRetriever
 from octopus_app.data.local_day import start_of_local_day
@@ -18,7 +20,6 @@ from octopus_app.data.octopus.model import (
     Meter,
     Rate,
 )
-from sqlalchemy.orm import Session
 
 GRAPHQL_ENDPOINT = "https://api.octopus.energy/v1/graphql/"
 PRODUCT_CODE = "VAR-24-10-01"

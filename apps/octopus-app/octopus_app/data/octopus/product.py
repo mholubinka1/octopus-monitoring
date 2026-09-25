@@ -1,6 +1,7 @@
+from pydantic import BaseModel
+
 from octopus_app.data.octopus.model import Direction, Product
 from octopus_app.data.octopus.transport import OctopusTransport
-from pydantic import BaseModel
 
 
 class ProductSummary(BaseModel):

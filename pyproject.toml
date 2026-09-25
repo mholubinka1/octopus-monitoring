@@ -56,6 +56,17 @@ testpaths = ["apps/octopus-app/tests", "apps/hive-app/tests", "libs/common/tests
 # derived from its full file path instead.
 addopts = ["--import-mode=importlib"]
 
+[tool.isort]
+# Since each app became a real installable uv workspace package (#530/#531),
+# isort's own installed-vs-local heuristic started treating octopus_app/
+# hive_app/common as indistinguishable from genuine third-party libraries,
+# merging them into one flat alphabetized import block -- which pylint's
+# import-order checker (a stricter local-file-under-source-roots check that
+# never changed) disagrees with, since it still expects them grouped as
+# first-party after real third-party imports. Declaring them explicitly
+# resolves the disagreement instead of the two tools fighting over ordering.
+known_first_party = ["octopus_app", "hive_app", "common"]
+
 [tool.coverage.run]
 source = ["apps/octopus-app/octopus_app", "apps/hive-app/hive_app", "libs/common/common"]
 

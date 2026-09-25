@@ -1,4 +1,5 @@
 import pytest
+
 from octopus_app.common.exceptions import ArgumentError, NullValueError
 from octopus_app.data.octopus.account import (
     AgreementInfo,

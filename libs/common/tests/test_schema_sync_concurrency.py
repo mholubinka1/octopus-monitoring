@@ -2,13 +2,14 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-from common.config import MariaDBSettings
-from common.mariadb.client import MariaDBClientBase
-from common.mariadb.model import SQLBase
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.pool import StaticPool
+
+from common.config import MariaDBSettings
+from common.mariadb.client import MariaDBClientBase
+from common.mariadb.model import SQLBase
 
 
 def _mysql_error(code: int, message: str) -> OperationalError:

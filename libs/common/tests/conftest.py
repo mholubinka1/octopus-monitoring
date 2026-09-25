@@ -1,11 +1,12 @@
 import logging
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
+
 from common.config import MariaDBSettings
 from common.mariadb.client import MariaDBClientBase
 from common.mariadb.model import SQLBase
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture

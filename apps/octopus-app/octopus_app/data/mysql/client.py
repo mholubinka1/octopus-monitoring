@@ -4,6 +4,8 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from logging import Logger, getLogger
 
+from sqlalchemy import and_, or_
+
 from common.config import MariaDBSettings
 from common.exceptions import MariaDBError
 from common.mariadb.client import MariaDBClientBase
@@ -27,7 +29,6 @@ from octopus_app.data.octopus.model import (
     Product,
     Rate,
 )
-from sqlalchemy import and_, or_
 
 SUMMARIZATION_WINDOW_DAYS = 14
 

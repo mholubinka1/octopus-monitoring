@@ -4,12 +4,13 @@ from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Any
 
+from pydantic import BaseModel
+
 from octopus_app.common.logging import APP_LOGGER_NAME, config
 from octopus_app.data.model import Energy
 from octopus_app.data.octopus.model import Rate
 from octopus_app.data.octopus.timestamps import to_utc_z
 from octopus_app.data.octopus.transport import OctopusTransport
-from pydantic import BaseModel
 
 logging.config.dictConfig(config)
 logger: Logger = getLogger(APP_LOGGER_NAME)
