@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, Integer, String
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Float, Integer, String
 
 from common.mariadb.model import SQLBase, job_run
 
@@ -34,3 +34,14 @@ class weather_observation(SQLBase):
     pressure = Column(Float)
     wind_speed = Column(Float)
     precipitation = Column(Float)
+
+
+class weather_forecast(SQLBase):
+    __tablename__ = "weather_forecast"
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+
+    id = Column(String(50), primary_key=True)
+    source = Column(String(20))
+    target_date = Column(Date, nullable=False)
+    max_temp = Column(Float)
+    fetched_at = Column(DateTime, nullable=False)

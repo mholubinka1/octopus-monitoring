@@ -79,6 +79,14 @@ def test_an_open_meteo_observation_is_persisted_and_queryable(
     client = OpenMeteoClient(LocationSettings(latitude=51.5, longitude=-0.1))
 
     observation = client.get_current_observation()
+
+    # Unlike get_forecast() (which requests Europe/London for ADR-0010 day
+    # bucketing), this request must stay UTC -- observed_at is a point-in-
+    # time instant, not a calendar day, so forcing UTC just avoids guessing
+    # an offset on the naive timestamp Open-Meteo returns.
+    assert len(responses.calls) == 1
+    assert "timezone=UTC" in responses.calls[0].request.url
+
     mariadb_client.write_weather_observation(observation)
 
     with mariadb_client.session_read_scope() as session:
