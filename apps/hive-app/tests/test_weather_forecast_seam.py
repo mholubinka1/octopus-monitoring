@@ -31,6 +31,15 @@ def test_an_open_meteo_forecast_is_persisted_and_queryable(
     client = OpenMeteoClient(LocationSettings(latitude=51.5, longitude=-0.1))
 
     forecast = client.get_forecast()
+
+    # ADR-0010: this repo buckets "day" as Europe/London local time for
+    # consumption/cost data -- the forecast request must ask Open-Meteo to
+    # bucket its daily aggregation the same way, not UTC, or target_date
+    # would drift from daily_consumption_summary's day boundaries around a
+    # BST transition (relevant once #511 joins the two).
+    assert len(responses.calls) == 1
+    assert "timezone=Europe%2FLondon" in responses.calls[0].request.url
+
     mariadb_client.write_weather_forecast(forecast)
 
     with mariadb_client.session_read_scope() as session:

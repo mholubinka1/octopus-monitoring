@@ -44,17 +44,14 @@ class OpenMeteoClient:
         self._settings = settings
 
     def _request(self, endpoint_params: dict[str, str]) -> dict[str, Any]:
-        # Shared by every Open-Meteo endpoint this client calls: latitude,
-        # longitude and a forced UTC timezone are common to both the
-        # current-observation and forecast requests -- forcing UTC means
-        # the naive timestamps/dates Open-Meteo returns can be treated as
-        # UTC by the caller without guessing an offset.
+        # Shared by every Open-Meteo endpoint this client calls: latitude
+        # and longitude. Each caller passes its own "timezone" -- the two
+        # endpoints need different ones (see each call site).
         response = requests.get(
             url=self.base_url,
             params={
                 "latitude": str(self._settings.latitude),
                 "longitude": str(self._settings.longitude),
-                "timezone": "UTC",
                 **endpoint_params,
             },
             timeout=REQUEST_TIMEOUT_SECONDS,
@@ -63,7 +60,16 @@ class OpenMeteoClient:
         return response.json()
 
     def get_current_observation(self) -> WeatherObservation:
-        payload = self._request({"current": CURRENT_FIELDS})
+        payload = self._request(
+            {
+                "current": CURRENT_FIELDS,
+                # Open-Meteo defaults "current.time" to the location's local
+                # timezone (or GMT) when none is requested -- forcing UTC
+                # here means the naive timestamp it returns can be treated
+                # as UTC below without guessing an offset.
+                "timezone": "UTC",
+            }
+        )
         parsed = OpenMeteoResponse.model_validate(payload)
         current = parsed.current
 
@@ -78,7 +84,20 @@ class OpenMeteoClient:
         )
 
     def get_forecast(self) -> list[WeatherForecastDay]:
-        payload = self._request({"daily": DAILY_FIELDS})
+        payload = self._request(
+            {
+                "daily": DAILY_FIELDS,
+                # This repo buckets "day" as the Europe/London local
+                # calendar day for consumption/cost data (ADR-0010), not
+                # UTC -- requesting Open-Meteo's daily aggregation in that
+                # same timezone keeps target_date aligned with
+                # daily_consumption_summary's day boundaries, so a later
+                # join (gas cost projection, #511) compares like-for-like
+                # days instead of drifting by up to an hour around BST
+                # transitions.
+                "timezone": "Europe/London",
+            }
+        )
         parsed = OpenMeteoForecastResponse.model_validate(payload)
         daily = parsed.daily
 
