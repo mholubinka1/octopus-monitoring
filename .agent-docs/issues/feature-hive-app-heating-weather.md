@@ -67,6 +67,8 @@ A `WeatherSource` protocol (same shape as `HiveSource`/`PricingSource`) with a `
 
 ## hive-app: weather forecast polling (Open-Meteo) — [#510](https://github.com/mholubinka1/octopus-monitoring/issues/510)
 
+> Work complete — [PR #535](https://github.com/mholubinka1/octopus-monitoring/pull/535) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+
 **Blocked by**: #508
 
 **User stories**: 4, 5
@@ -77,10 +79,10 @@ Extends `WeatherSource` with a `fetch_forecast()`/`persist_forecast()` verb pair
 
 ### Acceptance criteria
 
-- [ ] Given Open-Meteo's forecast endpoint responds successfully, when the `weather_forecast_refresh` job runs, then `weather_forecast` rows are written, one per upcoming day, each with that day's predicted max temperature.
-- [ ] Given the forecast call fails, when the job runs, then it's recorded as a `job_run` failure with retry-with-backoff — same as every other job, no fallback source attempted.
-- [ ] Re-running the job for a day already present in `weather_forecast` upserts (updates) that day's figure rather than duplicating a row — mirrors the upsert pattern `write_agile_forecast`/`write_product_rate` already use.
-- [ ] Tested with HTTP-boundary mocking via `responses`, same seam as the observation client.
+- [x] Given Open-Meteo's forecast endpoint responds successfully, when the `weather_forecast_refresh` job runs, then `weather_forecast` rows are written, one per upcoming day, each with that day's predicted max temperature.
+- [x] Given the forecast call fails, when the job runs, then it's recorded as a `job_run` failure with retry-with-backoff — same as every other job, no fallback source attempted.
+- [x] Re-running the job for a day already present in `weather_forecast` upserts (updates) that day's figure rather than duplicating a row — mirrors the upsert pattern `write_agile_forecast`/`write_product_rate` already use.
+- [x] Tested with HTTP-boundary mocking via `responses`, same seam as the observation client.
 
 ---
 
