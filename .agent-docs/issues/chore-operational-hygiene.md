@@ -4,7 +4,7 @@
 
 ## Test infrastructure + CI gate
 
-**GitHub issue**: [#366](https://github.com/mholubinka1/octopus-monitoring/issues/366)
+**GitHub issue**: [#366](https://github.com/mholubinka1/home-monitoring/issues/366)
 
 **Blocked by**: None
 
@@ -25,9 +25,9 @@ Add `pytest` and `responses` as dev dependencies, create a `tests/` directory, a
 
 ## Fix hardcoded refresh interval
 
-**GitHub issue**: [#367](https://github.com/mholubinka1/octopus-monitoring/issues/367)
+**GitHub issue**: [#367](https://github.com/mholubinka1/home-monitoring/issues/367)
 
-**Blocked by**: [#366](https://github.com/mholubinka1/octopus-monitoring/issues/366)
+**Blocked by**: [#366](https://github.com/mholubinka1/home-monitoring/issues/366)
 
 **User stories**: 1
 
@@ -46,9 +46,9 @@ Extract job registration in `app/main.py` into a testable function, and replace 
 
 ## `job_run` table + outcome recording
 
-**GitHub issue**: [#368](https://github.com/mholubinka1/octopus-monitoring/issues/368)
+**GitHub issue**: [#368](https://github.com/mholubinka1/home-monitoring/issues/368)
 
-**Blocked by**: [#366](https://github.com/mholubinka1/octopus-monitoring/issues/366)
+**Blocked by**: [#366](https://github.com/mholubinka1/home-monitoring/issues/366)
 
 **User stories**: 5
 
@@ -67,7 +67,7 @@ Add a `job_run` table (`id, job_name, status, ran_at, error_message`) to `mariad
 
 ## Restore docker-compose app service
 
-**GitHub issue**: [#369](https://github.com/mholubinka1/octopus-monitoring/issues/369)
+**GitHub issue**: [#369](https://github.com/mholubinka1/home-monitoring/issues/369)
 
 **Blocked by**: None
 
@@ -87,7 +87,7 @@ Uncomment/restore the `energy-monitor` service block in `docker-compose.yml` so 
 
 ## Rewrite README
 
-**GitHub issue**: [#370](https://github.com/mholubinka1/octopus-monitoring/issues/370)
+**GitHub issue**: [#370](https://github.com/mholubinka1/home-monitoring/issues/370)
 
 **Blocked by**: None
 
@@ -107,7 +107,7 @@ Rewrite `README.md` to describe the actual MariaDB + Grafana architecture, remov
 
 ## Coverage ratchet
 
-**GitHub issue**: [#372](https://github.com/mholubinka1/octopus-monitoring/issues/372)
+**GitHub issue**: [#372](https://github.com/mholubinka1/home-monitoring/issues/372)
 
 **Blocked by**: None
 
@@ -128,7 +128,7 @@ Replace the fixed `--cov-fail-under=58` gate with a ratchet. A checked-in `.gith
 
 ## Pydantic models for config settings
 
-**GitHub issue**: [#373](https://github.com/mholubinka1/octopus-monitoring/issues/373)
+**GitHub issue**: [#373](https://github.com/mholubinka1/home-monitoring/issues/373)
 
 **Blocked by**: None
 
@@ -149,7 +149,7 @@ Convert `OctopusAPISettings`, `MariaDBSettings`, `RefreshSettings`, `Application
 
 ## Pydantic models for Octopus API response parsing
 
-**GitHub issue**: [#374](https://github.com/mholubinka1/octopus-monitoring/issues/374)
+**GitHub issue**: [#374](https://github.com/mholubinka1/home-monitoring/issues/374)
 
 **Blocked by**: None
 
@@ -170,7 +170,7 @@ Define Pydantic models for the Octopus account/meter-information response and th
 
 ## Expand pre-commit hooks
 
-**GitHub issue**: [#375](https://github.com/mholubinka1/octopus-monitoring/issues/375)
+**GitHub issue**: [#375](https://github.com/mholubinka1/home-monitoring/issues/375)
 
 **Blocked by**: None
 
@@ -190,9 +190,9 @@ Add to `.pre-commit-config.yaml`: `bandit`, `pylint`, `yamllint`, `markdownlint`
 
 ## Poetry to uv migration
 
-**GitHub issue**: [#376](https://github.com/mholubinka1/octopus-monitoring/issues/376)
+**GitHub issue**: [#376](https://github.com/mholubinka1/home-monitoring/issues/376)
 
-**Blocked by**: [#375](https://github.com/mholubinka1/octopus-monitoring/issues/375)
+**Blocked by**: [#375](https://github.com/mholubinka1/home-monitoring/issues/375)
 
 **User stories**: 10
 
@@ -212,9 +212,9 @@ Replace `[tool.poetry]` sections in `pyproject.toml` with PEP 621 `[project]` + 
 
 ## Python version upgrade
 
-**GitHub issue**: [#377](https://github.com/mholubinka1/octopus-monitoring/issues/377)
+**GitHub issue**: [#377](https://github.com/mholubinka1/home-monitoring/issues/377)
 
-**Blocked by**: [#376](https://github.com/mholubinka1/octopus-monitoring/issues/376)
+**Blocked by**: [#376](https://github.com/mholubinka1/home-monitoring/issues/376)
 
 **User stories**: 11
 

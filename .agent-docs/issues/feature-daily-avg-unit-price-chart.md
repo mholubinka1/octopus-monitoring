@@ -4,7 +4,7 @@
 
 ## Add Daily Average Unit Price (Rolling 7-Day Window) panel
 
-**GitHub issue**: [#518](https://github.com/mholubinka1/octopus-monitoring/issues/518)
+**GitHub issue**: [#518](https://github.com/mholubinka1/home-monitoring/issues/518)
 
 **Blocked by**: None
 

@@ -80,7 +80,7 @@ Turn the fixed coverage floor into a ratchet that can only hold steady or improv
 
 ### Out of Scope
 
-Domain model conversion to Pydantic (Account, Meter, Agreement, Consumption) — explicitly decided against; see design session notes. `pydantic-settings`/env-var config overrides. A full `gitleaks` git-history scan (only staged-diff protection is added). Backfilling legacy test coverage to hit 80% — tracked separately in [#371](https://github.com/mholubinka1/octopus-monitoring/issues/371).
+Domain model conversion to Pydantic (Account, Meter, Agreement, Consumption) — explicitly decided against; see design session notes. `pydantic-settings`/env-var config overrides. A full `gitleaks` git-history scan (only staged-diff protection is added). Backfilling legacy test coverage to hit 80% — tracked separately in [#371](https://github.com/mholubinka1/home-monitoring/issues/371).
 
 ### Further Notes (Part 2)
 

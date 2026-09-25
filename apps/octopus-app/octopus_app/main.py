@@ -292,7 +292,7 @@ def run_pending_safely(scheduler: Scheduler) -> None:
 
 
 def main() -> None:
-    logger.info("Starting octopus-monitoring.")
+    logger.info("Starting octopus-app.")
 
     try:
         parser = argparse.ArgumentParser()
