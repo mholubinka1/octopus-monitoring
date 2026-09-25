@@ -16,6 +16,17 @@ class HeatingStatus:
 
 
 @dataclass
+class WeatherObservation:
+    source: str
+    observed_at: datetime
+    temp: float
+    humidity: float
+    pressure: float
+    wind_speed: float
+    precipitation: float
+
+
+@dataclass
 class HiveAuthState:
     refresh_token: str
     device_group_key: str

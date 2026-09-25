@@ -20,3 +20,17 @@ class heating_status(SQLBase):
     boost_active = Column(Boolean)
     boost_ends_at = Column(DateTime)
     schedule = Column(JSON)
+
+
+class weather_observation(SQLBase):
+    __tablename__ = "weather_observation"
+    __table_args__: ClassVar[dict[str, str]] = {"schema": "octopus"}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String(20))
+    observed_at = Column(DateTime, nullable=False)
+    temp = Column(Float)
+    humidity = Column(Float)
+    pressure = Column(Float)
+    wind_speed = Column(Float)
+    precipitation = Column(Float)

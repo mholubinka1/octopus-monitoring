@@ -46,6 +46,8 @@ A narrowly-scoped `notify_reauth_required()` helper, called only from the heatin
 
 ## hive-app: weather observation polling (Weather Underground + Open-Meteo fallback) — [#508](https://github.com/mholubinka1/octopus-monitoring/issues/508)
 
+> Work complete — [PR #534](https://github.com/mholubinka1/octopus-monitoring/pull/534) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+
 **Blocked by**: #506
 
 **User stories**: 1, 5
@@ -56,10 +58,10 @@ A `WeatherSource` protocol (same shape as `HiveSource`/`PricingSource`) with a `
 
 ### Acceptance criteria
 
-- [ ] Given Weather Underground's API responds successfully, when the `weather_observation_refresh` job runs, then a `weather_observation` row is written with `source = 'wunderground'` and the observed fields.
-- [ ] Given Weather Underground's API call fails, when the job runs, then Open-Meteo is called as fallback and a `weather_observation` row is written with `source = 'open-meteo'` — the job still succeeds (recorded as `job_run` success), not a failure.
-- [ ] Given both sources fail, when the job runs, then it's recorded as a `job_run` failure with retry-with-backoff — no ntfy alert (out of scope for this failure path, see #509).
-- [ ] Both clients are tested with HTTP-boundary mocking via `responses`, matching `test_consumption_seam.py`'s pattern — real client code runs against a mocked response, result asserted after round-tripping through a real (SQLite-backed) `MariaDBClient`.
+- [x] Given Weather Underground's API responds successfully, when the `weather_observation_refresh` job runs, then a `weather_observation` row is written with `source = 'wunderground'` and the observed fields.
+- [x] Given Weather Underground's API call fails, when the job runs, then Open-Meteo is called as fallback and a `weather_observation` row is written with `source = 'open-meteo'` — the job still succeeds (recorded as `job_run` success), not a failure.
+- [x] Given both sources fail, when the job runs, then it's recorded as a `job_run` failure with retry-with-backoff — no ntfy alert (out of scope for this failure path, see #509).
+- [x] Both clients are tested with HTTP-boundary mocking via `responses`, matching `test_consumption_seam.py`'s pattern — real client code runs against a mocked response, result asserted after round-tripping through a real (SQLite-backed) `MariaDBClient`.
 
 ---
 

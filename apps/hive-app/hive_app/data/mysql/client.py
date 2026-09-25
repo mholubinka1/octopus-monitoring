@@ -4,7 +4,7 @@ from logging import Logger, getLogger
 from common.config import MariaDBSettings
 from common.mariadb.client import MariaDBClientBase
 from hive_app.common.logging import APP_LOGGER_NAME, config
-from hive_app.data.model import HeatingStatus
+from hive_app.data.model import HeatingStatus, WeatherObservation
 from hive_app.data.mysql import model as sql_model
 from hive_app.data.mysql.model import SQLBase
 
@@ -32,3 +32,19 @@ class MariaDBClient(MariaDBClientBase):
             schedule=status.schedule,
         )
         self._write_all([record], "Heating status data")
+
+    def write_weather_observation(self, observation: WeatherObservation) -> None:
+        # sqlalchemy-stubs models every Numeric subclass (Float included) as
+        # TypeEngine[Decimal], so it reports a float/Decimal mismatch here even
+        # though SQLAlchemy's real runtime Float column stores/returns a plain
+        # Python float -- a known stub-accuracy gap, not a real type error.
+        record = sql_model.weather_observation(
+            source=observation.source,
+            observed_at=observation.observed_at,
+            temp=observation.temp,  # type: ignore[misc]
+            humidity=observation.humidity,  # type: ignore[misc]
+            pressure=observation.pressure,  # type: ignore[misc]
+            wind_speed=observation.wind_speed,  # type: ignore[misc]
+            precipitation=observation.precipitation,  # type: ignore[misc]
+        )
+        self._write_all([record], "Weather observation data")
