@@ -8,7 +8,7 @@
             "name": "Python Debugger: Main",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/app/main.py",
+            "program": "${workspaceFolder}/apps/octopus-app/octopus_app/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
@@ -16,7 +16,7 @@
                 "C:\\Users\\mehol\\git\\octopus-monitoring\\config.yml"
             ],
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/app"
+                "PYTHONPATH": "${workspaceFolder}/apps/octopus-app;${workspaceFolder}"
             }
         }
     ]
