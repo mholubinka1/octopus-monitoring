@@ -1,8 +1,8 @@
 # Issues: feature/hive-app-heating-weather
 
-> Work complete on #506 — [PR #525](https://github.com/mholubinka1/octopus-monitoring/pull/525) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+> Work complete on #506 — [PR #525](https://github.com/mholubinka1/home-monitoring/pull/525) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
 
-## hive-app: skeleton, Hive auth, and heating status polling — [#506](https://github.com/mholubinka1/octopus-monitoring/issues/506)
+## hive-app: skeleton, Hive auth, and heating status polling — [#506](https://github.com/mholubinka1/home-monitoring/issues/506)
 
 **Blocked by**: None
 
@@ -24,13 +24,13 @@ The walking skeleton for hive-app: a config-driven entrypoint with a scheduler l
 
 ---
 
-## hive-app: active alert on unrecoverable Hive re-auth — [#509](https://github.com/mholubinka1/octopus-monitoring/issues/509)
+## hive-app: active alert on unrecoverable Hive re-auth — [#509](https://github.com/mholubinka1/home-monitoring/issues/509)
 
 **Blocked by**: #506
 
 **User stories**: 7, 8
 
-> Work complete — [PR #526](https://github.com/mholubinka1/octopus-monitoring/pull/526) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+> Work complete — [PR #526](https://github.com/mholubinka1/home-monitoring/pull/526) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
 
 ### What to build
 
@@ -44,9 +44,9 @@ A narrowly-scoped `notify_reauth_required()` helper, called only from the heatin
 
 ---
 
-## hive-app: weather observation polling (Weather Underground + Open-Meteo fallback) — [#508](https://github.com/mholubinka1/octopus-monitoring/issues/508)
+## hive-app: weather observation polling (Weather Underground + Open-Meteo fallback) — [#508](https://github.com/mholubinka1/home-monitoring/issues/508)
 
-> Work complete — [PR #534](https://github.com/mholubinka1/octopus-monitoring/pull/534) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+> Work complete — [PR #534](https://github.com/mholubinka1/home-monitoring/pull/534) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
 
 **Blocked by**: #506
 
@@ -65,9 +65,9 @@ A `WeatherSource` protocol (same shape as `HiveSource`/`PricingSource`) with a `
 
 ---
 
-## hive-app: weather forecast polling (Open-Meteo) — [#510](https://github.com/mholubinka1/octopus-monitoring/issues/510)
+## hive-app: weather forecast polling (Open-Meteo) — [#510](https://github.com/mholubinka1/home-monitoring/issues/510)
 
-> Work complete — [PR #535](https://github.com/mholubinka1/octopus-monitoring/pull/535) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
+> Work complete — [PR #535](https://github.com/mholubinka1/home-monitoring/pull/535) ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
 
 **Blocked by**: #508
 
@@ -88,7 +88,7 @@ Extends `WeatherSource` with a `fetch_forecast()`/`persist_forecast()` verb pair
 
 > Work complete — PR #522 ready to merge. (The other issues in this file are separate, still-open slices of the same epic — not implemented by this PR.)
 
-## octopus-app: generalize cost_forecast to gas (average-based projection) — [#507](https://github.com/mholubinka1/octopus-monitoring/issues/507)
+## octopus-app: generalize cost_forecast to gas (average-based projection) — [#507](https://github.com/mholubinka1/home-monitoring/issues/507)
 
 **Blocked by**: None
 
@@ -108,7 +108,7 @@ Extends `WeatherSource` with a `fetch_forecast()`/`persist_forecast()` verb pair
 
 ---
 
-## octopus-app: weather-aware gas cost projection — [#511](https://github.com/mholubinka1/octopus-monitoring/issues/511)
+## octopus-app: weather-aware gas cost projection — [#511](https://github.com/mholubinka1/home-monitoring/issues/511)
 
 **Blocked by**: #510, #507
 
@@ -128,7 +128,7 @@ Replaces gas's flat average-based `projected_total_cost` (from #507) with a live
 
 ---
 
-## Grafana: indoor/outdoor temperature panel — [#512](https://github.com/mholubinka1/octopus-monitoring/issues/512)
+## Grafana: indoor/outdoor temperature panel — [#512](https://github.com/mholubinka1/home-monitoring/issues/512)
 
 **Blocked by**: #506, #508
 
@@ -145,7 +145,7 @@ A new panel query in `grafana/mariadb/queries.md` (no dashboard exists to wire i
 
 ---
 
-## Grafana: gas consumption with heating-ON shading — [#513](https://github.com/mholubinka1/octopus-monitoring/issues/513)
+## Grafana: gas consumption with heating-ON shading — [#513](https://github.com/mholubinka1/home-monitoring/issues/513)
 
 **Blocked by**: #506
 
@@ -163,7 +163,7 @@ A new panel query showing half-hourly gas `consumption` (`energy = 'G'`) as the 
 
 ---
 
-## Grafana: gas-vs-outdoor-temperature correlation view — [#514](https://github.com/mholubinka1/octopus-monitoring/issues/514)
+## Grafana: gas-vs-outdoor-temperature correlation view — [#514](https://github.com/mholubinka1/home-monitoring/issues/514)
 
 **Blocked by**: #508
 

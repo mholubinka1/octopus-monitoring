@@ -1,5 +1,5 @@
 [project]
-name = "octopus-monitoring"
+name = "home-monitoring"
 version = "0.1.0"
 description = ""
 authors = [{name = "Matt Holubinka", email = "meholubinka@gmail.com"}]

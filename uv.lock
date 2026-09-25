@@ -10,8 +10,8 @@ resolution-markers = [
 members = [
     "common",
     "hive-app",
+    "home-monitoring",
     "octopus-app",
-    "octopus-monitoring",
 ]
 
 [[package]]
@@ -880,6 +880,47 @@ requires-dist = [
 ]
 
 [[package]]
+name = "home-monitoring"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "ipykernel" },
+    { name = "isort" },
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "pylint" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "responses" },
+    { name = "ruff" },
+    { name = "sqlalchemy-stubs" },
+    { name = "types-pyyaml" },
+    { name = "types-requests" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=26.3.1" },
+    { name = "ipykernel", specifier = ">=7.2.0" },
+    { name = "isort", specifier = ">=8.0.1" },
+    { name = "mypy", specifier = ">=2.3.1" },
+    { name = "pre-commit", specifier = ">=4.6.2" },
+    { name = "pylint", specifier = ">=4.0.6" },
+    { name = "pytest", specifier = ">=8.3.4" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "responses", specifier = ">=0.25.3" },
+    { name = "ruff", specifier = ">=0.16.3" },
+    { name = "sqlalchemy-stubs", specifier = ">=0.4" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20260815" },
+    { name = "types-requests", specifier = ">=2.33.0.20260408" },
+]
+
+[[package]]
 name = "identify"
 version = "2.6.19"
 source = { registry = "https://pypi.org/simple" }
@@ -1481,47 +1522,6 @@ requires-dist = [
     { name = "schedule", specifier = ">=1.2.2" },
     { name = "sqlalchemy", specifier = ">=2.0.52" },
     { name = "tzdata", specifier = ">=2026.3" },
-]
-
-[[package]]
-name = "octopus-monitoring"
-version = "0.1.0"
-source = { virtual = "." }
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "ipykernel" },
-    { name = "isort" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pylint" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "responses" },
-    { name = "ruff" },
-    { name = "sqlalchemy-stubs" },
-    { name = "types-pyyaml" },
-    { name = "types-requests" },
-]
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=26.3.1" },
-    { name = "ipykernel", specifier = ">=7.2.0" },
-    { name = "isort", specifier = ">=8.0.1" },
-    { name = "mypy", specifier = ">=2.3.1" },
-    { name = "pre-commit", specifier = ">=4.6.2" },
-    { name = "pylint", specifier = ">=4.0.6" },
-    { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
-    { name = "responses", specifier = ">=0.25.3" },
-    { name = "ruff", specifier = ">=0.16.3" },
-    { name = "sqlalchemy-stubs", specifier = ">=0.4" },
-    { name = "types-pyyaml", specifier = ">=6.0.12.20260815" },
-    { name = "types-requests", specifier = ">=2.33.0.20260408" },
 ]
 
 [[package]]
