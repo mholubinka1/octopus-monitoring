@@ -127,7 +127,7 @@ Everything else — retry/backoff strategy (genuinely different: `octopus-app`'s
 
 ## Out of Scope
 
-- GitHub repo rename (`octopus-monitoring` → `home-monitoring`) — Wayfinder #496, deferred.
+- GitHub repo rename (`octopus-monitoring` → `home-monitoring`) — Wayfinder #496, deferred at the time this spec was written. **Since resolved**: #496 shipped via [PR #536](https://github.com/mholubinka1/home-monitoring/pull/536); the GitHub repo is now `mholubinka1/home-monitoring`. Left unedited above as historical record of this spec's own scope.
 - Docker Hub image rename (`mholubinka1/octopus-monitoring` → `mholubinka1/octopus-app`) — part of #495, deferred; this spec's CI changes keep publishing to the existing image names.
 - MariaDB database rename (`octopus` → `home_monitoring`) and any live-data migration — ADR-0022's rename is explicitly deferred; `data/mariadb/init.sql` still creates a database named `octopus`.
 - The live Pi deployment cutover itself (stopping/starting containers, updating the Pi's `docker-compose.yml`) — this spec only produces the new `deployments/` files in the repo; rolling them out to the Pi is a separate, later, explicitly-confirmed step.
